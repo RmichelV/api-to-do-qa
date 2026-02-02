@@ -1,0 +1,19 @@
+{
+  "name": "ejemplos",
+  "version": "1.0.0",
+  "description": "Este proyecto es una API REST diseñada para realizar tareas de QA automatizado utilizando Playwright. El objetivo es analizar, limpiar y verificar contenido web.",
+  "type": "module",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "node --watch src/app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.2.1",
+    "playwright": "^1.58.1"
+  }
+}

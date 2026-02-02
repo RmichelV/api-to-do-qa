@@ -1,0 +1,15 @@
+import express from 'express';
+import statusRoutes from './routes/statusRoutes.js';
+import qaRoutes from './routes/qaRoutes.js';
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(express.json());
+
+app.use('/api/status', statusRoutes);
+app.use('/api/qa', qaRoutes);
+
+app.listen(PORT, () =>{
+    console.log(`Server is running on http://localhost:${PORT}`)
+})
