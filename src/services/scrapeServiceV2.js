@@ -49,58 +49,99 @@ export const scrapePage = async (url, selectorsToRemove = [], expectedTexts = []
             "[aria-labelledby='ws-inv-filters-modal-label']"
         ];
 
-        const finalSelectors = [...defaultSelectors, ...selectorsToRemove];
+        // Selectores adicionales para páginas tipo inventario E2 (se aplican condicionalmente)
+        const extraInventorySelectors = [
+            // UI de inventario (buscador, filtros, facetas, listado)
+            '.ws-inv-text-search',
+            '.ws-inv-filters',
+            '.srp-wrapper-facets',
+            // Banners/placers asociados al bloque de inventario
+            "[data-name^='inventory-search-results-page-primary-banner-']",
+            "[data-name^='inventory-search-results-page-filters-sort-']",
+            '.content-alert-banner',
+            '.ws-tps-placeholder',
+            '#placeholder1-app-root',
+            // Data bus/inventory servicios
+            '.inventory-listing-ws-inv-data-service',
+            '#inventory-data-bus2-app-root'
+        ];
+
+        // Detectar si la página actual es del tipo inventario E2 y fusionar selectores
+        const hasInventoryE2 = await page.$("[data-name^='inventory-search-results']")
+            || await page.$('.ws-inv-text-search')
+            || await page.$('.ws-inv-filters');
+
+        const finalSelectors = [
+            ...defaultSelectors,
+            ...(hasInventoryE2 ? extraInventorySelectors : []),
+            ...selectorsToRemove
+        ];
 
         await page.evaluate((selectors) => {
+            // 1) Remover UI general y de inventario según selectores
             selectors.forEach(selector => {
                 document.querySelectorAll(selector).forEach(el=>el.remove());
             });
+
+            // 2) Remover el bloque de inventario SOLO si no contiene contenido editorial
+            const isInventoryUI = (el) => !!(el.closest('.ws-inv-text-search')
+                || el.closest('.ws-inv-filters')
+                || el.closest('.srp-wrapper-facets')
+                || el.closest('#inventory-search1-app-root')
+                || el.closest('#inventory-filters1-app-root')
+                || el.closest('[aria-labelledby="ws-inv-filters-modal-label"]')
+                || el.closest('[data-name^="inventory-search-results-page-filters-sort-"]')
+                || el.closest('[data-name^="inventory-search-results-page-primary-banner-"]')
+                || el.closest('.content-alert-banner')
+                || el.closest('.ws-tps-placeholder'));
+
+            const inventoryWrappers = Array.from(document.querySelectorAll(
+                '.srp-wrapper-listing, [data-name="srp-wrapper-combined"], [data-name^="inventory-search-results"], [data-name="srp-wrapper-listing-inner-inventory-results"], [data-name="srp-wrapper-listing-inner-inventory-paging"]'
+            ));
+
+            inventoryWrappers.forEach(w => {
+                // Mantener inventario solo si detectamos contenido editorial con encabezados
+                const headings = Array.from(w.querySelectorAll('h1,h2,h3'))
+                    .filter(el => !isInventoryUI(el))
+                    .map(el => (el.innerText || '').trim())
+                    .filter(txt => txt.length >= 10); // evitar títulos vacíos o muy cortos
+                const headingCount = headings.length;
+                // Regla: eliminar inventario si no hay más de un encabezado significativo
+                if (headingCount <= 1) {
+                    w.remove();
+                }
+            });
         }, finalSelectors);
         
-        // Extraer contenido priorizado: bloque editorial bajo inventario
+        // Extraer contenido editorial en todo .ddc-wrapper (arriba/abajo del inventario), excluyendo UI
         const cleanedContent = await page.evaluate(() => {
-            // Extrae líneas significativas respetando títulos y párrafos
-            const extractLinesFromContainer = (container) => {
-                if (!container) return '';
-                const lines = [];
-                // Priorizar elementos semánticos de bloque típicos de contenido editorial
-                const elems = container.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li');
-                if (elems.length > 0) {
-                    elems.forEach(el => {
-                        const raw = (el.innerText || '').replace(/\r\n/g, '\n');
-                        const txt = raw.trim();
-                        if (txt) {
-                            lines.push(txt);
-                            // Añadir línea en blanco tras títulos para separar visualmente
-                            if (/^H[1-6]$/i.test(el.tagName)) {
-                                lines.push('');
-                            }
-                        }
-                    });
-                    // Evitar múltiples saltos seguidos
-                    return lines.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+|\n+$/g, '');
+            const root = document.querySelector('.ddc-wrapper') || document.body;
+            const isInventoryUI = (el) => !!(el.closest('.ws-inv-text-search')
+                || el.closest('.ws-inv-filters')
+                || el.closest('.srp-wrapper-facets')
+                || el.closest('#inventory-search1-app-root')
+                || el.closest('#inventory-filters1-app-root')
+                || el.closest('[data-name^="inventory-search-results-page-filters-sort-"]')
+                || el.closest('[data-name^="inventory-search-results-page-primary-banner-"]')
+                || el.closest('.content-alert-banner')
+                || el.closest('.ws-tps-placeholder'));
+
+            const lines = [];
+            const elems = Array.from(root.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li'))
+                .filter(el => !isInventoryUI(el));
+            elems.forEach(el => {
+                const raw = (el.innerText || '').replace(/\r\n/g, '\n');
+                const txt = raw.trim();
+                if (txt) {
+                    lines.push(txt);
+                    if (/^H[1-6]$/i.test(el.tagName)) {
+                        lines.push('');
+                    }
                 }
-                // Fallback: usar los saltos de línea de innerText
-                return (container.innerText || '').replace(/\r\n/g, '\n').trim();
-            };
-
-            const preferido = document.querySelector('[data-name="srp-wrapper-listing-inner-content"] .text-content-container.content');
-            if (preferido) return extractLinesFromContainer(preferido);
-
-            const innerContent = document.querySelector('[data-name="srp-wrapper-listing-inner-content"]');
-            if (innerContent) {
-                const texto = innerContent.querySelector('.text-content-container') || innerContent.querySelector('[data-widget-name="content-default"]');
-                if (texto) return extractLinesFromContainer(texto);
-                return extractLinesFromContainer(innerContent);
-            }
-
-            const anyBlock = document.querySelector('.text-content-container.content')
-                || document.querySelector('.content-default .text-content-container')
-                || document.querySelector('.content-default');
-            if (anyBlock) return extractLinesFromContainer(anyBlock);
-
-            const contenedorPrincipal = document.querySelector('.ddc-wrapper') || document.body;
-            return extractLinesFromContainer(contenedorPrincipal);
+            });
+            const combined = lines.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+|\n+$/g, '');
+            if (combined.trim()) return combined;
+            return (root.innerText || '').replace(/\r\n/g, '\n').trim();
         });
 
         // -------------------------------------------------------------
@@ -349,52 +390,89 @@ export const extractCleanContent = async (url, selectorsToRemove = []) => {
             "[aria-labelledby='ws-inv-filters-modal-label']"
         ];
 
-        const finalSelectors = [...defaultSelectors, ...selectorsToRemove];
+        const extraInventorySelectors = [
+            '.ws-inv-text-search',
+            '.ws-inv-filters',
+            '.srp-wrapper-facets',
+            "[data-name^='inventory-search-results-page-primary-banner-']",
+            "[data-name^='inventory-search-results-page-filters-sort-']",
+            '.content-alert-banner',
+            '.ws-tps-placeholder',
+            '#placeholder1-app-root',
+            '.inventory-listing-ws-inv-data-service',
+            '#inventory-data-bus2-app-root'
+        ];
+
+        const hasInventoryE2 = await page.$("[data-name^='inventory-search-results']")
+            || await page.$('.ws-inv-text-search')
+            || await page.$('.ws-inv-filters');
+
+        const finalSelectors = [
+            ...defaultSelectors,
+            ...(hasInventoryE2 ? extraInventorySelectors : []),
+            ...selectorsToRemove
+        ];
 
         await page.evaluate((selectors) => {
             selectors.forEach(selector => {
                 document.querySelectorAll(selector).forEach(el=>el.remove());
             });
+
+            const isInventoryUI = (el) => !!(el.closest('.ws-inv-text-search')
+                || el.closest('.ws-inv-filters')
+                || el.closest('.srp-wrapper-facets')
+                || el.closest('#inventory-search1-app-root')
+                || el.closest('#inventory-filters1-app-root')
+                || el.closest('[aria-labelledby="ws-inv-filters-modal-label"]')
+                || el.closest('[data-name^="inventory-search-results-page-filters-sort-"]')
+                || el.closest('[data-name^="inventory-search-results-page-primary-banner-"]')
+                || el.closest('.content-alert-banner')
+                || el.closest('.ws-tps-placeholder'));
+
+            const inventoryWrappers = Array.from(document.querySelectorAll(
+                '.srp-wrapper-listing, [data-name="srp-wrapper-combined"], [data-name^="inventory-search-results"], [data-name="srp-wrapper-listing-inner-inventory-results"], [data-name="srp-wrapper-listing-inner-inventory-paging"]'
+            ));
+
+            inventoryWrappers.forEach(w => {
+                const headings = Array.from(w.querySelectorAll('h1,h2,h3'))
+                    .filter(el => !isInventoryUI(el))
+                    .map(el => (el.innerText || '').trim())
+                    .filter(txt => txt.length >= 10);
+                const headingCount = headings.length;
+                if (headingCount <= 1) {
+                    w.remove();
+                }
+            });
         }, finalSelectors);
 
         const cleanedContent = await page.evaluate(() => {
-            const extractLinesFromContainer = (container) => {
-                if (!container) return '';
-                const lines = [];
-                const elems = container.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li');
-                if (elems.length > 0) {
-                    elems.forEach(el => {
-                        const raw = (el.innerText || '').replace(/\r\n/g, '\n');
-                        const txt = raw.trim();
-                        if (txt) {
-                            lines.push(txt);
-                            if (/^H[1-6]$/i.test(el.tagName)) {
-                                lines.push('');
-                            }
-                        }
-                    });
-                    return lines.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+|\n+$/g, '');
+            const root = document.querySelector('.ddc-wrapper') || document.body;
+            const isInventoryUI = (el) => !!(el.closest('.ws-inv-text-search')
+                || el.closest('.ws-inv-filters')
+                || el.closest('.srp-wrapper-facets')
+                || el.closest('#inventory-search1-app-root')
+                || el.closest('#inventory-filters1-app-root')
+                || el.closest('[data-name^="inventory-search-results-page-filters-sort-"]')
+                || el.closest('[data-name^="inventory-search-results-page-primary-banner-"]')
+                || el.closest('.content-alert-banner')
+                || el.closest('.ws-tps-placeholder'));
+
+            const lines = [];
+            const elems = Array.from(root.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li'))
+                .filter(el => !isInventoryUI(el));
+            elems.forEach(el => {
+                const raw = (el.innerText || '').replace(/\r\n/g, '\n');
+                const txt = raw.trim();
+                if (txt) {
+                    lines.push(txt);
+                    if (/^H[1-6]$/i.test(el.tagName)) {
+                        lines.push('');
+                    }
                 }
-                return (container.innerText || '').replace(/\r\n/g, '\n').trim();
-            };
-
-            const preferido = document.querySelector('[data-name="srp-wrapper-listing-inner-content"] .text-content-container.content');
-            if (preferido) return extractLinesFromContainer(preferido);
-
-            const innerContent = document.querySelector('[data-name="srp-wrapper-listing-inner-content"]');
-            if (innerContent) {
-                const texto = innerContent.querySelector('.text-content-container') || innerContent.querySelector('[data-widget-name="content-default"]');
-                if (texto) return extractLinesFromContainer(texto);
-                return extractLinesFromContainer(innerContent);
-            }
-
-            const anyBlock = document.querySelector('.text-content-container.content')
-                || document.querySelector('.content-default .text-content-container')
-                || document.querySelector('.content-default');
-            if (anyBlock) return extractLinesFromContainer(anyBlock);
-
-            const contenedorPrincipal = document.querySelector('.ddc-wrapper') || document.body;
-            return extractLinesFromContainer(contenedorPrincipal);
+            });
+            const combined = lines.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+|\n+$/g, '');
+            if (combined.trim()) return combined;
+            return (root.innerText || '').replace(/\r\n/g, '\n').trim();
         });
 
         return { cleaned_text: cleanedContent };
@@ -498,7 +576,8 @@ export const compareLines = async (url, expectedText, selectorsToRemove = []) =>
             sentence_co,
             sentence_cp
         });
-        if (bestIdx >= 0) j = bestIdx + 1;
+        // No avanzar el puntero en CP para casos diferentes: permitir que siguientes CO encuentren su match exacto
+        // Solo avanzar si fuera un match exacto (ya manejado arriba)
     }
 
     return {
