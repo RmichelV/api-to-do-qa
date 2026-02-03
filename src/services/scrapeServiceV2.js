@@ -113,7 +113,7 @@ export const scrapePage = async (url, selectorsToRemove = [], expectedTexts = []
             });
         }, finalSelectors);
         
-        // Extraer contenido editorial en todo .ddc-wrapper (arriba/abajo del inventario), excluyendo UI
+        // Extraer contenido editorial en todo .ddc-wrapper (arriba/abajo del inventario), excluyendo UI e INVENTARIO
         const cleanedContent = await page.evaluate(() => {
             const root = document.querySelector('.ddc-wrapper') || document.body;
             const isInventoryUI = (el) => !!(el.closest('.ws-inv-text-search')
@@ -125,17 +125,58 @@ export const scrapePage = async (url, selectorsToRemove = [], expectedTexts = []
                 || el.closest('[data-name^="inventory-search-results-page-primary-banner-"]')
                 || el.closest('.content-alert-banner')
                 || el.closest('.ws-tps-placeholder'));
+            // Excluir SOLO el contenido dentro del listado de inventario, sin excluir el wrapper combinado
+            const isInventoryContent = (el) => !!(el.closest('.srp-wrapper-listing')
+                || el.closest('[data-name="srp-wrapper-listing-inner-inventory-results"]')
+                || el.closest('[data-name="srp-wrapper-listing-inner-inventory-paging"]')
+                || el.closest('[data-name^="inventory-search-results"]')
+                || el.closest('[data-widget-name^="ws-inv-"]'));
 
             const lines = [];
+            const seen = new Set();
+            const pushLine = (s) => {
+                const t = (s || '').replace(/\r\n/g, '\n').trim();
+                if (!t) return;
+                const key = t.toLowerCase();
+                if (seen.has(key)) return;
+                lines.push(t);
+                seen.add(key);
+            };
             const elems = Array.from(root.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li'))
-                .filter(el => !isInventoryUI(el));
+                .filter(el => !isInventoryUI(el) && !isInventoryContent(el));
             elems.forEach(el => {
                 const raw = (el.innerText || '').replace(/\r\n/g, '\n');
                 const txt = raw.trim();
                 if (txt) {
-                    lines.push(txt);
+                    pushLine(txt);
                     if (/^H[1-6]$/i.test(el.tagName)) {
+                        // Capturar texto suelto inmediatamente después del heading (hermanos TEXT_NODE)
+                        let sib = el.nextSibling;
+                        let collected = '';
+                        while (sib && sib.nodeType === Node.TEXT_NODE) {
+                            collected += sib.textContent || '';
+                            sib = sib.nextSibling;
+                        }
+                        if ((collected || '').trim().length > 0) {
+                            pushLine(collected);
+                        }
                         lines.push('');
+                    }
+                }
+            });
+            // Capturar nodos de texto sueltos dentro de contenedores editoriales
+            const contentContainers = Array.from(root.querySelectorAll(
+                '.text-content-container, [data-widget-name="content-default"], [data-widget-name="content-raw"], .content-default, .mod .content, .content'
+            )).filter(el => !isInventoryUI(el) && !isInventoryContent(el));
+            contentContainers.forEach(container => {
+                const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+                let node;
+                while ((node = walker.nextNode())) {
+                    const parent = node.parentElement;
+                    if (parent && (isInventoryUI(parent) || isInventoryContent(parent))) continue;
+                    const txt = (node.textContent || '').replace(/\r\n/g, '\n').trim();
+                    if (txt.length >= 20) {
+                        pushLine(txt);
                     }
                 }
             });
@@ -456,17 +497,55 @@ export const extractCleanContent = async (url, selectorsToRemove = []) => {
                 || el.closest('[data-name^="inventory-search-results-page-primary-banner-"]')
                 || el.closest('.content-alert-banner')
                 || el.closest('.ws-tps-placeholder'));
+            const isInventoryContent = (el) => !!(el.closest('.srp-wrapper-listing')
+                || el.closest('[data-name="srp-wrapper-listing-inner-inventory-results"]')
+                || el.closest('[data-name="srp-wrapper-listing-inner-inventory-paging"]')
+                || el.closest('[data-name^="inventory-search-results"]')
+                || el.closest('[data-widget-name^="ws-inv-"]'));
 
             const lines = [];
+            const seen = new Set();
+            const pushLine = (s) => {
+                const t = (s || '').replace(/\r\n/g, '\n').trim();
+                if (!t) return;
+                const key = t.toLowerCase();
+                if (seen.has(key)) return;
+                lines.push(t);
+                seen.add(key);
+            };
             const elems = Array.from(root.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li'))
-                .filter(el => !isInventoryUI(el));
+                .filter(el => !isInventoryUI(el) && !isInventoryContent(el));
             elems.forEach(el => {
                 const raw = (el.innerText || '').replace(/\r\n/g, '\n');
                 const txt = raw.trim();
                 if (txt) {
-                    lines.push(txt);
+                    pushLine(txt);
                     if (/^H[1-6]$/i.test(el.tagName)) {
+                        let sib = el.nextSibling;
+                        let collected = '';
+                        while (sib && sib.nodeType === Node.TEXT_NODE) {
+                            collected += sib.textContent || '';
+                            sib = sib.nextSibling;
+                        }
+                        if ((collected || '').trim().length > 0) {
+                            pushLine(collected);
+                        }
                         lines.push('');
+                    }
+                }
+            });
+            const contentContainers = Array.from(root.querySelectorAll(
+                '.text-content-container, [data-widget-name="content-default"], [data-widget-name="content-raw"], .content-default, .mod .content, .content'
+            )).filter(el => !isInventoryUI(el) && !isInventoryContent(el));
+            contentContainers.forEach(container => {
+                const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+                let node;
+                while ((node = walker.nextNode())) {
+                    const parent = node.parentElement;
+                    if (parent && (isInventoryUI(parent) || isInventoryContent(parent))) continue;
+                    const txt = (node.textContent || '').replace(/\r\n/g, '\n').trim();
+                    if (txt.length >= 20) {
+                        pushLine(txt);
                     }
                 }
             });
