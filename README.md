@@ -79,4 +79,40 @@ Estos comandos ya se ejecutaron, pero quedan como referencia:
 - **Manipulación:** Inyección de código en el navegador con `page.evaluate` para eliminar elementos (`remove()`).
 - **Validación Defensiva:** El controlador ahora verifica que `remove` sea un Array antes de pasarlo al servicio, evitando errores `TypeError: .forEach is not a function`.
 
+### Clase 7: Lógica de Comparación de Textos (Laboratorio)
+**Profesor:** Introducción de la lógica de "Normalización" para comparar textos sucios (HTML) contra textos esperados.
+- **Concepto Clave:** "Planchar" el texto (quitar espacios dobles, trim, lowerCase) antes de comparar.
+- **Metáfora:** La suma. Procesar una lista de verificaciones una por una (`.map`).
+- **Archivo de estudio:** `src/examples/laboratorio_texto.js`.
+
+### Reto Actual #1: El Juez de Texto ⚖️
+**Objetivo:** Integrar la lógica del laboratorio en la API real.
+
+**Tu Tarea:**
+1.  **Estudiar:** Ejecuta `node src/examples/laboratorio_texto.js` y entiende cómo transformamos la entrada sucia y la lista esperada en un reporte limpio.
+2.  **Implementar en `qaController.js`:**
+    *   Habilitar la recepción de `expectedTexts` (Array) en el body.
+3.  **Implementar en `scrapeService.js`:**
+    *   Importar lógica de normalización.
+    *   Recibir `expectedTexts`.
+    *   Cambiar el retorno: DE `content string` -> A `results array` (Objeto con título y detalles de qué se encontró y qué no).
+
+---
+### Clase 8: Pasar datos al Navegador (`page.evaluate`)
+**Pregunta del Alumno:** *"¿Por qué usamos `selectors` dentro de `page.evaluate` si afuera se llama `finalSelectors`?"*
+
+**Explicación Práctica:**
+El código dentro de `page.evaluate(() => { ... })` **SE EJECUTA EN EL NAVEGADOR (Chrome)**, no en tu terminal.
+La variable `finalSelectors` existe en Node.js, pero "Browser Land" (el navegador) no la conoce.
+
+**El Puente Mágico:**
+```javascript
+//                (1. Argumento en Node)  (2. Puente)         (3. Argumento en Navegador)
+await page.evaluate( (misDatosEnBrowser)      =>       { ... }, finalSelectors );
+```
+1.  **Node.js** toma `finalSelectors`.
+2.  Playwright lo serializa (lo convierte en texto/JSON) y lo envía a través del puente (protocolo de depuración).
+3.  **Chrome** lo recibe y lo asigna al primer argumento de la función (`misDatosEnBrowser`).
+4.  El nombre del argumento dentro de la función (`selectors`, `x`, `lista`) **NO IMPORTA**, lo que importa es el orden.
+
 ---
