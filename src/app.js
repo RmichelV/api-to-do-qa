@@ -8,6 +8,9 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
+// Servir la carpeta 'public' como archivos estáticos (HTML, CSS, JS)
+app.use(express.static('public'));
+
 app.use('/api/status', statusRoutes);
 app.use('/api/qa', qaRoutes);
 app.use('/api/qa-v2', qaRoutesV2);

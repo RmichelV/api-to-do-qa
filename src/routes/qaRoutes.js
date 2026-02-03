@@ -1,8 +1,9 @@
 import { Router } from 'express';
-import { analyzeUrl } from '../controllers/qaController.js';
+// Actualizamos para usar la V2 (con lógica "Integrado/Incompleto")
+import { analyzeContent } from '../controllers/qaControllerV2.js';
 
 const router = Router();
 
-router.post('/analyze', analyzeUrl);
+router.post('/analyze', analyzeContent);
 
 export default router;

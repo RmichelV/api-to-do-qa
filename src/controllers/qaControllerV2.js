@@ -2,8 +2,10 @@ import { scrapePage } from '../services/scrapeServiceV2.js';
 
 export const analyzeContent = async(req, res)=>{
     try{
-        const { url, remove} = req.body;
+        const { url, remove, expectedTexts } = req.body;
 
+        // Validamos que expectedTexts sea un array si viene
+        const textosEsperados = Array.isArray(expectedTexts) ? expectedTexts : [];
         const selectors = Array.isArray(remove)? remove : [];
 
         if(!url){
@@ -12,7 +14,9 @@ export const analyzeContent = async(req, res)=>{
             });
         }
 
-        const result = await scrapePage(url, selectors);
+        // Enviamos todo al servicio
+        const result = await scrapePage(url, selectors, textosEsperados);
+        
         res.status(200).json({
             url, 
             ...result
