@@ -31,101 +31,170 @@
         <textarea id="textInput" placeholder="Pega aquí el texto. Cada línea será una validación separada."></textarea>
     </div>
 
-    <button onclick="runTest()">Analizar Página</button>
+    <div style="margin-bottom: 20px;">
+        <button onclick="runTest()" style="margin-right: 10px;">🔍 Analizar Texto</button>
+        <button onclick="runLinkTest()" style="background: #28a745;">🔗 Analizar Links</button>
+        <button onclick="runLineCompare()" style="background: #6f42c1; margin-left:10px;">📑 Comparar por Líneas</button>
+    </div>
 
     <div id="results">Esperando análisis...</div>
 
     <script>
+        // --- FUNCIÓN DE LINKS ---
+        async function runLinkTest() {
+            const url = document.getElementById('url').value;
+            const resultsDiv = document.getElementById('results');
+
+            if (!url) { alert("Por favor ingresa una URL"); return; }
+            
+            resultsDiv.innerHTML = "⏳ Analizando Links... (Esto puede tardar unos segundos)";
+
+            try {
+                const response = await fetch('/api/qa/analyze-links', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url })
+                });
+
+                const data = await response.json();
+                
+                let html = `<h3>🔗 Reporte de Enlaces</h3>`;
+                html += `<p>Total encontrados: <strong>${data.total_encontrados}</strong> (Mostrando primeros 50)</p>`;
+
+                html += `<table style="width:100%; border-collapse: collapse; font-size: 0.9em;">
+                    <tr style="background:#eee; text-align:left;">
+                        <th style="padding:8px;">Estado</th>
+                        <th style="padding:8px;">Texto</th>
+                        <th style="padding:8px;">URL</th>
+                    </tr>`;
+
+                data.resultados.forEach(link => {
+                    let statusColor = link.status === 200 ? 'green' : (link.status === 'ERR' ? 'red' : 'orange');
+                    let statusIcon = link.status === 200 ? '✅' : (link.status === 'ERR' ? '❌' : '⚠️');
+                    
+                    html += `
+                        <tr style="border-bottom: 1px solid #ddd;">
+                            <td style="padding:8px; color:${statusColor}; font-weight:bold;">${statusIcon} ${link.status}</td>
+                            <td style="padding:8px;">${link.texto}</td>
+                            <td style="padding:8px; font-family:monospace; font-size:0.85em;">
+                                <a href="${link.href}" target="_blank" style="color:#007bff; text-decoration:none;">${link.href}</a>
+                                ${link.error ? `<div style="color:red; font-size:0.8em;">${link.error}</div>` : ''}
+                            </td>
+                        </tr>
+                    `;
+                });
+                html += `</table>`;
+                resultsDiv.innerHTML = html;
+
+            } catch (error) {
+                resultsDiv.innerHTML = `<span class="status-fail">Error de conexión: ${error.message}</span>`;
+            }
+        }
+
+        // --- FUNCIÓN DE TEXTO ---
         async function runTest() {
             const url = document.getElementById('url').value;
             const rawText = document.getElementById('textInput').value;
             const resultsDiv = document.getElementById('results');
 
             if (!url) {
-                alert("Por favor ingresa una URL");
+                alert('Por favor ingresa una URL');
                 return;
             }
 
-            // 1. CONVERTIR TEXTO PEAGADO A ARRAY (Magia ✨)
-            // Separamos por Enter (\n) y quitamos líneas vacías
-            const expectedTexts = rawText.split('\n')
-                .map(line => line.trim())
-                .filter(line => line.length > 0);
-
-            resultsDiv.innerHTML = "⏳ Analizando...";
+            resultsDiv.innerHTML = '⏳ Obteniendo texto limpio de la página...';
 
             try {
-                // 2. ENVIAR A TU API
-                const response = await fetch('/api/qa/analyze', {
+                const resp = await fetch('/api/qa-v2/preview', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        url: url,
-                        expectedTexts: expectedTexts,
-                        // remove: ['.miclase'] // Podrías agregar inputs para esto luego
-                    })
+                    body: JSON.stringify({ url, expectedText: rawText })
                 });
 
-                const data = await response.json();
-
-                // 3. MOSTRAR RESULTADOS
-                let html = `<h3>Reporte de Análisis QA</h3>`;
-                
-                if (data.resultados_comparacion) {
-                    // FILTRADO: Separamos éxitos de errores
-                    const errores = data.resultados_comparacion.filter(item => !item.estado.includes('INTEGRADO'));
-                    const total = data.resultados_comparacion.length;
-
-                    if (errores.length === 0) {
-                        // CASO FELIZ: Todo verde
-                        html += `
-                        <div style="padding: 2rem; background: #d4edda; color: #155724; border-radius: 8px; text-align: center;">
-                            <h2 style="margin:0">🎉 EXCELENTE</h2>
-                            <p style="font-size: 1.2rem">Los ${total} textos solicitados están integrados al 100% en la página.</p>
-                        </div>`;
-                    } else {
-                        // CASO ERROR: Mostrar solo lo que falló
-                        html += `<p><strong>Resumen:</strong> Se encontraron <span class="status-fail">${errores.length} errores</span> de ${total} textos validados.</p>`;
-                        
-                        // Iteramos solo sobre errores
-                        errores.forEach(item => {
-                            let colorClass = item.estado.includes('NO INTEGRADO') ? 'status-fail' : 'status-partial';
-                            let bordeColor = item.estado.includes('NO INTEGRADO') ? 'red' : 'orange';
-
-                            html += `
-                            <div style="border-left: 5px solid ${bordeColor}; background: white; padding: 10px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                                <div style="font-weight: bold; margin-bottom: 5px;">
-                                    <span class="${colorClass}">${item.estado}</span>
-                                </div>
-                                
-                                <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
-                                    <div>
-                                        <small style="color: #666">TEXTO 1 (Esperado):</small><br>
-                                        <div style="background: #fff; border: 1px solid #ddd; padding: 8px; border-radius: 4px; margin-top:4px;">"${item.texto}"</div>
-                                    </div>
-                                    <div>
-                                        <small style="color: #666">TEXTO 2 (Encontrado en web):</small><br>
-                                        <div style="background: #f9f9f9; border: 1px solid #ddd; padding: 8px; border-radius: 4px; font-style: italic; color: #444; margin-top:4px;">${item.contexto || "No encontrado"}</div>
-                                    </div>
-                                </div>
-
-                                ${(item.detalle && item.detalle.palabras_faltantes) ? 
-                                    `<div style="margin-top: 8px; border-top: 1px solid #eee; padding-top: 5px; color: brown; font-size: 0.9em;">
-                                        <strong>⚠️ Faltan estas palabras:</strong> ${item.detalle.palabras_faltantes.join(', ')}
-                                     </div>` : ''
-                                }
-                            </div>`;
-                        });
-                    }
-
-                } else {
-                    html += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+                if (!resp.ok) {
+                    let details = '';
+                    try { details = (await resp.json()).detalles || ''; } catch {}
+                    throw new Error(details || resp.statusText);
                 }
 
-                resultsDiv.innerHTML = html;
+                const data = await resp.json();
 
+                let html = '<h3>Vista de Texto Limpio</h3>';
+                html += `
+                <div style="border-left: 5px solid #0d6efd; background: white; padding: 15px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <div style="display: grid; grid-template-columns: 1fr; gap: 12px;">
+                        <div>
+                            <strong style="color: #333; display: block; margin-bottom: 0.5rem; font-size: 0.95em;">📄 Texto Esperado:</strong>
+                            <div style="background: #fff3cd; border: 2px solid #ffc107; padding: 10px; border-radius: 4px; white-space: pre-wrap; line-height: 1.5;">${data.expected_text || rawText}</div>
+                        </div>
+                        <div>
+                            <strong style="color: #333; display: block; margin-bottom: 0.5rem; font-size: 0.95em;">🌐 Texto Limpio de la Página:</strong>
+                            <div style="background: #f9f9f9; border: 2px solid #6c757d; padding: 10px; border-radius: 4px; white-space: pre-wrap; font-style: italic; color: #444; line-height: 1.5;">${data.page_clean_text || '[No disponible]'}</div>
+                        </div>
+                    </div>
+                </div>`;
+
+                resultsDiv.innerHTML = html;
             } catch (error) {
-                resultsDiv.innerHTML = `<span class="status-fail">Error de conexión: ${error.message}</span>`;
+                resultsDiv.innerHTML = `<span class="status-fail">Error: ${error.message}</span>`;
+            }
+        }
+
+        // --- COMPARACIÓN POR LÍNEAS ---
+        async function runLineCompare() {
+            const url = document.getElementById('url').value;
+            const rawText = document.getElementById('textInput').value;
+            const resultsDiv = document.getElementById('results');
+
+            if (!url) { alert('Por favor ingresa una URL'); return; }
+            if (!rawText.trim()) { alert('Pega el texto esperado'); return; }
+
+            resultsDiv.innerHTML = '⏳ Comparando por líneas...';
+
+            try {
+                const resp = await fetch('/api/qa-v2/compare-lines', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, expectedText: rawText })
+                });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.detalles || resp.statusText);
+
+                let html = '<h3>Comparación por Líneas</h3>';
+                html += `<p style="margin:0 0 6px 0;">Total líneas CO: <b>${data.expected_lines.length}</b> | CP: <b>${data.page_lines.length}</b></p>`;
+
+                const diffs = (data.resultados || []).filter(item => !item.estado.includes('EXACTO'));
+
+                diffs.forEach(item => {
+                    const stateColor = 'red';
+                    html += `
+                    <div style="border-left:4px solid ${stateColor}; padding:8px; background:#fff; margin-bottom:8px;">
+                        <div style="margin:0 0 3px 0;">
+                            <span style="color:${stateColor}; font-weight:bold;">${item.estado}</span>
+                            <span style="margin-left:8px; color:#555;">CO #${item.idx_co}${item.idx_cp ? ` → CP #${item.idx_cp}` : ''}</span>
+                        </div>
+                        <div style="white-space:pre-wrap; line-height:1.4; margin:0 0 3px 0;">
+                            <b>CO línea:</b> ${item.co_line}
+                        </div>
+                        <div style="white-space:pre-wrap; line-height:1.4; margin:0 0 6px 0;">
+                            <b>CP línea:</b> ${item.cp_line}
+                        </div>
+                        <div style="display:grid; grid-template-columns:1fr; gap:3px;">
+                            <div>
+                                <b>Oración CO:</b>
+                                <div style="background:#e7f3ff; border:1px solid #007bff; padding:6px; border-radius:3px;">${(item.sentence_co || '').trim()}</div>
+                            </div>
+                            <div>
+                                <b>Oración CP:</b>
+                                <div style="background:#f8d7da; border:1px solid #dc3545; padding:6px; border-radius:3px;">${(item.sentence_cp || '').trim()}</div>
+                            </div>
+                        </div>
+                    </div>`;
+                });
+
+                resultsDiv.innerHTML = html;
+            } catch (e) {
+                resultsDiv.innerHTML = `<span class="status-fail">Error: ${e.message}</span>`;
             }
         }
     </script>
