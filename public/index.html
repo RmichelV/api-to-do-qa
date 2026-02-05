@@ -163,34 +163,62 @@
                 let html = '<h3>Comparación por Líneas</h3>';
                 html += `<p style="margin:0 0 6px 0;">Total líneas CO: <b>${data.expected_lines.length}</b> | CP: <b>${data.page_lines.length}</b></p>`;
 
-                const diffs = (data.resultados || []).filter(item => !item.estado.includes('EXACTO'));
+                const resultados = data.resultados || [];
+                const diffs = resultados.filter(item => !item.estado.includes('EXACTO'));
+                const exacts = resultados.filter(item => item.estado.includes('EXACTO'));
 
-                diffs.forEach(item => {
-                    const stateColor = 'red';
-                    html += `
-                    <div style="border-left:4px solid ${stateColor}; padding:8px; background:#fff; margin-bottom:8px;">
-                        <div style="margin:0 0 3px 0;">
-                            <span style="color:${stateColor}; font-weight:bold;">${item.estado}</span>
-                            <span style="margin-left:8px; color:#555;">CO #${item.idx_co}${item.idx_cp ? ` → CP #${item.idx_cp}` : ''}</span>
-                        </div>
-                        <div style="white-space:pre-wrap; line-height:1.4; margin:0 0 3px 0;">
-                            <b>CO línea:</b> ${item.co_line}
-                        </div>
-                        <div style="white-space:pre-wrap; line-height:1.4; margin:0 0 6px 0;">
-                            <b>CP línea:</b> ${item.cp_line}
-                        </div>
-                        <div style="display:grid; grid-template-columns:1fr; gap:3px;">
-                            <div>
-                                <b>Oración CO:</b>
-                                <div style="background:#e7f3ff; border:1px solid #007bff; padding:6px; border-radius:3px;">${(item.sentence_co || '').trim()}</div>
+                if (diffs.length === 0 && resultados.length > 0) {
+                    html += `<p style="color:green; font-weight:bold; margin:6px 0 12px;">✅ Todas las líneas del texto esperado aparecen en la página en orden.</p>`;
+                }
+
+                if (exacts.length > 0) {
+                    html += `<h4 style="margin-top:12px;">Coincidencias Exactas (${exacts.length})</h4>`;
+                    exacts.forEach(item => {
+                        html += `
+                        <div style="border-left:4px solid #28a745; padding:8px; background:#fff; margin-bottom:8px;">
+                            <div style="margin:0 0 3px 0;">
+                                <span style="color:#28a745; font-weight:bold;">${item.estado}</span>
+                                <span style="margin-left:8px; color:#555;">CO #${item.idx_co} → CP #${item.idx_cp}</span>
                             </div>
-                            <div>
-                                <b>Oración CP:</b>
-                                <div style="background:#f8d7da; border:1px solid #dc3545; padding:6px; border-radius:3px;">${(item.sentence_cp || '').trim()}</div>
+                            <div style="white-space:pre-wrap; line-height:1.4; margin:0 0 3px 0;">
+                                <b>CO línea:</b> ${item.co_line}
                             </div>
-                        </div>
-                    </div>`;
-                });
+                            <div style="white-space:pre-wrap; line-height:1.4; margin:0 0 6px 0;">
+                                <b>CP línea:</b> ${item.cp_line}
+                            </div>
+                        </div>`;
+                    });
+                }
+
+                if (diffs.length > 0) {
+                    html += `<h4 style="margin-top:12px;">Diferencias (${diffs.length})</h4>`;
+                    diffs.forEach(item => {
+                        const stateColor = 'red';
+                        html += `
+                        <div style="border-left:4px solid ${stateColor}; padding:8px; background:#fff; margin-bottom:8px;">
+                            <div style="margin:0 0 3px 0;">
+                                <span style="color:${stateColor}; font-weight:bold;">${item.estado}</span>
+                                <span style="margin-left:8px; color:#555;">CO #${item.idx_co}${item.idx_cp ? ` → CP #${item.idx_cp}` : ''}</span>
+                            </div>
+                            <div style="white-space:pre-wrap; line-height:1.4; margin:0 0 3px 0;">
+                                <b>CO línea:</b> ${item.co_line}
+                            </div>
+                            <div style="white-space:pre-wrap; line-height:1.4; margin:0 0 6px 0;">
+                                <b>CP línea:</b> ${item.cp_line}
+                            </div>
+                            <div style="display:grid; grid-template-columns:1fr; gap:3px;">
+                                <div>
+                                    <b>Oración CO:</b>
+                                    <div style="background:#e7f3ff; border:1px solid #007bff; padding:6px; border-radius:3px;">${(item.sentence_co || '').trim()}</div>
+                                </div>
+                                <div>
+                                    <b>Oración CP:</b>
+                                    <div style="background:#f8d7da; border:1px solid #dc3545; padding:6px; border-radius:3px;">${(item.sentence_cp || '').trim()}</div>
+                                </div>
+                            </div>
+                        </div>`;
+                    });
+                }
 
                 resultsDiv.innerHTML = html;
             } catch (e) {
