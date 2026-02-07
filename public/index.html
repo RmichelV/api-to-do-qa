@@ -5,14 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QA API Tester</title>
     <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+        body { font-family: sans-serif; max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
         .input-group { margin-bottom: 1rem; }
         label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
         input[type="text"], textarea { width: 100%; padding: 0.5rem; }
-        textarea { height: 200px; }
+        textarea { height: 160px; }
         button { padding: 0.75rem 1.5rem; background: #007bff; color: white; border: none; cursor: pointer; font-size: 1rem; }
         button:hover { background: #0056b3; }
-        #results { margin-top: 2rem; white-space: pre-wrap; background: #f4f4f4; padding: 1rem; border-radius: 5px; }
+        #outputs { margin-top: 2rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .panel { background: #f4f4f4; padding: 1rem; border-radius: 5px; }
+        .panel h3 { margin-top: 0; }
+        .text-output { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
         .status-ok { color: green; font-weight: bold; }
         .status-fail { color: red; font-weight: bold; }
         .status-partial { color: orange; font-weight: bold; }
@@ -26,33 +29,66 @@
         <input type="text" id="url" placeholder="https://ejemplo.com">
     </div>
 
+    <div class="input-group">
+        <label for="co">CO: Contenido Original (pegado aquí)</label>
+        <textarea id="co" placeholder="Pega aquí tu contenido original..."></textarea>
+    </div>
+
     <div style="margin-bottom: 20px;">
         <button onclick="runTextReading()" style="background:#0d6efd;">▶️ Iniciar revisión (text-reading)</button>
     </div>
 
-    <div id="results">Esperando análisis...</div>
+    <div id="outputs">
+        <div class="panel">
+            <h3>CP: Contenido de la página (normalizado)</h3>
+            <div id="cp-output" class="text-output">Esperando análisis...</div>
+        </div>
+        <div class="panel">
+            <h3>CO: Contenido original (normalizado)</h3>
+            <div id="co-output" class="text-output">Esperando análisis...</div>
+        </div>
+    </div>
 
     <script>
         // --- TEXT READING ---
+        function normalizeText(raw) {
+            if (!raw) return '';
+            return raw
+                .replace(/[\u2014\u2013]/g, '-')
+                .split(/\r?\n/)
+                .map(line => line.toLowerCase().replace(/\s+/g, ' ').trim())
+                .join('\n');
+        }
+
         async function runTextReading() {
             const url = document.getElementById('url').value;
-            const resultsDiv = document.getElementById('results');
+            const coInput = document.getElementById('co').value;
+            const cpDiv = document.getElementById('cp-output');
+            const coDiv = document.getElementById('co-output');
 
             if (!url) { alert('Por favor ingresa una URL'); return; }
 
-            resultsDiv.innerHTML = '⏳ Abriendo página y limpiando (mantendré .ddc-wrapper)...';
+            cpDiv.textContent = '⏳ Abriendo página, limpiando y extrayendo texto...';
+            coDiv.textContent = '⏳ Normalizando CO...';
             try {
                 const resp = await fetch('/api/text-reading/preview', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url, headless: false, pauseMs: 15000 })
+                    body: JSON.stringify({ url, headless: false, pauseMs: 8000 })
                 });
-                const data = await resp.json();
-                if (!resp.ok) throw new Error(data.detalles || resp.statusText);
+                const text = await resp.text();
+                if (!resp.ok) throw new Error(text || resp.statusText);
+                // CP ya viene normalizado desde el servidor
+                cpDiv.textContent = text;
 
-                resultsDiv.innerHTML = `✅ Listo. Wrapper conservado: <b>${data.keptWrapper}</b>`;
+                // Normalizar CO con las mismas reglas
+                const normalizedCO = normalizeText(coInput);
+                coDiv.textContent = normalizedCO;
             } catch (error) {
-                resultsDiv.innerHTML = `<span class="status-fail">Error: ${error.message}</span>`;
+                cpDiv.textContent = `Error: ${error.message}`;
+                // Aun así mostrar CO normalizado si estaba presente
+                const normalizedCO = normalizeText(coInput);
+                coDiv.textContent = normalizedCO || '';
             }
         }
     </script>

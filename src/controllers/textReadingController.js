@@ -4,11 +4,11 @@ export const textReadingPreview = async (req, res) => {
   try {
     const { url, headless, pauseMs } = req.body || {};
     if (!url) {
-      return res.status(400).json({ error: 'Falta parámetro: url' });
+      return res.status(400).type('text/plain').send('falta parámetro: url');
     }
-    const result = await previewTextReading(url, { headless, pauseMs });
-    return res.status(200).json(result);
+    const cleanText = await previewTextReading(url, { headless, pauseMs });
+    return res.status(200).type('text/plain').send(cleanText);
   } catch (err) {
-    return res.status(500).json({ error: 'No se pudo ejecutar text-reading', detalles: err.message });
+    return res.status(500).type('text/plain').send('no se pudo ejecutar text-reading');
   }
 };

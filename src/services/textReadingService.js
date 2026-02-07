@@ -76,7 +76,32 @@ export const previewTextReading = async (url, options = {}) => {
     // Pausa para observación
     await page.waitForTimeout(Math.max(5000, pauseMs));
 
-    return { url, keptWrapper };
+    // Extraer el texto "renderizado" preservando el orden y saltos
+    const rawText = await page.evaluate(() => {
+      const wrapper = document.querySelector('.ddc-wrapper');
+      if (!wrapper) return '';
+      // innerText incluye nodos de texto sueltos y respeta saltos de línea visuales
+      return wrapper.innerText || '';
+    });
+
+    // Normalización del texto
+    const normalized = rawText
+      // Reemplazar guiones largos por cortos
+      .replace(/[\u2014\u2013]/g, '-')
+      // Dividir por líneas para mantener saltos y limpiar cada línea
+      .split(/\r?\n/)
+      .map(line => {
+        return line
+          .toLowerCase()
+          // Colapsar múltiples espacios en uno solo (por línea)
+          .replace(/\s+/g, ' ')
+          // Quitar espacios al inicio/fin de la línea
+          .trim();
+      })
+      // Volver a unir respetando los saltos originales
+      .join('\n');
+
+    return normalized;
   } finally {
     if (browser) await browser.close();
   }
