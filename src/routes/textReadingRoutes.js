@@ -1,8 +1,9 @@
 import { Router } from 'express';
-import { textReadingPreview } from '../controllers/textReadingController.js';
+import { textReadingPreview, textReadingCompare } from '../controllers/textReadingController.js';
 
 const router = Router();
 
 router.post('/preview', textReadingPreview);
+router.post('/compare', textReadingCompare);
 
 export default router;
