@@ -150,3 +150,52 @@ export const extractVisibleAnchors = async (url, options = {}) => {
 		if (browser) { try { await browser.close(); } catch {} }
 	}
 };
+
+// Verifica el estado HTTP de una lista de URLs usando HEAD (fallback GET si 405/0), con límite de concurrencia
+export const fetchHttpStatuses = async (urls = [], options = {}) => {
+	const timeoutMs = options.timeoutMs ?? 8000;
+	const concurrency = options.concurrency ?? 6;
+
+	const results = [];
+	let index = 0;
+
+	const runOne = async (u) => {
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), timeoutMs);
+		try {
+			const rHead = await fetch(u, { method: 'HEAD', redirect: 'follow', signal: controller.signal });
+			clearTimeout(timer);
+			return { url: u, status: rHead.status, ok: rHead.ok };
+		} catch (e) {
+			clearTimeout(timer);
+			// Fallback GET si HEAD falla
+			const controller2 = new AbortController();
+			const timer2 = setTimeout(() => controller2.abort(), timeoutMs);
+			try {
+				const rGet = await fetch(u, { method: 'GET', redirect: 'follow', signal: controller2.signal });
+				clearTimeout(timer2);
+				return { url: u, status: rGet.status, ok: rGet.ok };
+			} catch (e2) {
+				clearTimeout(timer2);
+				return { url: u, status: 0, ok: false, error: 'timeout_or_network' };
+			}
+		}
+	};
+
+	const workers = Array.from({ length: Math.min(concurrency, urls.length) }, async () => {
+		while (index < urls.length) {
+			const current = urls[index++];
+			try {
+				const r = await runOne(current);
+				results.push(r);
+			} catch (err) {
+				results.push({ url: current, status: 0, ok: false, error: err?.message || 'unknown' });
+			}
+		}
+	});
+
+	await Promise.all(workers);
+	// Mantener el orden original
+	const map = new Map(results.map(r => [r.url, r]));
+	return urls.map(u => map.get(u) || { url: u, status: 0, ok: false });
+};

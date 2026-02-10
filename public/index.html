@@ -24,6 +24,7 @@
         .anchors-table th, .anchors-table td { border: 1px solid #ddd; padding: 8px; word-break: break-word; overflow-wrap: anywhere; }
         .anchors-table th { background: #e9ecef; text-align: left; }
         .anchors-table th:nth-child(1), .anchors-table td:nth-child(1) { width: 3rem; }
+        .anchors-table th:nth-child(4), .anchors-table td:nth-child(4) { width: 6rem; text-align: center; }
         .anchors-url a { color: #0d6efd; text-decoration: none; }
         .anchors-url a:hover { text-decoration: underline; }
         .anchors-url, .anchors-url a { word-break: break-word; overflow-wrap: anywhere; }
@@ -171,6 +172,10 @@
                     return;
                 }
                 anchorsDiv.innerHTML = buildAnchorsTable(anchors);
+                // Después de renderizar, pedir estados HTTP y actualizar la columna
+                try {
+                    await updateLinkStatuses(anchors.map(a => a.url));
+                } catch {}
             } catch (error) {
                 anchorsDiv.textContent = `Error al extraer enlaces: ${error.message}`;
             }
@@ -180,18 +185,36 @@
             const rows = anchors.map((a, idx) => {
                 const safeText = (a.text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                 const safeUrl = (a.url || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                return `<tr><td>${idx + 1}</td><td>${safeText}</td><td class="anchors-url"><a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl}</a></td></tr>`;
+                return `<tr><td>${idx + 1}</td><td>${safeText}</td><td class="anchors-url"><a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl}</a></td><td><span id="link-status-${idx}">…</span></td></tr>`;
             }).join('');
             return `
                 <table class="anchors-table">
                     <thead>
-                        <tr><th>#</th><th>Texto</th><th>URL</th></tr>
+                        <tr><th>#</th><th>Texto</th><th>URL</th><th>Estado</th></tr>
                     </thead>
                     <tbody>
                         ${rows}
                     </tbody>
                 </table>
             `;
+        }
+
+        async function updateLinkStatuses(urls) {
+            const resp = await fetch('/api/link-reading/statuses', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ urls, timeoutMs: 8000, concurrency: 6 })
+            });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error((data && data.error) || resp.statusText);
+            const statuses = data.statuses || [];
+            statuses.forEach((s, idx) => {
+                const el = document.getElementById(`link-status-${idx}`);
+                if (el) {
+                    el.textContent = s.status || 0;
+                    el.style.color = s.ok ? 'green' : 'red';
+                }
+            });
         }
     </script>
 </body>
