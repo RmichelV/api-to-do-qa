@@ -52,11 +52,28 @@ const extractEditorialRaw = async (url, options = {}) => {
         '.ws-inv-text-search',
         '.ws-inv-filters',
         '.ws-inv-facets',
-        '.srp-wrapper-facets'
+        '.srp-wrapper-facets',
+        // Header / Footer / Nav dentro del wrapper
+        'header', 'footer', '.global-header', '.global-footer', '.site-header', '.site-footer', '.ddc-header', '.ddc-footer', 'nav', '.primary-nav', '.site-nav',
+        // Breadcrumbs / topbars / sitewide banners
+        '.breadcrumbs', '.bread-crumbs', '.topbar', '.sitewide-bar',
+        // Banners/overlays de cookies/promos
+        '.cookie-banner', '#onetrust-banner-sdk', '[role="dialog"][aria-label*="cookie"]', '.notification-banner', '.promo-banner',
+        // Widgets de chat/social/hours
+        '[data-widget-name="chat"]', '.chat-widget', '.ws-hours', '.ws-social', '.ws-share'
       ];
       selectors.forEach(sel => {
         wrapper.querySelectorAll(sel).forEach(el => el.remove());
       });
+
+      // Reaplicar la limpieza si elementos se reinsertan dinámicamente
+      const unwanted = selectors.slice();
+      const observer = new MutationObserver(() => {
+        unwanted.forEach(sel => {
+          wrapper.querySelectorAll(sel).forEach(el => el.remove());
+        });
+      });
+      observer.observe(wrapper, { childList: true, subtree: true });
     });
     console.log('[text-reading] Cleanup done');
 

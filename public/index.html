@@ -19,6 +19,16 @@
         .status-ok { color: green; font-weight: bold; }
         .status-fail { color: red; font-weight: bold; }
         .status-partial { color: orange; font-weight: bold; }
+        /* Tabla de anchors */
+        .anchors-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        .anchors-table th, .anchors-table td { border: 1px solid #ddd; padding: 8px; word-break: break-word; overflow-wrap: anywhere; }
+        .anchors-table th { background: #e9ecef; text-align: left; }
+        .anchors-table th:nth-child(1), .anchors-table td:nth-child(1) { width: 3rem; }
+        .anchors-url a { color: #0d6efd; text-decoration: none; }
+        .anchors-url a:hover { text-decoration: underline; }
+        .anchors-url, .anchors-url a { word-break: break-word; overflow-wrap: anywhere; }
+        .anchors-panel { overflow-x: auto; }
+        #anchors-output { overflow-x: auto; }
     </style>
 </head>
 <body>
@@ -42,6 +52,7 @@
 
     <div style="margin-bottom: 20px;">
         <button onclick="runTextReading()" style="background:#0d6efd;">▶️ Iniciar revisión (text-reading)</button>
+        <button onclick="runLinkReading()" style="background:#6f42c1; margin-left:8px;">🔗 Leer enlaces (link-reading)</button>
     </div>
 
     <div id="outputs">
@@ -57,6 +68,10 @@
             <h3>Comparación línea a línea</h3>
             <div id="compare-summary" class="text-output">Pendiente…</div>
             <div id="compare-details" class="text-output" style="margin-top:0.5rem;"></div>
+        </div>
+        <div class="panel anchors-panel" style="grid-column: 1 / span 2;">
+            <h3>Enlaces (texto y URL)</h3>
+            <div id="anchors-output">Aún no extraídos…</div>
         </div>
     </div>
 
@@ -128,6 +143,55 @@
                 coDiv.textContent = normalizedCO || '';
                 compareSummary.textContent = 'Error durante la comparación';
             }
+        }
+
+        // --- LINK READING: Leer enlaces y mostrarlos en tabla ---
+        async function runLinkReading() {
+            const url = document.getElementById('url').value;
+            const openBrowser = document.getElementById('open-browser').checked;
+            const anchorsDiv = document.getElementById('anchors-output');
+            if (!url) { alert('Por favor ingresa una URL'); return; }
+            anchorsDiv.textContent = '⏳ Extrayendo enlaces visibles…';
+            try {
+                const resp = await fetch('/api/link-reading/anchors', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url,
+                        headless: openBrowser ? false : true,
+                        pauseMs: openBrowser ? 10000 : 0
+                    })
+                });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error((data && data.error) || resp.statusText);
+
+                const anchors = data.anchors || [];
+                if (!anchors.length) {
+                    anchorsDiv.textContent = 'No se encontraron enlaces visibles en .ddc-wrapper';
+                    return;
+                }
+                anchorsDiv.innerHTML = buildAnchorsTable(anchors);
+            } catch (error) {
+                anchorsDiv.textContent = `Error al extraer enlaces: ${error.message}`;
+            }
+        }
+
+        function buildAnchorsTable(anchors) {
+            const rows = anchors.map((a, idx) => {
+                const safeText = (a.text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const safeUrl = (a.url || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                return `<tr><td>${idx + 1}</td><td>${safeText}</td><td class="anchors-url"><a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl}</a></td></tr>`;
+            }).join('');
+            return `
+                <table class="anchors-table">
+                    <thead>
+                        <tr><th>#</th><th>Texto</th><th>URL</th></tr>
+                    </thead>
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>
+            `;
         }
     </script>
 </body>
