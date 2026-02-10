@@ -34,6 +34,12 @@
         <textarea id="co" placeholder="Pega aquí tu contenido original..."></textarea>
     </div>
 
+    <div class="input-group">
+        <label>
+            <input type="checkbox" id="open-browser" /> Abrir navegador (visual) y cerrar tras 10s
+        </label>
+    </div>
+
     <div style="margin-bottom: 20px;">
         <button onclick="runTextReading()" style="background:#0d6efd;">▶️ Iniciar revisión (text-reading)</button>
     </div>
@@ -75,10 +81,16 @@
             compareSummary.textContent = '⏳ Comparando líneas...';
             compareDetails.textContent = '';
             try {
+                const openBrowser = document.getElementById('open-browser').checked;
                 const resp = await fetch('/api/text-reading/compare', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url, coText: coInput })
+                    body: JSON.stringify({
+                        url,
+                        coText: coInput,
+                        headless: openBrowser ? false : true,
+                        pauseMs: openBrowser ? 10000 : 0
+                    })
                 });
                 const data = await resp.json();
                 if (!resp.ok) throw new Error((data && data.error) || resp.statusText);

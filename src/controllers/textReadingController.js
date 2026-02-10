@@ -2,10 +2,7 @@ import { previewTextReading, compareTextReading } from '../services/textReadingS
 
 export const textReadingPreview = async (req, res) => {
   try {
-    const { url } = req.body || {};
-    // Forzar headless mientras diagnosticamos cuelgues
-    const headless = true;
-    const pauseMs = 0;
+    const { url, headless, pauseMs } = req.body || {};
     if (!url) {
       return res.status(400).type('text/plain').send('falta parámetro: url');
     }
@@ -18,10 +15,7 @@ export const textReadingPreview = async (req, res) => {
 
 export const textReadingCompare = async (req, res) => {
   try {
-    const { url, coText } = req.body || {};
-    // Forzar headless mientras diagnosticamos cuelgues
-    const headless = true;
-    const pauseMs = 0;
+    const { url, coText, headless, pauseMs } = req.body || {};
     if (!url) {
       return res.status(400).json({ error: 'falta parámetro: url' });
     }

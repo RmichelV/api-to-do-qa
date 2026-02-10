@@ -73,13 +73,37 @@ const extractEditorialRaw = async (url, options = {}) => {
 
     return rawText;
   } finally {
+    // Si se solicitó visual, esperar antes de cerrar
+    if (pauseMs && pauseMs > 0) {
+      try { await new Promise(resolve => setTimeout(resolve, pauseMs)); } catch {}
+    }
     if (browser) { try { await browser.close(); } catch {} }
   }
 };
 
 // Endpoint preview: devuelve texto ya normalizado
 export const previewTextReading = async (url, options = {}) => {
-  const raw = await extractEditorialRaw(url, options);
+  // Watchdog: reinicia cada 5s si no hay resultado
+  const retryIntervalMs = 5000;
+  const maxAttempts = 12; // ~60s
+  let raw = '';
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    console.log(`[text-reading] Watchdog attempt ${attempt}/${maxAttempts}`);
+    const extraction = extractEditorialRaw(url, options);
+    const timeout = new Promise(resolve => setTimeout(() => resolve('timeout'), retryIntervalMs));
+    const outcome = await Promise.race([extraction, timeout]);
+    if (outcome === 'timeout') {
+      console.log(`[text-reading] Attempt ${attempt} timed out after ${retryIntervalMs}ms — restarting`);
+      continue;
+    }
+    raw = outcome || '';
+    const hasLines = raw.split(/\r?\n/).some(l => l.trim().length > 0);
+    if (hasLines) {
+      console.log(`[text-reading] Watchdog success with content on attempt ${attempt}`);
+      break;
+    }
+    console.log(`[text-reading] Attempt ${attempt} returned empty content — restarting`);
+  }
   const rawLines = raw.split(/\r?\n/);
   rawLines.forEach((line, idx) => {
     console.log(`[text-reading] L${idx + 1}: ${line}`);
@@ -93,7 +117,27 @@ export const previewTextReading = async (url, options = {}) => {
 
 // Comparación en servidor: devuelve JSON con CP/CO y resultados
 export const compareTextReading = async (url, coText, options = {}) => {
-  const rawCP = await extractEditorialRaw(url, options);
+  // Watchdog: reinicia cada 5s si no hay resultado
+  const retryIntervalMs = 10000;
+  const maxAttempts = 12;
+  let rawCP = '';
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    console.log(`[text-reading] Watchdog attempt ${attempt}/${maxAttempts} (compare)`);
+    const extraction = extractEditorialRaw(url, options);
+    const timeout = new Promise(resolve => setTimeout(() => resolve('timeout'), retryIntervalMs));
+    const outcome = await Promise.race([extraction, timeout]);
+    if (outcome === 'timeout') {
+      console.log(`[text-reading] Attempt ${attempt} timed out after ${retryIntervalMs}ms — restarting`);
+      continue;
+    }
+    rawCP = outcome || '';
+    const hasLines = rawCP.split(/\r?\n/).some(l => l.trim().length > 0);
+    if (hasLines) {
+      console.log(`[text-reading] Watchdog success with content on attempt ${attempt} (compare)`);
+      break;
+    }
+    console.log(`[text-reading] Attempt ${attempt} returned empty content — restarting`);
+  }
   const cpText = normalizeText(rawCP);
   const coTextNorm = normalizeText(coText || '');
 
