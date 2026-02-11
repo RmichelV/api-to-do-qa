@@ -1,5 +1,5 @@
 import { runLinkReading } from '../services/linkReadingService.js';
-import { extractVisibleAnchors, fetchHttpStatuses } from '../services/linkReadingService.js';
+import { extractVisibleAnchors, fetchHttpStatuses, extractH1Data } from '../services/linkReadingService.js';
 
 export const linkReadingRun = async (req, res) => {
 	try {
@@ -36,6 +36,19 @@ export const linkReadingStatuses = async (req, res) => {
 	try {
 		const statuses = await fetchHttpStatuses(urls, { timeoutMs, concurrency });
 		return res.status(200).json({ statuses });
+	} catch (err) {
+		return res.status(500).json({ error: err?.message || 'Unknown error' });
+	}
+};
+
+export const linkReadingH1Check = async (req, res) => {
+	const { url, headless, pauseMs } = req.body || {};
+	if (!url) {
+		return res.status(400).json({ error: 'Missing url' });
+	}
+	try {
+		const data = await extractH1Data(url, { headless, pauseMs });
+		return res.status(200).json(data);
 	} catch (err) {
 		return res.status(500).json({ error: err?.message || 'Unknown error' });
 	}

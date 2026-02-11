@@ -19,9 +19,15 @@ export const runLinkReading = async (url, options = {}) => {
 		await page.evaluate(() => {
 			const wrapper = document.querySelector('.ddc-wrapper');
 			if (!wrapper) return;
+			// Preservar etiqueta externa h1.sr-only
+			const preservedH1 = document.querySelector('h1.sr-only');
 			// Igual que text-reading: reemplazar body con el wrapper y luego eliminar selectores
 			document.body.innerHTML = '';
 			document.body.appendChild(wrapper);
+			// Si existe y está fuera del wrapper, reanexar al body
+			if (preservedH1 && !wrapper.contains(preservedH1)) {
+				document.body.appendChild(preservedH1);
+			}
 				// Igual que text-reading: eliminar inventario y elementos de UI dentro del wrapper
 				const selectors = [
 				"[data-name^='inventory-search-results-page-filters-sort-']",
@@ -89,8 +95,12 @@ export const extractVisibleAnchors = async (url, options = {}) => {
 			const wrapper = document.querySelector('.ddc-wrapper');
 			if (!wrapper) return [];
 			// Igual que text-reading: aislar wrapper y limpiar elementos no editoriales
+			const preservedH1 = document.querySelector('h1.sr-only');
 			document.body.innerHTML = '';
 			document.body.appendChild(wrapper);
+			if (preservedH1 && !wrapper.contains(preservedH1)) {
+				document.body.appendChild(preservedH1);
+			}
 			const selectors = [
 				"[data-name^='inventory-search-results-page-filters-sort-']",
 				"[data-name^='inventory-search-results-facets-']",
@@ -198,4 +208,78 @@ export const fetchHttpStatuses = async (urls = [], options = {}) => {
 	// Mantener el orden original
 	const map = new Map(results.map(r => [r.url, r]));
 	return urls.map(u => map.get(u) || { url: u, status: 0, ok: false });
+};
+
+// Extrae datos de H1: h1 visibles dentro de .ddc-wrapper (excluye .sr-only) y el texto de h1.sr-only externo si existe
+export const extractH1Data = async (url, options = {}) => {
+	const headless = options.headless ?? true;
+	const pauseMs = options.pauseMs ?? 0;
+	let browser;
+	try {
+		browser = await chromium.launch({ headless });
+		const context = await browser.newContext();
+		const page = await context.newPage();
+		page.setDefaultTimeout(60000);
+		page.setDefaultNavigationTimeout(60000);
+
+		await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+
+		const result = await page.evaluate(() => {
+			const wrapper = document.querySelector('.ddc-wrapper');
+			if (!wrapper) return { h1Texts: [], srOnlyText: null };
+			const preservedH1 = document.querySelector('h1.sr-only');
+			document.body.innerHTML = '';
+			document.body.appendChild(wrapper);
+			if (preservedH1 && !wrapper.contains(preservedH1)) {
+				document.body.appendChild(preservedH1);
+			}
+			const selectors = [
+				"[data-name^='inventory-search-results-page-filters-sort-']",
+				"[data-name^='inventory-search-results-facets-']",
+				'#inventory-results1-app-root',
+				'#inventory-search1-app-root',
+				'#inventory-filters1-app-root',
+				'#inventory-facets1-app-root',
+				'#kbb-leaddriver-search',
+				"[data-name^='form-centered']",
+				"[data-widget-name='contact-form']",
+				"[data-name^='map-hours']",
+				"[data-name='map-1']",
+				"[data-widget-name='map-dynamic']",
+				'.facetmulti.BLANK',
+				'#compareForm',
+				'.ws-inv-text-search',
+				'.ws-inv-filters',
+				'.ws-inv-facets',
+				'.srp-wrapper-facets'
+			];
+			selectors.forEach(sel => {
+				wrapper.querySelectorAll(sel).forEach(el => el.remove());
+			});
+
+			const isVisible = (el) => {
+				const style = window.getComputedStyle(el);
+				if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity || '1') === 0) return false;
+				const rect = el.getBoundingClientRect();
+				if (rect.width === 0 || rect.height === 0) return false;
+				return true;
+			};
+
+			const h1Nodes = Array.from(wrapper.querySelectorAll('h1'))
+				.filter(h => !h.classList.contains('sr-only'))
+				.filter(isVisible);
+
+			const h1Texts = h1Nodes.map(h => (h.innerText || '').trim()).filter(t => t.length > 0);
+			const srOnlyText = preservedH1 ? (preservedH1.innerText || '').trim() : null;
+
+			return { h1Texts, srOnlyText };
+		});
+
+		return result;
+	} finally {
+		if (pauseMs && pauseMs > 0) {
+			await new Promise(resolve => setTimeout(resolve, pauseMs));
+		}
+		if (browser) { try { await browser.close(); } catch {} }
+	}
 };

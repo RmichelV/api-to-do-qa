@@ -30,6 +30,9 @@
         .anchors-url, .anchors-url a { word-break: break-word; overflow-wrap: anywhere; }
         .anchors-panel { overflow-x: auto; }
         #anchors-output { overflow-x: auto; }
+        /* Panel H1 */
+        .h1-panel .h1-summary { font-weight: bold; }
+        .h1-panel .h1-details { margin-top: 0.5rem; }
     </style>
 </head>
 <body>
@@ -73,6 +76,11 @@
         <div class="panel anchors-panel" style="grid-column: 1 / span 2;">
             <h3>Enlaces (texto y URL)</h3>
             <div id="anchors-output">Aún no extraídos…</div>
+        </div>
+        <div class="panel h1-panel" style="grid-column: 1 / span 2;">
+            <h3>Revisión H1</h3>
+            <div id="h1-summary" class="h1-summary">Aún no evaluado…</div>
+            <div id="h1-details" class="h1-details"></div>
         </div>
     </div>
 
@@ -176,6 +184,10 @@
                 try {
                     await updateLinkStatuses(anchors.map(a => a.url));
                 } catch {}
+                // Evaluación H1
+                try {
+                    await updateH1Check(url, openBrowser);
+                } catch {}
             } catch (error) {
                 anchorsDiv.textContent = `Error al extraer enlaces: ${error.message}`;
             }
@@ -215,6 +227,77 @@
                     el.style.color = s.ok ? 'green' : 'red';
                 }
             });
+        }
+
+        async function updateH1Check(url, openBrowser) {
+            const h1Summary = document.getElementById('h1-summary');
+            const h1Details = document.getElementById('h1-details');
+            h1Summary.textContent = '⏳ Evaluando H1…';
+            h1Details.textContent = '';
+            const resp = await fetch('/api/link-reading/h1-check', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url, headless: openBrowser ? false : true, pauseMs: openBrowser ? 10000 : 0 })
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                h1Summary.textContent = 'Error al evaluar H1';
+                h1Summary.className = 'h1-summary status-fail';
+                return;
+            }
+            const h1Texts = data.h1Texts || [];
+            const srOnlyText = data.srOnlyText || null;
+            const count = h1Texts.length;
+
+            // Regla 1: más de un h1 (excluyendo sr-only) => rojo
+            if (count > 1) {
+                h1Summary.textContent = `🔴 Hay ${count} H1 visibles (se espera 1)`;
+                h1Summary.className = 'h1-summary status-fail';
+                h1Details.innerHTML = h1Texts.map(t => `• ${escapeHtml(t)}`).join('<br>');
+                return;
+            }
+
+            // Regla 2: exactamente un h1 y uno sr-only iguales => verde
+            if (count === 1 && srOnlyText && normalizeStr(h1Texts[0]) === normalizeStr(srOnlyText)) {
+                h1Summary.textContent = '🟢 Solo hay un H1 y coincide con el H1 sr-only';
+                h1Summary.className = 'h1-summary status-ok';
+                h1Details.innerHTML = `H1: ${escapeHtml(h1Texts[0])}<br>sr-only: ${escapeHtml(srOnlyText)}`;
+                return;
+            }
+
+            // Regla 3: exactamente un h1 y uno sr-only distintos => naranja
+            if (count === 1 && srOnlyText && normalizeStr(h1Texts[0]) !== normalizeStr(srOnlyText)) {
+                h1Summary.textContent = '🟠 H1 y H1 sr-only son distintos';
+                h1Summary.className = 'h1-summary status-partial';
+                h1Details.innerHTML = `H1: ${escapeHtml(h1Texts[0])}<br>sr-only: ${escapeHtml(srOnlyText)}`;
+                return;
+            }
+
+            // Casos adicionales (no especificados): sin H1 visible
+            if (count === 0) {
+                if (srOnlyText) {
+                    h1Summary.textContent = '🟠 No hay H1 visible, solo H1 sr-only presente';
+                    h1Summary.className = 'h1-summary status-partial';
+                    h1Details.textContent = `sr-only: ${escapeHtml(srOnlyText)}`;
+                } else {
+                    h1Summary.textContent = '🔴 No se encontró ningún H1';
+                    h1Summary.className = 'h1-summary status-fail';
+                }
+                return;
+            }
+
+            // Por defecto: un H1 sin sr-only => verde
+            h1Summary.textContent = '🟢 Solo hay un H1 visible';
+            h1Summary.className = 'h1-summary status-ok';
+            h1Details.textContent = `H1: ${escapeHtml(h1Texts[0])}`;
+        }
+
+        function escapeHtml(str) {
+            return String(str).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        function normalizeStr(str) {
+            return String(str).trim().replace(/\s+/g, ' ').toLowerCase();
         }
     </script>
 </body>
