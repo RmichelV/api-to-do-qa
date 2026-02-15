@@ -1,0 +1,123 @@
+TEXTO ORIGINAL
+
+el poder de la curiosidad
+la curiosidad es una fuerza silenciosa que empuja a las personas a explorar, preguntar y descubrir. 
+
+gracias a ella nacen las ideas nuevas y se rompen los límites de lo conocido. cuando alguien se permite ser curioso, el mundo se vuelve más amplio y lleno de posibilidades inesperadas.
+
+CASO 1: LA PAGINA PUEDE TENER MUCHO MAS TEXTO QUE EL TEXTO ORIGINAL: 
+
+pequeños hábitos, grandes cambios
+a veces los cambios más importantes no vienen de decisiones enormes, sino de acciones pequeñas repetidas cada día. leer unos minutos, escuchar con atención o cuidar el descanso puede transformar poco a poco la forma en que vivimos. la constancia convierte lo simple en algo poderoso.
+
+el poder de la curiosidad
+la curiosidad es una fuerza silenciosa que empuja a las personas a explorar, preguntar y descubrir. 
+
+gracias a ella nacen las ideas nuevas y se rompen los límites de lo conocido. cuando alguien se permite ser curioso, el mundo se vuelve más amplio y lleno de posibilidades inesperadas.
+
+la importancia del silencio
+en un mundo lleno de ruido, el silencio se vuelve un refugio valioso. nos permite ordenar pensamientos, reconocer emociones y escucharnos de verdad. tomarse un momento de calma no es perder el tiempo, es recuperarlo.
+
+// SE DEBE VERIFICAR QUE EL TEXTO ORIGINAL SI ESTA INTEGRADO COMPLETAMENTE EN LA PAGINA Y NO SIMILAR POR EJEMPLO: 
+
+FRASE ORIGINAL: MI GATO ES DE COLOR CAFE, VA A LA MONTAÑA 
+FRASE EN LA PAGINA: VA A LA MONTAÑA MI GATO CAFE 
+
+LEVANTAR REPORTE !! 
+
+CASO 2: ORDEN DEL TEXTO ORIGINAL 
+
+//SE DEBE VERIFICAR QUE EL TEXTO  ORIGINAL MANTENGA SU ORDEN DENTRO LA PAGINA SIN IMPORTAR QUE ESTE REPARADO
+
+ESTA BIEN SI APARECE ASI:
+pequeños hábitos, grandes cambios
+a veces los cambios más importantes no vienen de decisiones enormes, sino de acciones pequeñas repetidas cada día. leer unos minutos, escuchar con atención o cuidar el descanso puede transformar poco a poco la forma en que vivimos. la constancia convierte lo simple en algo poderoso.
+
+el poder de la curiosidad
+la curiosidad es una fuerza silenciosa que empuja a las personas a explorar, preguntar y descubrir. 
+
+gracias a ella nacen las ideas nuevas y se rompen los límites de lo conocido. cuando alguien se permite ser curioso, el mundo se vuelve más amplio y lleno de posibilidades inesperadas.
+
+la importancia del silencio
+en un mundo lleno de ruido, el silencio se vuelve un refugio valioso. nos permite ordenar pensamientos, reconocer emociones y escucharnos de verdad. tomarse un momento de calma no es perder el tiempo, es recuperarlo.
+
+
+ESTA MAL SI APARECE ASI: 
+pequeños hábitos, grandes cambios
+a veces los cambios más importantes no vienen de decisiones enormes, sino de acciones pequeñas repetidas cada día. leer unos minutos, escuchar con atención o cuidar el descanso puede transformar poco a poco la forma en que vivimos. la constancia convierte lo simple en algo poderoso.
+
+gracias a ella nacen las ideas nuevas y se rompen los límites de lo conocido. cuando alguien se permite ser curioso, el mundo se vuelve más amplio y lleno de posibilidades inesperadas.
+
+la importancia del silencio
+en un mundo lleno de ruido, el silencio se vuelve un refugio valioso. nos permite ordenar pensamientos, reconocer emociones y escucharnos de verdad. tomarse un momento de calma no es perder el tiempo, es recuperarlo.
+
+el poder de la curiosidad
+la curiosidad es una fuerza silenciosa que empuja a las personas a explorar, preguntar y descubrir. 
+
+// DE SER ASI LEVANTAR UN ERROR DE ORDEN
+
+CASO 3: ORACIONES SIMILARES 
+COMO SE VERIFICARA SI LAS LINEAS ESTAN INTEGRADAS CORRECTAMENTE EN EL TEXTO (LINEA A LINEA) HABRA LINEAS SIMILARES, MUCHO CUIDADO CON ESTA PARTE, POR EJEMPLO
+
+el poder de la curiosidad
+la curiosidad es una fuerza silenciosa que empuja a las personas a explorar, preguntar y descubrir. 
+
+la importancia del silencio
+en un mundo lleno de ruido, el silencio se vuelve un refugio valioso. nos permite ordenar pensamientos, reconocer emociones y escucharnos de verdad. tomarse un momento de calma no es perder el tiempo, es recuperarlo.
+
+gracias a ella nacen las ideas nuevas y se rompen los límites de lo conocido. cuando alguien se permite ser curioso, el mundo se vuelve más amplio y lleno de posibilidades inesperadas.
+
+
+la curiosidad es una fuerza silenciosa que puede tener muchos antibajos.
+
+COMO SE VE EN LAS SIGUIENTES FRASES:
+FRASE ORIGNAL: 
+"la curiosidad es una fuerza silenciosa que empuja a las personas a explorar, preguntar y descubrir. "
+
+FRASES EN LA PAGINA: 
+"la curiosidad es una fuerza silenciosa que empuja a las personas a explorar, preguntar y descubrir. "
+Y
+"la curiosidad es una fuerza silenciosa que puede tener muchos antibajos" 
+
+SON FRASES SIMILARES PERO DISTINTAS PERO SI HACEMOS UNA COMPARACIÓN DEL TEXTO ORIGINAL, SI ESTA SU FRASE EN LA PAGINA (FRASE ORIGNAL) Y LA SEGUNDA FRASE NO SE TOMA EN CUENTA EN ESA COMPARACIÓN YA QUE NO APLICA. 
+
+
+EVITAR ESTOS ERRORES: 
+
+linea 1: hola mundo 
+linea 2: mi mundo es mejor 
+linea 3: gracias a la programacion
+
+pagina: 
+linea 1: hola mundo 
+linea 2: 
+linea 3: mi mundo es mejor 
+linea 4: gracias a la programacion
+
+error que quiero evitar: 
+linea 1: hola mundo bien 
+linea 2: !error lo que hay: " " lo que se esperaba " mi mundo es mejor" 
+linea 3: !error lo que hay : "mi mundo es mejor" lo que se espaba: "gracias a la programacion" 
+
+
+
+RESULTADOS QUE ESPERO OBTENER: 
+
+1. EN VERDE SI TODO EL CONTENIDO ORIGNAL ESTA EN LA PAGINA
+2. AMARILLO: SI EL CONTENIDO ORIGINAL ESTA INCOMPLETO 
+
+EJEMPLO:
+TEXTO EN LA PAGINA: 
+
+el poder de la curiosidad
+la curiosidad es una fuerza silenciosa que empuja a explorar, preguntar y descubrir. 
+
+LEVANTAR UN ERROR AMARILLO, MOSTRAR EL PARRAFO DONDE ESTA EL ERROR, AMBOS PARRAFOS DEL TEXTO ORIGINAL Y DEL TEXTO DE LA PAGINA, MOSTRAR TAMBIEN SOLO LA ORACION ORIGINAL Y LA ORACION  DE DONDE ESTA INCOMPLETO 
+
+LEVANTAR ERROR ROJO SI NADA DEL CONTENIDO DEL TEXTO ORIGINAL ESTA EN EL TEXTO DE LA PAGINA
+
+
+
+
+
+
