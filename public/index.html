@@ -8,6 +8,7 @@
         body { font-family: sans-serif; max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
         .input-group { margin-bottom: 1rem; }
         label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
+        .input-group label { display: inline-block; margin-right: 1.5rem; margin-bottom: 0; font-weight: normal; }
         input[type="text"], textarea { width: 100%; padding: 0.5rem; }
         textarea { height: 160px; }
         button { padding: 0.75rem 1.5rem; background: #007bff; color: white; border: none; cursor: pointer; font-size: 1rem; }
@@ -52,6 +53,9 @@
         <label>
             <input type="checkbox" id="open-browser" /> Abrir navegador (visual) y cerrar tras 10s
         </label>
+        <label>
+            <input type="checkbox" id="show-content" checked /> Mostrar contenido extraído (CP y CO)
+        </label>
     </div>
 
     <div style="margin-bottom: 20px;">
@@ -60,11 +64,11 @@
     </div>
 
     <div id="outputs">
-        <div class="panel">
+        <div class="panel" id="cp-panel">
             <h3>CP: Contenido de la página (normalizado)</h3>
             <div id="cp-output" class="text-output">Esperando análisis...</div>
         </div>
-        <div class="panel">
+        <div class="panel" id="co-panel">
             <h3>CO: Contenido original (normalizado)</h3>
             <div id="co-output" class="text-output">Esperando análisis...</div>
         </div>
@@ -97,8 +101,15 @@
             const coDiv = document.getElementById('co-output');
             const compareSummary = document.getElementById('compare-summary');
             const compareDetails = document.getElementById('compare-details');
+            const cpPanel = document.getElementById('cp-panel');
+            const coPanel = document.getElementById('co-panel');
 
             if (!url) { alert('Por favor ingresa una URL'); return; }
+
+            // Controlar visibilidad de paneles según checkbox
+            const showContent = document.getElementById('show-content').checked;
+            cpPanel.style.display = showContent ? '' : 'none';
+            coPanel.style.display = showContent ? '' : 'none';
 
             cpDiv.textContent = '⏳ Abriendo página, limpiando y extrayendo texto...';
             coDiv.textContent = '⏳ Normalizando CO...';
