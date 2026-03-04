@@ -156,7 +156,13 @@
                     const orderTag = d.orderTag === 'ordered' ? '↔️ orden ok' : (d.orderTag === 'out-of-order' ? '↯ fuera de orden' : '');
                     return `${mark} [CO ${i + 1}] ${d.line} ${where} ${orderTag}`.trim();
                 });
-                compareDetails.textContent = lines.join('\n');
+                
+                // Mostrar líneas detalladas solo si no está completo o está fuera de orden
+                if (complete && ordered) {
+                    compareDetails.textContent = '';
+                } else {
+                    compareDetails.textContent = lines.join('\n');
+                }
             } catch (error) {
                 cpDiv.textContent = `Error: ${error.message}`;
                 const normalizedCO = normalizeText(coInput);
