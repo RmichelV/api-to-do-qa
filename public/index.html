@@ -37,8 +37,9 @@
 
     <div class="actions">
         <button class="btn btn--text-reading" onclick="runTextReading()">▶️ Revisión texto</button>
-        <button class="btn btn--mobile" onclick="runTextReadingMobile()">📱 Revisión mobile</button>
-        <button class="btn btn--link-reading" onclick="runLinkReading()">🔗 Leer enlaces</button>
+        <button class="btn btn--mobile" onclick="runTextReadingMobile()">📱 Revisión texto mobile</button>
+        <button class="btn btn--link-reading" onclick="runLinkReading()">🔗 Leer enlaces </button>
+        <button class="btn btn--anchor-reading" onclick="runAnchorReading()">⚓ Leer anchors</button>
     </div>
 
     <div class="section-label">Resultados</div>
@@ -77,6 +78,10 @@
             <h3>🏷️ Revisión H1</h3>
             <div id="h1-summary" class="h1-summary">Aún no evaluado…</div>
             <div id="h1-details" class="h1-details"></div>
+        </div>
+        <div class="panel panel--full anchors-panel" id="anchor-panel" style="display:none;">
+            <h3>⚓ Resultado de los anchors </h3>
+            <div id="anchor-output">Aún no evaluados…</div>
         </div>
     </div>
 
@@ -120,6 +125,8 @@
             if (anchorsEl && anchorsEl.textContent.startsWith('⏳')) anchorsEl.textContent = cancelMsg;
             const h1El = document.getElementById('h1-summary');
             if (h1El && h1El.textContent.startsWith('⏳')) h1El.textContent = cancelMsg;
+            const anchorEl = document.getElementById('anchor-output');
+            if (anchorEl && anchorEl.textContent.startsWith('⏳')) anchorEl.textContent = cancelMsg;
         }
 
         // --- TEXT READING ---
@@ -429,6 +436,81 @@
             h1Details.textContent = `H1: ${escapeHtml(h1Texts[0])}`;
         }
 
+        // --- ANCHOR READING: Validar anchor links internos (#seccion) ---
+        async function runAnchorReading() {
+            const url = document.getElementById('url').value;
+            const openBrowser = document.getElementById('open-browser').checked;
+            const anchorPanel = document.getElementById('anchor-panel');
+            const anchorDiv = document.getElementById('anchor-output');
+            if (!url) { alert('Por favor ingresa una URL'); return; }
+
+            anchorPanel.style.display = '';
+            anchorDiv.textContent = '⏳ Extrayendo y validando anchor links internos…';
+            const ac = createAbortController();
+            try {
+                const resp = await fetch('/api/anchor-reading/check', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url,
+                        headless: openBrowser ? false : true,
+                        pauseMs: openBrowser ? 10000 : 0
+                    }),
+                    signal: ac.signal
+                });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error((data && data.error) || resp.statusText);
+
+                const anchors = data.anchors || [];
+                if (!anchors.length) {
+                    anchorDiv.textContent = 'No se encontraron anchor links internos (#) en .ddc-wrapper';
+                    return;
+                }
+
+                // Resumen
+                const totalExists = anchors.filter(a => a.targetExists).length;
+                const totalScroll = anchors.filter(a => a.scrollOk).length;
+                const summaryBadge = (totalExists === anchors.length && totalScroll === anchors.length)
+                    ? '🟢' : (totalExists === anchors.length ? '🟡' : '🔴');
+
+                anchorDiv.innerHTML = `
+                    <div style="margin-bottom:0.5rem;font-weight:600;">
+                        ${summaryBadge} ${anchors.length} anchor links encontrados — Destino existe: ${totalExists}/${anchors.length}, Scroll OK: ${totalScroll}/${anchors.length}
+                    </div>
+                    ${buildAnchorTable(anchors)}
+                `;
+            } catch (error) {
+                if (error.name === 'AbortError') return;
+                anchorDiv.textContent = `Error al validar anchor links: ${error.message}`;
+            } finally {
+                removeAbortController(ac);
+            }
+        }
+
+        function buildAnchorTable(anchors) {
+            const rows = anchors.map((a, idx) => {
+                const safeText = escapeHtml(a.text);
+                const safeHref = escapeHtml(a.href);
+                const existsIcon = a.targetExists ? '✅' : '❌';
+                const scrollIcon = a.scrollOk ? '✅' : (a.targetExists ? '❌' : '➖');
+                return `<tr>
+                    <td>${idx + 1}</td>
+                    <td>${safeText}</td>
+                    <td><code>${safeHref}</code></td>
+                    <td>${existsIcon}</td>
+                    <td>${scrollIcon}</td>
+                </tr>`;
+            }).join('');
+            return `
+                <table class="anchors-table">
+                    <thead>
+                        <tr><th>#</th><th>Texto</th><th>href</th><th>Destino existe</th><th>Scroll OK</th></tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+        }
+
         function escapeHtml(str) {
             return String(str).replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
@@ -473,6 +555,10 @@
             document.getElementById('h1-summary').textContent = 'Aún no evaluado…';
             document.getElementById('h1-summary').className = 'h1-summary';
             document.getElementById('h1-details').innerHTML = '';
+
+            // Restaurar panel anchor
+            document.getElementById('anchor-panel').style.display = 'none';
+            document.getElementById('anchor-output').textContent = 'Aún no evaluados…';
         }
     </script>
 </body>

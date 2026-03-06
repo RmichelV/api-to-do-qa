@@ -150,6 +150,7 @@ textarea {
 .btn--text-reading  { background: #2563eb; }
 .btn--mobile        { background: #ea580c; }
 .btn--link-reading  { background: #7c3aed; }
+.btn--anchor-reading { background: #0891b2; }
 
 /* --- Controles superiores (Detener / Resetear) --- */
 .top-controls {
