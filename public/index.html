@@ -60,6 +60,7 @@
 
     <div style="margin-bottom: 20px;">
         <button onclick="runTextReading()" style="background:#0d6efd;">▶️ Iniciar revisión (text-reading)</button>
+        <button onclick="runTextReadingMobile()" style="background:#e85d04; margin-left:8px;">📱 Revisión mobile</button>
         <button onclick="runLinkReading()" style="background:#6f42c1; margin-left:8px;">🔗 Leer enlaces (link-reading)</button>
     </div>
 
@@ -76,6 +77,19 @@
             <h3>Comparación línea a línea</h3>
             <div id="compare-summary" class="text-output">Pendiente…</div>
             <div id="compare-details" class="text-output" style="margin-top:0.5rem;"></div>
+        </div>
+        <div class="panel" id="cp-mobile-panel" style="grid-column: 1 / span 2; display:none;">
+            <h3>📱 CP Mobile: Contenido de la página (normalizado)</h3>
+            <div id="cp-mobile-output" class="text-output">Esperando análisis mobile...</div>
+        </div>
+        <div class="panel" id="co-mobile-panel" style="grid-column: 1 / span 2; display:none;">
+            <h3>📱 CO Mobile: Contenido original (normalizado)</h3>
+            <div id="co-mobile-output" class="text-output">Esperando análisis mobile...</div>
+        </div>
+        <div class="panel" id="compare-mobile-panel" style="grid-column: 1 / span 2; display:none;">
+            <h3>📱 Comparación Mobile línea a línea</h3>
+            <div id="compare-mobile-summary" class="text-output">Pendiente…</div>
+            <div id="compare-mobile-details" class="text-output" style="margin-top:0.5rem;"></div>
         </div>
         <div class="panel anchors-panel" style="grid-column: 1 / span 2;">
             <h3>Enlaces (texto y URL)</h3>
@@ -168,6 +182,81 @@
                 const normalizedCO = normalizeText(coInput);
                 coDiv.textContent = normalizedCO || '';
                 compareSummary.textContent = 'Error durante la comparación';
+            }
+        }
+
+        // --- TEXT READING MOBILE ---
+        async function runTextReadingMobile() {
+            const url = document.getElementById('url').value;
+            const coInput = document.getElementById('co').value;
+            const cpDiv = document.getElementById('cp-mobile-output');
+            const coDiv = document.getElementById('co-mobile-output');
+            const compareSummary = document.getElementById('compare-mobile-summary');
+            const compareDetails = document.getElementById('compare-mobile-details');
+            const cpPanel = document.getElementById('cp-mobile-panel');
+            const coPanel = document.getElementById('co-mobile-panel');
+            const comparePanel = document.getElementById('compare-mobile-panel');
+
+            if (!url) { alert('Por favor ingresa una URL'); return; }
+
+            // Siempre mostrar paneles mobile al ejecutar
+            const showContent = document.getElementById('show-content').checked;
+            cpPanel.style.display = showContent ? '' : 'none';
+            coPanel.style.display = showContent ? '' : 'none';
+            comparePanel.style.display = '';
+
+            cpDiv.textContent = '⏳ Abriendo página en modo mobile (430×932), limpiando y extrayendo texto...';
+            coDiv.textContent = '⏳ Normalizando CO...';
+            compareSummary.textContent = '⏳ Comparando líneas...';
+            compareDetails.textContent = '';
+            try {
+                const openBrowser = document.getElementById('open-browser').checked;
+                const resp = await fetch('/api/text-reading-mobile/compare', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url,
+                        coText: coInput,
+                        headless: openBrowser ? false : true,
+                        pauseMs: openBrowser ? 10000 : 0
+                    })
+                });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error((data && data.error) || resp.statusText);
+
+                cpDiv.textContent = (data.cp && data.cp.text) || '';
+                coDiv.textContent = (data.co && data.co.text) || '';
+
+                const complete = data.result && data.result.complete;
+                const ordered = data.result && data.result.ordered;
+                const badge = complete && ordered
+                  ? '🟢 COMPLETO Y EN ORDEN'
+                  : (complete && !ordered ? '🟡 COMPLETO PERO FUERA DE ORDEN' : '🔴 INCOMPLETO');
+
+                const details = (data.details || []);
+                const counts = {
+                    total: (data.co && data.co.lines ? data.co.lines.length : 0),
+                    presentAnywhere: details.filter(d => d.found).length,
+                    presentInOrder: details.filter(d => d.orderTag === 'ordered').length,
+                    missing: details.filter(d => !d.found).length
+                };
+                compareSummary.textContent = `${badge} — CO líneas: ${counts.total}, presentes: ${counts.presentAnywhere}, en orden: ${counts.presentInOrder}, faltantes: ${counts.missing}`;
+
+                const lines = details.map((d, i) => {
+                    const mark = d.found ? '✔️' : '❌';
+                    const where = d.found ? `(CP línea ${(d.cpIndex ?? -1) + 1})` : '(no encontrada)';
+                    const orderTag = d.orderTag === 'ordered' ? '↔️ orden ok' : (d.orderTag === 'out-of-order' ? '↯ fuera de orden' : '');
+                    return `${mark} [CO ${i + 1}] ${d.line} ${where} ${orderTag}`.trim();
+                });
+
+                if (complete && ordered) {
+                    compareDetails.textContent = '';
+                } else {
+                    compareDetails.textContent = lines.join('\n');
+                }
+            } catch (error) {
+                cpDiv.textContent = `Error: ${error.message}`;
+                compareSummary.textContent = 'Error durante la comparación mobile';
             }
         }
 
