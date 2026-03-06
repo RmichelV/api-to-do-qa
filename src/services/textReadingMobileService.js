@@ -1,6 +1,9 @@
 import { chromium } from 'playwright';
 import { normalizeText } from '../utils/normalization.js';
 
+// Registro global de browsers activos para poder cancelarlos
+export const activeBrowsersMobile = new Set();
+
 // Emulación de iPhone 14 Pro Max
 const MOBILE_CONTEXT_OPTIONS = {
   viewport: { width: 430, height: 932 },
@@ -18,6 +21,7 @@ const extractEditorialRawMobile = async (url, options = {}) => {
   try {
     console.log(`[text-reading-mobile] Launch Chromium headless=${headless}`);
     browser = await chromium.launch({ headless });
+    activeBrowsersMobile.add(browser);
     const context = await browser.newContext(MOBILE_CONTEXT_OPTIONS);
     const page = await context.newPage();
     page.setDefaultTimeout(30000);
@@ -113,7 +117,10 @@ const extractEditorialRawMobile = async (url, options = {}) => {
     if (pauseMs && pauseMs > 0) {
       try { await new Promise(resolve => setTimeout(resolve, pauseMs)); } catch {}
     }
-    if (browser) { try { await browser.close(); } catch {} }
+    if (browser) {
+      activeBrowsersMobile.delete(browser);
+      try { await browser.close(); } catch {}
+    }
   }
 };
 

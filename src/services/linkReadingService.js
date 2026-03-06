@@ -1,5 +1,8 @@
 import { chromium } from 'playwright';
 
+// Registro global de browsers activos para poder cancelarlos
+export const activeBrowsersLink = new Set();
+
 // Ejecuta limpieza: aisla .ddc-wrapper y elimina elementos internos como en text-reading.
 // No extrae ni retorna contenido.
 export const runLinkReading = async (url, options = {}) => {
@@ -9,6 +12,7 @@ export const runLinkReading = async (url, options = {}) => {
 	let browser;
 	try {
 		browser = await chromium.launch({ headless });
+		activeBrowsersLink.add(browser);
 		const context = await browser.newContext();
 		const page = await context.newPage();
 		page.setDefaultTimeout(60000);
@@ -72,7 +76,10 @@ export const runLinkReading = async (url, options = {}) => {
 			await new Promise(resolve => setTimeout(resolve, pauseMs));
 		}
 	} finally {
-		if (browser) { try { await browser.close(); } catch {} }
+		if (browser) {
+			activeBrowsersLink.delete(browser);
+			try { await browser.close(); } catch {}
+		}
 	}
 };
 
@@ -84,6 +91,7 @@ export const extractVisibleAnchors = async (url, options = {}) => {
 	let browser;
 	try {
 		browser = await chromium.launch({ headless });
+		activeBrowsersLink.add(browser);
 		const context = await browser.newContext();
 		const page = await context.newPage();
 		page.setDefaultTimeout(60000);
@@ -157,7 +165,10 @@ export const extractVisibleAnchors = async (url, options = {}) => {
 		if (pauseMs && pauseMs > 0) {
 			await new Promise(resolve => setTimeout(resolve, pauseMs));
 		}
-		if (browser) { try { await browser.close(); } catch {} }
+		if (browser) {
+			activeBrowsersLink.delete(browser);
+			try { await browser.close(); } catch {}
+		}
 	}
 };
 
@@ -217,6 +228,7 @@ export const extractH1Data = async (url, options = {}) => {
 	let browser;
 	try {
 		browser = await chromium.launch({ headless });
+		activeBrowsersLink.add(browser);
 		const context = await browser.newContext();
 		const page = await context.newPage();
 		page.setDefaultTimeout(60000);
@@ -280,6 +292,9 @@ export const extractH1Data = async (url, options = {}) => {
 		if (pauseMs && pauseMs > 0) {
 			await new Promise(resolve => setTimeout(resolve, pauseMs));
 		}
-		if (browser) { try { await browser.close(); } catch {} }
+		if (browser) {
+			activeBrowsersLink.delete(browser);
+			try { await browser.close(); } catch {}
+		}
 	}
 };

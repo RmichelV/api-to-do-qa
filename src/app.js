@@ -4,6 +4,9 @@ import express from 'express';
 import textReadingRoutes from './routes/textReadingRoutes.js'
 import textReadingMobileRoutes from './routes/textReadingMobileRoutes.js'
 import linkReadingRoutes from './routes/linkReadingRoutes.js'
+import { activeBrowsers } from './services/textReadingService.js'
+import { activeBrowsersMobile } from './services/textReadingMobileService.js'
+import { activeBrowsersLink } from './services/linkReadingService.js'
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,6 +21,20 @@ app.use(express.static('public'));
 app.use('/api/text-reading', textReadingRoutes);
 app.use('/api/text-reading-mobile', textReadingMobileRoutes);
 app.use('/api/link-reading', linkReadingRoutes);
+
+// Endpoint para cancelar/detener todos los procesos activos
+app.post('/api/cancel', async (req, res) => {
+  let closed = 0;
+  const allSets = [activeBrowsers, activeBrowsersMobile, activeBrowsersLink];
+  for (const set of allSets) {
+    for (const browser of set) {
+      try { await browser.close(); closed++; } catch {}
+    }
+    set.clear();
+  }
+  console.log(`[cancel] Cerrados ${closed} browsers activos`);
+  res.json({ cancelled: true, browsersClosed: closed });
+});
 
 app.listen(PORT, () =>{
     console.log(`Server is running on http://localhost:${PORT}`)

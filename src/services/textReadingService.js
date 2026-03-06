@@ -1,6 +1,9 @@
 import { chromium } from 'playwright';
 import { normalizeText } from '../utils/normalization.js';
 
+// Registro global de browsers activos para poder cancelarlos
+export const activeBrowsers = new Set();
+
 /**
  * Abre la página y elimina todo excepto el contenedor .ddc-wrapper y su contenido.
  * Mantiene el navegador abierto al menos `pauseMs` milisegundos para observación.
@@ -19,6 +22,7 @@ const extractEditorialRaw = async (url, options = {}) => {
   try {
     console.log(`[text-reading] Launch Chromium headless=${headless}`);
     browser = await chromium.launch({ headless });
+    activeBrowsers.add(browser);
     const context = await browser.newContext();
     const page = await context.newPage();
     page.setDefaultTimeout(60000);
@@ -94,7 +98,10 @@ const extractEditorialRaw = async (url, options = {}) => {
     if (pauseMs && pauseMs > 0) {
       try { await new Promise(resolve => setTimeout(resolve, pauseMs)); } catch {}
     }
-    if (browser) { try { await browser.close(); } catch {} }
+    if (browser) {
+      activeBrowsers.delete(browser);
+      try { await browser.close(); } catch {}
+    }
   }
 };
 

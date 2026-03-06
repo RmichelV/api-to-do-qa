@@ -4,66 +4,44 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QA API Tester</title>
-    <style>
-        body { font-family: sans-serif; max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
-        .input-group { margin-bottom: 1rem; }
-        label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
-        .input-group label { display: inline-block; margin-right: 1.5rem; margin-bottom: 0; font-weight: normal; }
-        input[type="text"], textarea { width: 100%; padding: 0.5rem; }
-        textarea { height: 160px; }
-        button { padding: 0.75rem 1.5rem; background: #007bff; color: white; border: none; cursor: pointer; font-size: 1rem; }
-        button:hover { background: #0056b3; }
-        #outputs { margin-top: 2rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-        .panel { background: #f4f4f4; padding: 1rem; border-radius: 5px; }
-        .panel h3 { margin-top: 0; }
-        .text-output { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-        .status-ok { color: green; font-weight: bold; }
-        .status-fail { color: red; font-weight: bold; }
-        .status-partial { color: orange; font-weight: bold; }
-        /* Tabla de anchors */
-        .anchors-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-        .anchors-table th, .anchors-table td { border: 1px solid #ddd; padding: 8px; word-break: break-word; overflow-wrap: anywhere; }
-        .anchors-table th { background: #e9ecef; text-align: left; }
-        .anchors-table th:nth-child(1), .anchors-table td:nth-child(1) { width: 3rem; }
-        .anchors-table th:nth-child(4), .anchors-table td:nth-child(4) { width: 6rem; text-align: center; }
-        .anchors-url a { color: #0d6efd; text-decoration: none; }
-        .anchors-url a:hover { text-decoration: underline; }
-        .anchors-url, .anchors-url a { word-break: break-word; overflow-wrap: anywhere; }
-        .anchors-panel { overflow-x: auto; }
-        #anchors-output { overflow-x: auto; }
-        /* Panel H1 */
-        .h1-panel .h1-summary { font-weight: bold; }
-        .h1-panel .h1-details { margin-top: 0.5rem; }
-    </style>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <h1>QA API Tester 🤖</h1>
-    
-    <div class="input-group">
-        <label for="url">URL Objetivo:</label>
-        <input type="text" id="url" placeholder="https://ejemplo.com">
+    <h1 class="app-title">QA API Tester 🤖</h1>
+
+    <div class="top-controls">
+        <button class="btn-sm btn-sm--stop" onclick="stopAllProcesses()">⏹️ Detener</button>
+        <button class="btn-sm btn-sm--reset" onclick="resetAll()">🔄 Resetear</button>
     </div>
 
-    <div class="input-group">
-        <label for="co">CO: Contenido Original (pegado aquí)</label>
-        <textarea id="co" placeholder="Pega aquí tu contenido original..."></textarea>
+    <div class="form-card">
+        <div class="input-group">
+            <label for="url">URL Objetivo</label>
+            <input type="text" id="url" placeholder="https://ejemplo.com">
+        </div>
+
+        <div class="input-group">
+            <label for="co">CO: Contenido Original</label>
+            <textarea id="co" placeholder="Pega aquí tu contenido original..."></textarea>
+        </div>
+
+        <div class="input-group checkbox-group">
+            <label>
+                <input type="checkbox" id="open-browser" /> Abrir navegador (visual) y cerrar tras 10s
+            </label>
+            <label>
+                <input type="checkbox" id="show-content" /> Mostrar contenido extraído (CP y CO)
+            </label>
+        </div>
     </div>
 
-    <div class="input-group">
-        <label>
-            <input type="checkbox" id="open-browser" /> Abrir navegador (visual) y cerrar tras 10s
-        </label>
-        <label>
-            <input type="checkbox" id="show-content" checked /> Mostrar contenido extraído (CP y CO)
-        </label>
+    <div class="actions">
+        <button class="btn btn--text-reading" onclick="runTextReading()">▶️ Revisión texto</button>
+        <button class="btn btn--mobile" onclick="runTextReadingMobile()">📱 Revisión mobile</button>
+        <button class="btn btn--link-reading" onclick="runLinkReading()">🔗 Leer enlaces</button>
     </div>
 
-    <div style="margin-bottom: 20px;">
-        <button onclick="runTextReading()" style="background:#0d6efd;">▶️ Iniciar revisión (text-reading)</button>
-        <button onclick="runTextReadingMobile()" style="background:#e85d04; margin-left:8px;">📱 Revisión mobile</button>
-        <button onclick="runLinkReading()" style="background:#6f42c1; margin-left:8px;">🔗 Leer enlaces (link-reading)</button>
-    </div>
-
+    <div class="section-label">Resultados</div>
     <div id="outputs">
         <div class="panel" id="cp-panel">
             <h3>CP: Contenido de la página (normalizado)</h3>
@@ -73,40 +51,78 @@
             <h3>CO: Contenido original (normalizado)</h3>
             <div id="co-output" class="text-output">Esperando análisis...</div>
         </div>
-        <div class="panel" style="grid-column: 1 / span 2;">
+        <div class="panel panel--full">
             <h3>Comparación línea a línea</h3>
             <div id="compare-summary" class="text-output">Pendiente…</div>
-            <div id="compare-details" class="text-output" style="margin-top:0.5rem;"></div>
+            <div id="compare-details" class="text-output"></div>
         </div>
-        <div class="panel" id="cp-mobile-panel" style="grid-column: 1 / span 2; display:none;">
-            <h3>📱 CP Mobile: Contenido de la página (normalizado)</h3>
+        <div class="panel" id="cp-mobile-panel" style="display:none;">
+            <h3>📱 CP Mobile</h3>
             <div id="cp-mobile-output" class="text-output">Esperando análisis mobile...</div>
         </div>
-        <div class="panel" id="co-mobile-panel" style="grid-column: 1 / span 2; display:none;">
-            <h3>📱 CO Mobile: Contenido original (normalizado)</h3>
+        <div class="panel" id="co-mobile-panel" style="display:none;">
+            <h3>📱 CO Mobile</h3>
             <div id="co-mobile-output" class="text-output">Esperando análisis mobile...</div>
         </div>
-        <div class="panel" id="compare-mobile-panel" style="grid-column: 1 / span 2; display:none;">
-            <h3>📱 Comparación Mobile línea a línea</h3>
+        <div class="panel panel--full" id="compare-mobile-panel" style="display:none;">
+            <h3>📱 Comparación Mobile</h3>
             <div id="compare-mobile-summary" class="text-output">Pendiente…</div>
-            <div id="compare-mobile-details" class="text-output" style="margin-top:0.5rem;"></div>
+            <div id="compare-mobile-details" class="text-output"></div>
         </div>
-        <div class="panel anchors-panel" style="grid-column: 1 / span 2;">
-            <h3>Enlaces (texto y URL)</h3>
+        <div class="panel panel--full anchors-panel">
+            <h3>🔗 Enlaces</h3>
             <div id="anchors-output">Aún no extraídos…</div>
         </div>
-        <div class="panel h1-panel" style="grid-column: 1 / span 2;">
-            <h3>Revisión H1</h3>
+        <div class="panel panel--half h1-panel">
+            <h3>🏷️ Revisión H1</h3>
             <div id="h1-summary" class="h1-summary">Aún no evaluado…</div>
             <div id="h1-details" class="h1-details"></div>
         </div>
     </div>
 
     <script>
-        // --- TEXT READING ---
-        // Eliminado: la normalización y comparación se hará en el backend para evitar divergencias
+        // --- ABORT CONTROLLERS para cancelar fetch requests ---
+        let activeAbortControllers = [];
 
-        // Eliminado: la comparación ahora la hará el backend
+        function createAbortController() {
+            const ac = new AbortController();
+            activeAbortControllers.push(ac);
+            return ac;
+        }
+
+        function removeAbortController(ac) {
+            activeAbortControllers = activeAbortControllers.filter(c => c !== ac);
+        }
+
+        async function stopAllProcesses() {
+            // 1. Cancelar todos los fetch activos en el frontend
+            activeAbortControllers.forEach(ac => { try { ac.abort(); } catch {} });
+            activeAbortControllers = [];
+
+            // 2. Pedir al backend que cierre todos los browsers
+            try {
+                await fetch('/api/cancel', { method: 'POST' });
+            } catch {}
+
+            // 3. Actualizar paneles con mensaje de cancelación
+            const cancelMsg = '⏹️ Proceso detenido por el usuario';
+            ['cp-output', 'co-output', 'compare-summary', 'cp-mobile-output', 'co-mobile-output', 'compare-mobile-summary'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el && (el.textContent.startsWith('⏳') || el.textContent.startsWith('Esperando'))) {
+                    el.textContent = cancelMsg;
+                }
+            });
+            ['compare-details', 'compare-mobile-details'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = '';
+            });
+            const anchorsEl = document.getElementById('anchors-output');
+            if (anchorsEl && anchorsEl.textContent.startsWith('⏳')) anchorsEl.textContent = cancelMsg;
+            const h1El = document.getElementById('h1-summary');
+            if (h1El && h1El.textContent.startsWith('⏳')) h1El.textContent = cancelMsg;
+        }
+
+        // --- TEXT READING ---
 
         async function runTextReading() {
             const url = document.getElementById('url').value;
@@ -129,6 +145,7 @@
             coDiv.textContent = '⏳ Normalizando CO...';
             compareSummary.textContent = '⏳ Comparando líneas...';
             compareDetails.textContent = '';
+            const ac = createAbortController();
             try {
                 const openBrowser = document.getElementById('open-browser').checked;
                 const resp = await fetch('/api/text-reading/compare', {
@@ -139,7 +156,8 @@
                         coText: coInput,
                         headless: openBrowser ? false : true,
                         pauseMs: openBrowser ? 10000 : 0
-                    })
+                    }),
+                    signal: ac.signal
                 });
                 const data = await resp.json();
                 if (!resp.ok) throw new Error((data && data.error) || resp.statusText);
@@ -178,10 +196,13 @@
                     compareDetails.textContent = lines.join('\n');
                 }
             } catch (error) {
+                if (error.name === 'AbortError') return;
                 cpDiv.textContent = `Error: ${error.message}`;
                 const normalizedCO = normalizeText(coInput);
                 coDiv.textContent = normalizedCO || '';
                 compareSummary.textContent = 'Error durante la comparación';
+            } finally {
+                removeAbortController(ac);
             }
         }
 
@@ -209,6 +230,7 @@
             coDiv.textContent = '⏳ Normalizando CO...';
             compareSummary.textContent = '⏳ Comparando líneas...';
             compareDetails.textContent = '';
+            const ac = createAbortController();
             try {
                 const openBrowser = document.getElementById('open-browser').checked;
                 const resp = await fetch('/api/text-reading-mobile/compare', {
@@ -219,7 +241,8 @@
                         coText: coInput,
                         headless: openBrowser ? false : true,
                         pauseMs: openBrowser ? 10000 : 0
-                    })
+                    }),
+                    signal: ac.signal
                 });
                 const data = await resp.json();
                 if (!resp.ok) throw new Error((data && data.error) || resp.statusText);
@@ -255,8 +278,11 @@
                     compareDetails.textContent = lines.join('\n');
                 }
             } catch (error) {
+                if (error.name === 'AbortError') return;
                 cpDiv.textContent = `Error: ${error.message}`;
                 compareSummary.textContent = 'Error durante la comparación mobile';
+            } finally {
+                removeAbortController(ac);
             }
         }
 
@@ -267,6 +293,7 @@
             const anchorsDiv = document.getElementById('anchors-output');
             if (!url) { alert('Por favor ingresa una URL'); return; }
             anchorsDiv.textContent = '⏳ Extrayendo enlaces visibles…';
+            const ac = createAbortController();
             try {
                 const resp = await fetch('/api/link-reading/anchors', {
                     method: 'POST',
@@ -275,7 +302,8 @@
                         url,
                         headless: openBrowser ? false : true,
                         pauseMs: openBrowser ? 10000 : 0
-                    })
+                    }),
+                    signal: ac.signal
                 });
                 const data = await resp.json();
                 if (!resp.ok) throw new Error((data && data.error) || resp.statusText);
@@ -295,7 +323,10 @@
                     await updateH1Check(url, openBrowser);
                 } catch {}
             } catch (error) {
+                if (error.name === 'AbortError') return;
                 anchorsDiv.textContent = `Error al extraer enlaces: ${error.message}`;
+            } finally {
+                removeAbortController(ac);
             }
         }
 
@@ -404,6 +435,44 @@
 
         function normalizeStr(str) {
             return String(str).trim().replace(/\s+/g, ' ').toLowerCase();
+        }
+
+        function resetAll() {
+            // Detener procesos activos primero
+            activeAbortControllers.forEach(ac => { try { ac.abort(); } catch {} });
+            activeAbortControllers = [];
+            try { fetch('/api/cancel', { method: 'POST' }); } catch {}
+
+            // Limpiar inputs
+            document.getElementById('url').value = '';
+            document.getElementById('co').value = '';
+
+            // Restaurar checkboxes a su estado original
+            document.getElementById('open-browser').checked = false;
+            document.getElementById('show-content').checked = false;
+
+            // Restaurar paneles desktop
+            document.getElementById('cp-panel').style.display = '';
+            document.getElementById('co-panel').style.display = '';
+            document.getElementById('cp-output').textContent = 'Esperando análisis...';
+            document.getElementById('co-output').textContent = 'Esperando análisis...';
+            document.getElementById('compare-summary').textContent = 'Pendiente…';
+            document.getElementById('compare-details').textContent = '';
+
+            // Ocultar paneles mobile y restaurar texto
+            document.getElementById('cp-mobile-panel').style.display = 'none';
+            document.getElementById('co-mobile-panel').style.display = 'none';
+            document.getElementById('compare-mobile-panel').style.display = 'none';
+            document.getElementById('cp-mobile-output').textContent = 'Esperando análisis mobile...';
+            document.getElementById('co-mobile-output').textContent = 'Esperando análisis mobile...';
+            document.getElementById('compare-mobile-summary').textContent = 'Pendiente…';
+            document.getElementById('compare-mobile-details').textContent = '';
+
+            // Restaurar paneles de links y H1
+            document.getElementById('anchors-output').textContent = 'Aún no extraídos…';
+            document.getElementById('h1-summary').textContent = 'Aún no evaluado…';
+            document.getElementById('h1-summary').className = 'h1-summary';
+            document.getElementById('h1-details').innerHTML = '';
         }
     </script>
 </body>
