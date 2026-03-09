@@ -46,43 +46,74 @@ export const extractAndValidateAnchors = async (url, options = {}) => {
 		// Breve espera para que el layout se estabilice
 		await new Promise(resolve => setTimeout(resolve, 1000));
 
-		// Paso 2: Extraer los anchor links internos (href="#...")
-		const anchorLinks = await page.evaluate(() => {
+		// Paso 2: Extraer TODOS los links con # (bien y mal configurados)
+		const { wellConfigured, misconfigured } = await page.evaluate((currentUrl) => {
 			const wrapper = document.querySelector('.ddc-wrapper');
-			if (!wrapper) return [];
+			if (!wrapper) return { wellConfigured: [], misconfigured: [] };
 
-			const results = [];
+			const wellConfiguredResults = [];
+			const misconfiguredResults = [];
+
 			wrapper.querySelectorAll('a').forEach(a => {
 				const href = a.getAttribute('href') || '';
-				// Solo anchors internos: empieza con # y tiene algo después
-				if (!href.startsWith('#') || href.length <= 1) return;
 				const text = (a.innerText || '').trim();
 				if (text.length === 0) return;
+
 				// Verificar que el link sea visible
 				const style = window.getComputedStyle(a);
 				if (style.display === 'none' || style.visibility === 'hidden') return;
 				const rect = a.getBoundingClientRect();
 				if (rect.width === 0 || rect.height === 0) return;
 
-				results.push({
-					text,
-					href,
-					targetId: href.substring(1) // quitar el #
+				// Solo procesar si hay un #
+				if (!href.includes('#')) return;
+
+				const hashIndex = href.indexOf('#');
+				const baseUrl = href.substring(0, hashIndex); // parte antes del #
+				const anchorId = href.substring(hashIndex + 1); // parte después del #
+
+				if (!anchorId) return; // No hay ID después del #
+
+				const isSimpleAnchor = baseUrl === ''; // solo "#algo"
+				const baseUrlMatchesCurrent = baseUrl === currentUrl; // "url-actual#algo"
+
+				if (isSimpleAnchor || baseUrlMatchesCurrent) {
+					// BIEN configurado
+					wellConfiguredResults.push({
+						text,
+						href,
+						targetId: anchorId
+					});
+				} else {
+					// MAL configurado
+					misconfiguredResults.push({
+						text,
+						href
+					});
+				}
+			});
+
+			// Deduplicar por href
+			const deduplicate = (arr) => {
+				const seen = new Set();
+				return arr.filter(r => {
+					if (seen.has(r.href)) return false;
+					seen.add(r.href);
+					return true;
 				});
-			});
+			};
 
-			// Deduplicar por href (mismo anchor puede aparecer varias veces)
-			const seen = new Set();
-			return results.filter(r => {
-				if (seen.has(r.href)) return false;
-				seen.add(r.href);
-				return true;
-			});
-		});
+			return {
+				wellConfigured: deduplicate(wellConfiguredResults),
+				misconfigured: deduplicate(misconfiguredResults)
+			};
+		}, url); // Pasar la URL actual
 
-		if (anchorLinks.length === 0) {
-			return { anchors: [] };
+		if (wellConfigured.length === 0 && misconfigured.length === 0) {
+			return { anchors: [], misconfiguredAnchors: [] };
 		}
+
+		const anchorLinks = wellConfigured;
 
 		// Paso 3: Para cada anchor, verificar existencia del destino y scroll
 		const results = [];
@@ -132,7 +163,10 @@ export const extractAndValidateAnchors = async (url, options = {}) => {
 			await new Promise(resolve => setTimeout(resolve, pauseMs));
 		}
 
-		return { anchors: results };
+		return { 
+			anchors: results,
+			misconfiguredAnchors: misconfigured
+		};
 	} finally {
 		if (browser) {
 			activeBrowsersAnchor.delete(browser);

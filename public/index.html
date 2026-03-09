@@ -26,7 +26,7 @@
         </div>
 
         <div class="input-group checkbox-group">
-            <label>
+           <label>
                 <input type="checkbox" id="open-browser" /> Abrir navegador (visual) y cerrar tras 10s
             </label>
             <label>
@@ -462,23 +462,44 @@
                 if (!resp.ok) throw new Error((data && data.error) || resp.statusText);
 
                 const anchors = data.anchors || [];
-                if (!anchors.length) {
-                    anchorDiv.textContent = 'No se encontraron anchor links internos (#) en .ddc-wrapper';
+                const misconfiguredAnchors = data.misconfiguredAnchors || [];
+
+                // Si no hay ningún tipo de anchor
+                if (!anchors.length && !misconfiguredAnchors.length) {
+                    anchorDiv.textContent = 'No se encontraron anchors en .ddc-wrapper';
                     return;
                 }
 
-                // Resumen
-                const totalExists = anchors.filter(a => a.targetExists).length;
-                const totalScroll = anchors.filter(a => a.scrollOk).length;
-                const summaryBadge = (totalExists === anchors.length && totalScroll === anchors.length)
-                    ? '🟢' : (totalExists === anchors.length ? '🟡' : '🔴');
+                let htmlContent = '';
 
-                anchorDiv.innerHTML = `
-                    <div style="margin-bottom:0.5rem;font-weight:600;">
-                        ${summaryBadge} ${anchors.length} anchor links encontrados — Destino existe: ${totalExists}/${anchors.length}, Scroll OK: ${totalScroll}/${anchors.length}
-                    </div>
-                    ${buildAnchorTable(anchors)}
-                `;
+                // Mostrar anchors bien configurados
+                if (anchors.length > 0) {
+                    const totalExists = anchors.filter(a => a.targetExists).length;
+                    const totalScroll = anchors.filter(a => a.scrollOk).length;
+                    const summaryBadge = (totalExists === anchors.length && totalScroll === anchors.length)
+                        ? '🟢' : (totalExists === anchors.length ? '🟡' : '🔴');
+
+                    htmlContent += `
+                        <div style="margin-bottom:0.5rem;font-weight:600;">
+                            ${summaryBadge} ${anchors.length} anchors bien configurados — Destino existe: ${totalExists}/${anchors.length}, Scroll OK: ${totalScroll}/${anchors.length}
+                        </div>
+                        ${buildAnchorTable(anchors)}
+                    `;
+                }
+
+                // Mostrar anchors mal configurados
+                if (misconfiguredAnchors.length > 0) {
+                    htmlContent += `
+                        <div style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ccc;">
+                            <div style="margin-bottom:0.5rem;font-weight:600;">
+                                ❌ ${misconfiguredAnchors.length} anchors MAL CONFIGURADOS
+                            </div>
+                            ${buildMisconfiguredAnchorTable(misconfiguredAnchors)}
+                        </div>
+                    `;
+                }
+
+                anchorDiv.innerHTML = htmlContent;
             } catch (error) {
                 if (error.name === 'AbortError') return;
                 anchorDiv.textContent = `Error al validar anchor links: ${error.message}`;
@@ -505,6 +526,26 @@
                 <table class="anchors-table">
                     <thead>
                         <tr><th>#</th><th>Texto</th><th>href</th><th>Destino existe</th><th>Scroll OK</th></tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+        }
+
+        function buildMisconfiguredAnchorTable(anchors) {
+            const rows = anchors.map((a, idx) => {
+                const safeText = escapeHtml(a.text);
+                const safeHref = escapeHtml(a.href);
+                return `<tr>
+                    <td>${idx + 1}</td>
+                    <td>${safeText}</td>
+                    <td><code>${safeHref}</code></td>
+                </tr>`;
+            }).join('');
+            return `
+                <table class="anchors-table">
+                    <thead>
+                        <tr><th>#</th><th>Texto</th><th>href</th></tr>
                     </thead>
                     <tbody>${rows}</tbody>
                 </table>
