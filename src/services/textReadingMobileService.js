@@ -2,37 +2,73 @@ import { chromium } from 'playwright';
 import { normalizeText } from '../utils/normalization.js';
 
 // Registro global de browsers activos para poder cancelarlos
-export const activeBrowsers = new Set();
+export const activeBrowsersMobile = new Set();
 
-/**
- * Abre la página y elimina todo excepto el contenedor .ddc-wrapper y su contenido.
- * Mantiene el navegador abierto al menos `pauseMs` milisegundos para observación.
- * @param {string} url
- * @param {{ headless?: boolean, pauseMs?: number }} options
- * @returns {Promise<{ url: string, keptWrapper: boolean }>} 
- */
-// Normalización ahora importada desde utils/normalization.js
+// Emulación de iPhone 14 Pro Max
+const MOBILE_CONTEXT_OPTIONS = {
+  viewport: { width: 430, height: 932 },
+  isMobile: true,
+  hasTouch: true,
+  userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+};
 
-// Helper: abre la página, limpia el DOM y devuelve el texto crudo del wrapper
-const extractEditorialRaw = async (url, options = {}) => {
-  const headless = options.headless ?? true; // por defecto headless (no abrir navegador)
-  const pauseMs = options.pauseMs ?? 0; // sin pausa por defecto
+// Helper: abre la página en modo mobile, limpia el DOM y devuelve el texto crudo del wrapper
+const extractEditorialRawMobile = async (url, options = {}) => {
+  const headless = options.headless ?? true;
+  const pauseMs = options.pauseMs ?? 0;
 
   let browser;
   try {
-    console.log(`[text-reading] Launch Chromium headless=${headless}`);
+    console.log(`[text-reading-mobile] Launch Chromium headless=${headless}`);
     browser = await chromium.launch({ headless });
-    activeBrowsers.add(browser);
-    const context = await browser.newContext();
+    activeBrowsersMobile.add(browser);
+    const context = await browser.newContext(MOBILE_CONTEXT_OPTIONS);
     const page = await context.newPage();
-    page.setDefaultTimeout(60000);
-    page.setDefaultNavigationTimeout(60000);
+    page.setDefaultTimeout(30000);
+    page.setDefaultNavigationTimeout(30000);
 
-    console.log(`[text-reading] Goto start: ${url}`);
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-    console.log('[text-reading] Goto complete (domcontentloaded)');
+    console.log(`[text-reading-mobile] Goto start: ${url}`);
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    console.log(`[text-reading-mobile] Goto complete. Final URL: ${page.url()}`);
 
-    console.log('[text-reading] Cleanup start: scope to .ddc-wrapper and remove inventory elements');
+    // Esperar a que .ddc-wrapper aparezca (máx 10s)
+    let wrapperFound = false;
+    try {
+      await page.waitForSelector('.ddc-wrapper', { timeout: 10000 });
+      wrapperFound = true;
+      console.log('[text-reading-mobile] .ddc-wrapper found');
+    } catch {
+      console.log('[text-reading-mobile] .ddc-wrapper NOT found after 10s');
+    }
+
+    // Delay para contenido dinámico
+    await page.waitForTimeout(2000);
+
+    // Diagnóstico
+    const diagInfo = await page.evaluate(() => {
+      const wrapper = document.querySelector('.ddc-wrapper');
+      return {
+        wrapperExists: !!wrapper,
+        wrapperChildCount: wrapper ? wrapper.children.length : 0,
+        wrapperTextLen: wrapper ? (wrapper.innerText || '').length : 0,
+        bodyHtmlLen: document.body.innerHTML.length,
+        title: document.title
+      };
+    });
+    console.log(`[text-reading-mobile] DIAG: ${JSON.stringify(diagInfo)}`);
+
+    // Si el wrapper no existe o está vacío, fallback al body
+    if (!wrapperFound || diagInfo.wrapperTextLen === 0) {
+      console.log('[text-reading-mobile] No wrapper content, trying body fallback');
+      const bodyText = await page.evaluate(() => document.body.innerText || '');
+      if (bodyText.trim().length > 0) {
+        console.log(`[text-reading-mobile] Body fallback: ${bodyText.length} chars`);
+        return bodyText;
+      }
+      return '';
+    }
+
+    console.log('[text-reading-mobile] Cleanup start');
     await page.evaluate(() => {
       const wrapper = document.querySelector('.ddc-wrapper');
       if (!wrapper) return;
@@ -57,120 +93,100 @@ const extractEditorialRaw = async (url, options = {}) => {
         '.ws-inv-filters',
         '.ws-inv-facets',
         '.srp-wrapper-facets',
-        // Header / Footer / Nav dentro del wrapper
         'header', 'footer', '.global-header', '.global-footer', '.site-header', '.site-footer', '.ddc-header', '.ddc-footer', 'nav', '.primary-nav', '.site-nav',
-        // Breadcrumbs / topbars / sitewide banners
         '.breadcrumbs', '.bread-crumbs', '.topbar', '.sitewide-bar',
-        // Banners/overlays de cookies/promos
         '.cookie-banner', '#onetrust-banner-sdk', '[role="dialog"][aria-label*="cookie"]', '.notification-banner', '.promo-banner',
-        // Widgets de chat/social/hours
         '[data-widget-name="chat"]', '.chat-widget', '.ws-hours', '.ws-social', '.ws-share'
       ];
       selectors.forEach(sel => {
         wrapper.querySelectorAll(sel).forEach(el => el.remove());
       });
-
-      // Reaplicar la limpieza si elementos se reinsertan dinámicamente
-      const unwanted = selectors.slice();
-      const observer = new MutationObserver(() => {
-        unwanted.forEach(sel => {
-          wrapper.querySelectorAll(sel).forEach(el => el.remove());
-        });
-      });
-      observer.observe(wrapper, { childList: true, subtree: true });
     });
-    console.log('[text-reading] Cleanup done');
+    console.log('[text-reading-mobile] Cleanup done');
 
-    // Sin pausa para evitar cuelgues y acelerar diagnóstico
-
-    console.log('[text-reading] Extraction start: wrapper.innerText');
     const rawText = await page.evaluate(() => {
       const wrapper = document.querySelector('.ddc-wrapper');
       if (!wrapper) return '';
       return wrapper.innerText || '';
     });
     const rawLines = (rawText || '').split(/\r?\n/);
-    console.log(`[text-reading] Extraction done: raw lines=${rawLines.length}`);
+    console.log(`[text-reading-mobile] Extraction done: raw lines=${rawLines.length}`);
 
     return rawText;
   } finally {
-    // Si se solicitó visual, esperar antes de cerrar
     if (pauseMs && pauseMs > 0) {
       try { await new Promise(resolve => setTimeout(resolve, pauseMs)); } catch {}
     }
     if (browser) {
-      activeBrowsers.delete(browser);
+      activeBrowsersMobile.delete(browser);
       try { await browser.close(); } catch {}
     }
   }
 };
 
-// Endpoint preview: devuelve texto ya normalizado
-export const previewTextReading = async (url, options = {}) => {
-  // Watchdog: reinicia cada 5s si no hay resultado
-  const retryIntervalMs = 5000;
-  const maxAttempts = 12; // ~60s
+// Endpoint preview mobile: devuelve texto ya normalizado
+export const previewTextReadingMobile = async (url, options = {}) => {
+  const retryIntervalMs = 45000;
+  const maxAttempts = 3;
   let raw = '';
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    console.log(`[text-reading] Watchdog attempt ${attempt}/${maxAttempts}`);
-    const extraction = extractEditorialRaw(url, options);
+    console.log(`[text-reading-mobile] Watchdog attempt ${attempt}/${maxAttempts}`);
+    const extraction = extractEditorialRawMobile(url, options);
     const timeout = new Promise(resolve => setTimeout(() => resolve('timeout'), retryIntervalMs));
     const outcome = await Promise.race([extraction, timeout]);
     if (outcome === 'timeout') {
-      console.log(`[text-reading] Attempt ${attempt} timed out after ${retryIntervalMs}ms — restarting`);
+      console.log(`[text-reading-mobile] Attempt ${attempt} timed out — restarting`);
       continue;
     }
     raw = outcome || '';
     const hasLines = raw.split(/\r?\n/).some(l => l.trim().length > 0);
     if (hasLines) {
-      console.log(`[text-reading] Watchdog success with content on attempt ${attempt}`);
+      console.log(`[text-reading-mobile] Watchdog success on attempt ${attempt}`);
       break;
     }
-    console.log(`[text-reading] Attempt ${attempt} returned empty content — restarting`);
+    console.log(`[text-reading-mobile] Attempt ${attempt} returned empty — restarting`);
   }
   const rawLines = raw.split(/\r?\n/);
   rawLines.forEach((line, idx) => {
-    console.log(`[text-reading] L${idx + 1}: ${line}`);
+    console.log(`[text-reading-mobile] L${idx + 1}: ${line}`);
   });
-  console.log(`[text-reading] Total líneas (raw): ${rawLines.length}`);
+  console.log(`[text-reading-mobile] Total líneas (raw): ${rawLines.length}`);
   const normalized = normalizeText(raw);
   const normLines = normalized.split('\n');
-  console.log(`[text-reading] Total líneas (normalizado): ${normLines.length}`);
+  console.log(`[text-reading-mobile] Total líneas (normalizado): ${normLines.length}`);
   return normalized;
 };
 
-// Comparación en servidor: devuelve JSON con CP/CO y resultados
-export const compareTextReading = async (url, coText, options = {}) => {
-  // Watchdog: reinicia cada 5s si no hay resultado
-  const retryIntervalMs = 10000;
-  const maxAttempts = 12;
+// Comparación mobile en servidor: devuelve JSON con CP/CO y resultados
+export const compareTextReadingMobile = async (url, coText, options = {}) => {
+  const retryIntervalMs = 45000;
+  const maxAttempts = 3;
   let rawCP = '';
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    console.log(`[text-reading] Watchdog attempt ${attempt}/${maxAttempts} (compare)`);
-    const extraction = extractEditorialRaw(url, options);
+    console.log(`[text-reading-mobile] Watchdog attempt ${attempt}/${maxAttempts} (compare)`);
+    const extraction = extractEditorialRawMobile(url, options);
     const timeout = new Promise(resolve => setTimeout(() => resolve('timeout'), retryIntervalMs));
     const outcome = await Promise.race([extraction, timeout]);
     if (outcome === 'timeout') {
-      console.log(`[text-reading] Attempt ${attempt} timed out after ${retryIntervalMs}ms — restarting`);
+      console.log(`[text-reading-mobile] Attempt ${attempt} timed out — restarting`);
       continue;
     }
     rawCP = outcome || '';
     const hasLines = rawCP.split(/\r?\n/).some(l => l.trim().length > 0);
     if (hasLines) {
-      console.log(`[text-reading] Watchdog success with content on attempt ${attempt} (compare)`);
+      console.log(`[text-reading-mobile] Watchdog success on attempt ${attempt} (compare)`);
       break;
     }
-    console.log(`[text-reading] Attempt ${attempt} returned empty content — restarting`);
+    console.log(`[text-reading-mobile] Attempt ${attempt} returned empty — restarting`);
   }
   const cpText = normalizeText(rawCP);
   const coTextNorm = normalizeText(coText || '');
 
-  // Logging por línea del CP (normalizado) para diagnosticar progreso
   const cpLinesLog = cpText.split('\n');
   cpLinesLog.forEach((line, idx) => {
-    console.log(`[text-reading][CP] L${idx + 1}: ${line}`);
+    console.log(`[text-reading-mobile][CP] L${idx + 1}: ${line}`);
   });
-  console.log(`[text-reading][CP] Total líneas: ${cpLinesLog.length}`);
+  console.log(`[text-reading-mobile][CP] Total líneas: ${cpLinesLog.length}`);
 
   const cpLines = cpText.split('\n').filter(l => l.length > 0);
   const coLines = coTextNorm.split('\n').filter(l => l.length > 0);
@@ -206,7 +222,6 @@ export const compareTextReading = async (url, coText, options = {}) => {
       idxDetails.push(foundIdx);
       pos = foundIdx + 1;
     }
-    // Asignar índices y tags
     let i = 0;
     for (const d of details) {
       if (d.found) {
@@ -219,7 +234,6 @@ export const compareTextReading = async (url, coText, options = {}) => {
       }
     }
   } else {
-    // Completo=false: marcar índices si existen en cualquier lugar, tag out-of-order/missing
     for (const d of details) {
       if (d.found) {
         d.cpIndex = cpLines.indexOf(d.line);

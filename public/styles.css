@@ -1,0 +1,370 @@
+/* =============================================
+   QA API Tester — Estilos principales
+   ============================================= */
+
+/* --- Reset & Base --- */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 3rem;
+    background: #eef1f6;
+    color: #1a1a2e;
+    line-height: 1.55;
+}
+
+/* --- Encabezado --- */
+.app-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin: 0 0 1.25rem;
+    color: #1a1a2e;
+    letter-spacing: -0.02em;
+}
+
+/* --- Card de formulario --- */
+.form-card {
+    background: #fff;
+    border: 1px solid #dde1e7;
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem 1rem;
+    margin-bottom: 1.25rem;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* --- Formulario / Inputs --- */
+.input-group {
+    margin-bottom: 1rem;
+}
+
+.input-group:last-child {
+    margin-bottom: 0;
+}
+
+.input-group > label {
+    display: block;
+    margin-bottom: 0.35rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #374151;
+}
+
+input[type="text"],
+textarea {
+    width: 100%;
+    padding: 0.55rem 0.75rem;
+    border: 1.5px solid #d1d5db;
+    border-radius: 7px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    background: #fafbfc;
+    color: #1a1a2e;
+    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+
+input[type="text"]:focus,
+textarea:focus {
+    outline: none;
+    border-color: #4a90d9;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(74, 144, 217, 0.12);
+}
+
+input[type="text"]::placeholder,
+textarea::placeholder {
+    color: #9ca3af;
+}
+
+textarea {
+    height: 150px;
+    resize: vertical;
+}
+
+/* --- Checkboxes con toggle visual --- */
+.checkbox-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+    padding-top: 0.15rem;
+}
+
+.checkbox-group label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 400;
+    font-size: 0.85rem;
+    color: #4b5563;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s;
+}
+
+.checkbox-group label:hover {
+    color: #1f2937;
+}
+
+.checkbox-group input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #4a90d9;
+    cursor: pointer;
+}
+
+/* --- Botones de acción --- */
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+}
+
+.btn {
+    padding: 0.55rem 1.1rem;
+    color: #fff;
+    border: none;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 0.84rem;
+    font-weight: 600;
+    font-family: inherit;
+    letter-spacing: 0.01em;
+    transition: filter 0.15s, transform 0.1s, box-shadow 0.2s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.btn:hover {
+    filter: brightness(1.08);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.btn:active {
+    transform: scale(0.97);
+}
+
+.btn--text-reading  { background: #2563eb; }
+.btn--mobile        { background: #ea580c; }
+.btn--link-reading  { background: #7c3aed; }
+.btn--anchor-reading { background: #0891b2; }
+
+/* --- Controles superiores (Detener / Resetear) --- */
+.top-controls {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.4rem;
+    margin-bottom: 0.75rem;
+}
+
+.btn-sm {
+    padding: 0.3rem 0.7rem;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.76rem;
+    font-weight: 600;
+    font-family: inherit;
+    transition: filter 0.15s, transform 0.1s;
+}
+
+.btn-sm:hover {
+    filter: brightness(1.1);
+}
+
+.btn-sm:active {
+    transform: scale(0.96);
+}
+
+.btn-sm--stop  { background: #dc2626; }
+.btn-sm--reset { background: #6b7280; }
+
+/* --- Sección de resultados --- */
+.section-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #6b7280;
+    margin-bottom: 0.75rem;
+}
+
+/* --- Grid de paneles de salida --- */
+#outputs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.85rem;
+}
+
+/* --- Panel genérico --- */
+.panel {
+    background: #fff;
+    padding: 1rem 1.15rem;
+    border-radius: 9px;
+    border: 1px solid #e2e5ea;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    transition: box-shadow 0.2s;
+}
+
+.panel:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+}
+
+.panel h3 {
+    margin: 0 0 0.6rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #374151;
+    padding-bottom: 0.45rem;
+    border-bottom: 1px solid #f0f1f3;
+}
+
+.panel--full {
+    grid-column: 1 / -1;
+}
+
+.panel--half {
+    grid-column: span 1;
+}
+
+/* --- Texto monoespaciado (salidas) --- */
+.text-output {
+    white-space: pre-wrap;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+    font-size: 0.82rem;
+    line-height: 1.65;
+    color: #374151;
+}
+
+.text-output + .text-output {
+    margin-top: 0.5rem;
+}
+
+/* --- Estados / Badges --- */
+.status-ok      { color: #16a34a; font-weight: 700; }
+.status-fail    { color: #dc2626; font-weight: 700; }
+.status-partial { color: #ea580c; font-weight: 700; }
+
+/* --- Tabla de anchors (enlaces) --- */
+.anchors-panel {
+    overflow-x: auto;
+}
+
+#anchors-output {
+    overflow-x: auto;
+}
+
+.anchors-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 0.84rem;
+}
+
+.anchors-table th,
+.anchors-table td {
+    border: 1px solid #e5e7eb;
+    padding: 0.45rem 0.55rem;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
+.anchors-table thead {
+    position: sticky;
+    top: 0;
+}
+
+.anchors-table th {
+    background: #f8f9fb;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.8rem;
+    color: #4b5563;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.anchors-table tbody tr:hover {
+    background: #f9fafb;
+}
+
+.anchors-table th:nth-child(1),
+.anchors-table td:nth-child(1) {
+    width: 3rem;
+    text-align: center;
+    color: #9ca3af;
+    font-weight: 500;
+}
+
+.anchors-table th:nth-child(4),
+.anchors-table td:nth-child(4) {
+    width: 5.5rem;
+    text-align: center;
+}
+
+.anchors-url a {
+    color: #2563eb;
+    text-decoration: none;
+}
+
+.anchors-url a:hover {
+    text-decoration: underline;
+    color: #1d4ed8;
+}
+
+.anchors-url,
+.anchors-url a {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
+/* --- Panel H1 --- */
+.h1-panel .h1-summary {
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+.h1-panel .h1-details {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    color: #6b7280;
+}
+
+/* --- Responsive --- */
+@media (max-width: 640px) {
+    body {
+        padding: 1rem;
+    }
+
+    .form-card {
+        padding: 1rem;
+    }
+
+    #outputs {
+        grid-template-columns: 1fr;
+    }
+
+    .panel--full,
+    .panel--half {
+        grid-column: 1;
+    }
+
+    .actions {
+        flex-direction: column;
+    }
+
+    .btn {
+        width: 100%;
+        text-align: center;
+    }
+
+    .results-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+}
