@@ -1,4 +1,5 @@
 import { chromium } from 'playwright';
+import { buildBrowserHeaders, randomDelay } from '../utils/stealth.js';
 
 // Registro global de browsers activos para poder cancelarlos
 export const activeBrowsersLink = new Set();
@@ -172,34 +173,32 @@ export const extractVisibleAnchors = async (url, options = {}) => {
 	}
 };
 
-// Verifica el estado HTTP de una lista de URLs usando HEAD (fallback GET si 405/0), con límite de concurrencia
+// Verifica el estado HTTP de una lista de URLs con headers de navegador real para evitar 403.
+// Usa GET con headers stealth + delay aleatorio entre requests + concurrencia controlada.
 export const fetchHttpStatuses = async (urls = [], options = {}) => {
-	const timeoutMs = options.timeoutMs ?? 8000;
-	const concurrency = options.concurrency ?? 6;
+	const timeoutMs = options.timeoutMs ?? 12000;
+	const concurrency = options.concurrency ?? 5;
 
 	const results = [];
 	let index = 0;
 
 	const runOne = async (u) => {
+		await randomDelay(200, 800);
+		const headers = buildBrowserHeaders(u);
 		const controller = new AbortController();
 		const timer = setTimeout(() => controller.abort(), timeoutMs);
 		try {
-			const rHead = await fetch(u, { method: 'HEAD', redirect: 'follow', signal: controller.signal });
+			const res = await fetch(u, {
+				method: 'GET',
+				redirect: 'follow',
+				signal: controller.signal,
+				headers,
+			});
 			clearTimeout(timer);
-			return { url: u, status: rHead.status, ok: rHead.ok };
+			return { url: u, status: res.status, ok: res.ok };
 		} catch (e) {
 			clearTimeout(timer);
-			// Fallback GET si HEAD falla
-			const controller2 = new AbortController();
-			const timer2 = setTimeout(() => controller2.abort(), timeoutMs);
-			try {
-				const rGet = await fetch(u, { method: 'GET', redirect: 'follow', signal: controller2.signal });
-				clearTimeout(timer2);
-				return { url: u, status: rGet.status, ok: rGet.ok };
-			} catch (e2) {
-				clearTimeout(timer2);
-				return { url: u, status: 0, ok: false, error: 'timeout_or_network' };
-			}
+			return { url: u, status: 0, ok: false, error: e?.cause?.code || e?.message || 'timeout_or_network' };
 		}
 	};
 
