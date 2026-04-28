@@ -104,7 +104,30 @@ const extractEditorialRaw = async (url, options = {}) => {
         });
       };
 
+      const expandTabbedContent = () => {
+        // Mark all tabs as selected so associated panes are considered active content.
+        wrapper.querySelectorAll('[role="tab"]').forEach(tab => {
+          tab.setAttribute('aria-selected', 'true');
+          tab.setAttribute('tabindex', '0');
+          tab.classList.remove('collapsed');
+        });
+
+        // Force all tab panes visible; some builders keep text hidden in non-active panes.
+        wrapper.querySelectorAll('.tab-content .tab-pane, [role="tabpanel"].tab-pane').forEach(pane => {
+          pane.classList.add('active', 'show', 'in');
+          pane.setAttribute('aria-hidden', 'false');
+          pane.setAttribute('tabindex', '0');
+          pane.style.display = 'block';
+          pane.style.height = 'auto';
+          pane.style.maxHeight = 'none';
+          pane.style.overflow = 'visible';
+          pane.style.visibility = 'visible';
+          pane.style.opacity = '1';
+        });
+      };
+
       expandAccordionPanels();
+      expandTabbedContent();
 
       // Reaplicar la limpieza si elementos se reinsertan dinámicamente
       const unwanted = selectors.slice();
@@ -113,6 +136,7 @@ const extractEditorialRaw = async (url, options = {}) => {
           wrapper.querySelectorAll(sel).forEach(el => el.remove());
         });
         expandAccordionPanels();
+        expandTabbedContent();
       });
       observer.observe(wrapper, { childList: true, subtree: true });
     });
