@@ -1,8 +1,28 @@
 import { chromium } from 'playwright';
-import { buildBrowserHeaders, randomDelay } from '../utils/stealth.js';
+import { buildBrowserHeaders, getRandomUserAgent, randomDelay } from '../utils/stealth.js';
 
 // Registro global de browsers activos para poder cancelarlos
 export const activeBrowsersLink = new Set();
+
+const HEAVY_RESOURCE_TYPES = new Set(['image', 'media', 'font']);
+
+const createOptimizedPage = async (browser) => {
+	const context = await browser.newContext({
+		userAgent: getRandomUserAgent(),
+		locale: 'en-US',
+	});
+	const page = await context.newPage();
+	page.setDefaultTimeout(45000);
+	page.setDefaultNavigationTimeout(45000);
+	await page.route('**/*', (route) => {
+		const type = route.request().resourceType();
+		if (HEAVY_RESOURCE_TYPES.has(type)) {
+			return route.abort();
+		}
+		return route.continue();
+	});
+	return page;
+};
 
 // Ejecuta limpieza: aisla .ddc-wrapper y elimina elementos internos como en text-reading.
 // No extrae ni retorna contenido.
@@ -14,12 +34,10 @@ export const runLinkReading = async (url, options = {}) => {
 	try {
 		browser = await chromium.launch({ headless });
 		activeBrowsersLink.add(browser);
-		const context = await browser.newContext();
-		const page = await context.newPage();
-		page.setDefaultTimeout(60000);
-		page.setDefaultNavigationTimeout(60000);
+		const page = await createOptimizedPage(browser);
 
-		await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+		await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+		await page.waitForSelector('.ddc-wrapper', { timeout: 10000 });
 
 		await page.evaluate(() => {
 			const wrapper = document.querySelector('.ddc-wrapper');
@@ -63,12 +81,30 @@ export const runLinkReading = async (url, options = {}) => {
 				wrapper.querySelectorAll(sel).forEach(el => el.remove());
 			});
 
+			const expandAccordionPanels = () => {
+				wrapper.querySelectorAll('[aria-expanded="false"]').forEach(el => {
+					el.setAttribute('aria-expanded', 'true');
+					el.classList.remove('collapsed');
+				});
+				wrapper.querySelectorAll('.panel-collapse, .accordion-collapse, .collapse').forEach(panel => {
+					panel.classList.remove('collapse');
+					panel.classList.add('show', 'in');
+					panel.style.display = 'block';
+					panel.style.height = 'auto';
+					panel.style.overflow = 'visible';
+					panel.setAttribute('aria-hidden', 'false');
+				});
+			};
+
+			expandAccordionPanels();
+
 				// Mantener limpieza si se reinsertan elementos dinámicamente
 				const unwanted = selectors.slice();
 				const observer = new MutationObserver(() => {
 					unwanted.forEach(sel => {
 						wrapper.querySelectorAll(sel).forEach(el => el.remove());
 					});
+					expandAccordionPanels();
 				});
 				observer.observe(wrapper, { childList: true, subtree: true });
 		});
@@ -93,12 +129,10 @@ export const extractVisibleAnchors = async (url, options = {}) => {
 	try {
 		browser = await chromium.launch({ headless });
 		activeBrowsersLink.add(browser);
-		const context = await browser.newContext();
-		const page = await context.newPage();
-		page.setDefaultTimeout(60000);
-		page.setDefaultNavigationTimeout(60000);
+		const page = await createOptimizedPage(browser);
 
-		await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+		await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+		await page.waitForSelector('.ddc-wrapper', { timeout: 10000 });
 
 		const anchors = await page.evaluate(() => {
 			const wrapper = document.querySelector('.ddc-wrapper');
@@ -132,6 +166,18 @@ export const extractVisibleAnchors = async (url, options = {}) => {
 			];
 			selectors.forEach(sel => {
 				wrapper.querySelectorAll(sel).forEach(el => el.remove());
+			});
+			wrapper.querySelectorAll('[aria-expanded="false"]').forEach(el => {
+				el.setAttribute('aria-expanded', 'true');
+				el.classList.remove('collapsed');
+			});
+			wrapper.querySelectorAll('.panel-collapse, .accordion-collapse, .collapse').forEach(panel => {
+				panel.classList.remove('collapse');
+				panel.classList.add('show', 'in');
+				panel.style.display = 'block';
+				panel.style.height = 'auto';
+				panel.style.overflow = 'visible';
+				panel.setAttribute('aria-hidden', 'false');
 			});
 
 			const isVisible = (el) => {
@@ -228,12 +274,10 @@ export const extractH1Data = async (url, options = {}) => {
 	try {
 		browser = await chromium.launch({ headless });
 		activeBrowsersLink.add(browser);
-		const context = await browser.newContext();
-		const page = await context.newPage();
-		page.setDefaultTimeout(60000);
-		page.setDefaultNavigationTimeout(60000);
+		const page = await createOptimizedPage(browser);
 
-		await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+		await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+		await page.waitForSelector('.ddc-wrapper', { timeout: 10000 });
 
 		const result = await page.evaluate(() => {
 			const wrapper = document.querySelector('.ddc-wrapper');
@@ -266,6 +310,18 @@ export const extractH1Data = async (url, options = {}) => {
 			];
 			selectors.forEach(sel => {
 				wrapper.querySelectorAll(sel).forEach(el => el.remove());
+			});
+			wrapper.querySelectorAll('[aria-expanded="false"]').forEach(el => {
+				el.setAttribute('aria-expanded', 'true');
+				el.classList.remove('collapsed');
+			});
+			wrapper.querySelectorAll('.panel-collapse, .accordion-collapse, .collapse').forEach(panel => {
+				panel.classList.remove('collapse');
+				panel.classList.add('show', 'in');
+				panel.style.display = 'block';
+				panel.style.height = 'auto';
+				panel.style.overflow = 'visible';
+				panel.setAttribute('aria-hidden', 'false');
 			});
 
 			const isVisible = (el) => {

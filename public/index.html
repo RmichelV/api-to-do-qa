@@ -11,86 +11,82 @@
 
     <div class="top-controls">
       <button class="btn-sm btn-sm--stop" onclick="stopAllProcesses()">
-        ⏹️ Detener
+        ⏹️ Stop
       </button>
       <button class="btn-sm btn-sm--reset" onclick="resetAll()">
-        🔄 Resetear
+        🔄 Reset
       </button>
       <button
         class="btn-sm"
         style="background: #2ecc71; color: black"
         onclick="downloadPDF()"
       >
-        📄 Descargar PDF
+        📄 Download PDF
       </button>
     </div>
 
     <div class="form-card">
       <div class="input-group">
-        <label for="url">URL Objetivo</label>
-        <input type="text" id="url" placeholder="https://ejemplo.com" />
+        <label for="url">Target URL</label>
+        <input type="text" id="url" placeholder="https://example.com" />
       </div>
 
       <div class="input-group">
-        <label for="co">CO: Contenido Original</label>
+        <label for="co">CO: Original Content</label>
         <textarea
           id="co"
-          placeholder="Pega aquí tu contenido original..."
+          placeholder="Paste your original content here..."
         ></textarea>
       </div>
 
       <div class="input-group checkbox-group">
         <label>
-          <input type="checkbox" id="open-browser" /> Abrir navegador (visual) y
-          cerrar tras 10s
-        </label>
-        <label>
-          <input type="checkbox" id="show-content" /> Mostrar contenido extraído
-          (CP y CO)
+          <input type="checkbox" id="show-content" /> Show extracted content
+          (CP and CO)
         </label>
       </div>
     </div>
 
     <div class="actions">
       <button class="btn btn--text-reading" onclick="runTextReading()">
-        ▶️ Revisión texto
+        ▶️ Text Review
       </button>
       <button class="btn btn--mobile" onclick="runTextReadingMobile()">
-        📱 Revisión texto mobile
+        📱 Mobile Text Review
       </button>
       <button class="btn btn--link-reading" onclick="runLinkReading()">
-        🔗 Leer enlaces
+        🔗 Read Links
       </button>
       <button class="btn btn--anchor-reading" onclick="runAnchorReading()">
-        ⚓ Leer anchors
+        ⚓ Read Anchors
       </button>
     </div>
 
-    <div class="section-label">Resultados</div>
+    <div class="section-label">Results</div>
     <div id="outputs">
       <div class="panel" id="cp-panel">
-        <h3>CP: Contenido de la página (normalizado)</h3>
-        <div id="cp-output" class="text-output">Esperando análisis...</div>
+        <h3>CP: Page Content (normalized)</h3>
+        <div id="cp-output" class="text-output">Waiting for analysis...</div>
       </div>
       <div class="panel" id="co-panel">
-        <h3>CO: Contenido original (normalizado)</h3>
-        <div id="co-output" class="text-output">Esperando análisis...</div>
+        <h3>CO: Original Content (normalized)</h3>
+        <div id="co-output" class="text-output">Waiting for analysis...</div>
       </div>
       <div class="panel panel--full">
-        <h3>Comparación línea a línea</h3>
-        <div id="compare-summary" class="text-output">Pendiente…</div>
+        <h3>Line-by-line Comparison</h3>
+        <div id="compare-summary" class="text-output">Pending…</div>
         <div id="compare-details" class="text-output"></div>
       </div>
       <div class="panel" id="cp-mobile-panel" style="display: none">
         <h3>📱 CP Mobile</h3>
         <div id="cp-mobile-output" class="text-output">
-          Esperando análisis mobile...
+          Waiting for mobile analysis...
         </div>
       </div>
       <div class="panel" id="co-mobile-panel" style="display: none">
         <h3>📱 CO Mobile</h3>
         <div id="co-mobile-output" class="text-output">
-          Esperando análisis mobile...
+          Waiting for mobile analysis...
         </div>
       </div>
       <div
@@ -98,17 +94,17 @@
         id="compare-mobile-panel"
         style="display: none"
       >
-        <h3>📱 Comparación Mobile</h3>
-        <div id="compare-mobile-summary" class="text-output">Pendiente…</div>
+        <h3>📱 Mobile Comparison</h3>
+        <div id="compare-mobile-summary" class="text-output">Pending…</div>
         <div id="compare-mobile-details" class="text-output"></div>
       </div>
       <div class="panel panel--full anchors-panel">
-        <h3>🔗 Enlaces</h3>
-        <div id="anchors-output">Aún no extraídos…</div>
+        <h3>🔗 Links</h3>
+        <div id="anchors-output">Not extracted yet…</div>
       </div>
       <div class="panel panel--half h1-panel">
-        <h3>🏷️ Revisión H1</h3>
-        <div id="h1-summary" class="h1-summary">Aún no evaluado…</div>
+        <h3>🏷️ H1 Review</h3>
+        <div id="h1-summary" class="h1-summary">Not evaluated yet…</div>
         <div id="h1-details" class="h1-details"></div>
       </div>
       <div
@@ -116,8 +112,8 @@
         id="anchor-panel"
         style="display: none"
       >
-        <h3>⚓ Resultado de los anchors</h3>
-        <div id="anchor-output">Aún no evaluados…</div>
+        <h3>⚓ Anchor Results</h3>
+        <div id="anchor-output">Not evaluated yet…</div>
       </div>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -150,7 +146,7 @@
         } catch {}
 
         // 3. Actualizar paneles con mensaje de cancelación
-        const cancelMsg = "⏹️ Proceso detenido por el usuario";
+        const cancelMsg = "⏹️ Process stopped by user";
         [
           "cp-output",
           "co-output",
@@ -163,7 +159,7 @@
           if (
             el &&
             (el.textContent.startsWith("⏳") ||
-              el.textContent.startsWith("Esperando"))
+              el.textContent.startsWith("Waiting"))
           ) {
             el.textContent = cancelMsg;
           }
@@ -196,7 +192,7 @@
         const coPanel = document.getElementById("co-panel");
 
         if (!url) {
-          alert("Por favor ingresa una URL");
+          alert("Please enter a URL");
           return;
         }
 
@@ -206,21 +202,18 @@
         coPanel.style.display = showContent ? "" : "none";
 
         cpDiv.textContent =
-          "⏳ Abriendo página, limpiando y extrayendo texto...";
-        coDiv.textContent = "⏳ Normalizando CO...";
-        compareSummary.textContent = "⏳ Comparando líneas...";
+          "⏳ Opening page, cleaning, and extracting text...";
+        coDiv.textContent = "⏳ Normalizing CO...";
+        compareSummary.textContent = "⏳ Comparing lines...";
         compareDetails.textContent = "";
         const ac = createAbortController();
         try {
-          const openBrowser = document.getElementById("open-browser").checked;
           const resp = await fetch("/api/text-reading/compare", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               url,
               coText: coInput,
-              headless: openBrowser ? false : true,
-              pauseMs: openBrowser ? 10000 : 0,
             }),
             signal: ac.signal,
           });
@@ -237,10 +230,10 @@
           const ordered = data.result && data.result.ordered;
           const badge =
             complete && ordered
-              ? "🟢 COMPLETO Y EN ORDEN"
+              ? "🟢 COMPLETE AND IN ORDER"
               : complete && !ordered
-                ? "🟡 COMPLETO PERO FUERA DE ORDEN"
-                : "🔴 INCOMPLETO";
+                ? "🟡 COMPLETE BUT OUT OF ORDER"
+                : "🔴 INCOMPLETE";
 
           const details = data.details || [];
           const counts = {
@@ -250,18 +243,18 @@
               .length,
             missing: details.filter((d) => !d.found).length,
           };
-          compareSummary.textContent = `${badge} — CO líneas: ${counts.total}, presentes: ${counts.presentAnywhere}, en orden: ${counts.presentInOrder}, faltantes: ${counts.missing}`;
+          compareSummary.textContent = `${badge} — CO lines: ${counts.total}, present: ${counts.presentAnywhere}, in order: ${counts.presentInOrder}, missing: ${counts.missing}`;
 
           const lines = details.map((d, i) => {
             const mark = d.found ? "✔️" : "❌";
             const where = d.found
-              ? `(CP línea ${(d.cpIndex ?? -1) + 1})`
-              : "(no encontrada)";
+              ? `(CP line ${(d.cpIndex ?? -1) + 1})`
+              : "(not found)";
             const orderTag =
               d.orderTag === "ordered"
-                ? "↔️ orden ok"
+                ? "↔️ order ok"
                 : d.orderTag === "out-of-order"
-                  ? "↯ fuera de orden"
+                  ? "↯ out of order"
                   : "";
             return `${mark} [CO ${i + 1}] ${d.line} ${where} ${orderTag}`.trim();
           });
@@ -277,7 +270,7 @@
           cpDiv.textContent = `Error: ${error.message}`;
           const normalizedCO = normalizeText(coInput);
           coDiv.textContent = normalizedCO || "";
-          compareSummary.textContent = "Error durante la comparación";
+          compareSummary.textContent = "Error during comparison";
         } finally {
           removeAbortController(ac);
         }
@@ -300,7 +293,7 @@
         const comparePanel = document.getElementById("compare-mobile-panel");
 
         if (!url) {
-          alert("Por favor ingresa una URL");
+          alert("Please enter a URL");
           return;
         }
 
@@ -311,21 +304,18 @@
         comparePanel.style.display = "";
 
         cpDiv.textContent =
-          "⏳ Abriendo página en modo mobile (430×932), limpiando y extrayendo texto...";
-        coDiv.textContent = "⏳ Normalizando CO...";
-        compareSummary.textContent = "⏳ Comparando líneas...";
+          "⏳ Opening page in mobile mode (430×932), cleaning, and extracting text...";
+        coDiv.textContent = "⏳ Normalizing CO...";
+        compareSummary.textContent = "⏳ Comparing lines...";
         compareDetails.textContent = "";
         const ac = createAbortController();
         try {
-          const openBrowser = document.getElementById("open-browser").checked;
           const resp = await fetch("/api/text-reading-mobile/compare", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               url,
               coText: coInput,
-              headless: openBrowser ? false : true,
-              pauseMs: openBrowser ? 10000 : 0,
             }),
             signal: ac.signal,
           });
@@ -340,10 +330,10 @@
           const ordered = data.result && data.result.ordered;
           const badge =
             complete && ordered
-              ? "🟢 COMPLETO Y EN ORDEN"
+              ? "🟢 COMPLETE AND IN ORDER"
               : complete && !ordered
-                ? "🟡 COMPLETO PERO FUERA DE ORDEN"
-                : "🔴 INCOMPLETO";
+                ? "🟡 COMPLETE BUT OUT OF ORDER"
+                : "🔴 INCOMPLETE";
 
           const details = data.details || [];
           const counts = {
@@ -353,18 +343,18 @@
               .length,
             missing: details.filter((d) => !d.found).length,
           };
-          compareSummary.textContent = `${badge} — CO líneas: ${counts.total}, presentes: ${counts.presentAnywhere}, en orden: ${counts.presentInOrder}, faltantes: ${counts.missing}`;
+          compareSummary.textContent = `${badge} — CO lines: ${counts.total}, present: ${counts.presentAnywhere}, in order: ${counts.presentInOrder}, missing: ${counts.missing}`;
 
           const lines = details.map((d, i) => {
             const mark = d.found ? "✔️" : "❌";
             const where = d.found
-              ? `(CP línea ${(d.cpIndex ?? -1) + 1})`
-              : "(no encontrada)";
+              ? `(CP line ${(d.cpIndex ?? -1) + 1})`
+              : "(not found)";
             const orderTag =
               d.orderTag === "ordered"
-                ? "↔️ orden ok"
+                ? "↔️ order ok"
                 : d.orderTag === "out-of-order"
-                  ? "↯ fuera de orden"
+                  ? "↯ out of order"
                   : "";
             return `${mark} [CO ${i + 1}] ${d.line} ${where} ${orderTag}`.trim();
           });
@@ -377,7 +367,7 @@
         } catch (error) {
           if (error.name === "AbortError") return;
           cpDiv.textContent = `Error: ${error.message}`;
-          compareSummary.textContent = "Error durante la comparación mobile";
+          compareSummary.textContent = "Error during mobile comparison";
         } finally {
           removeAbortController(ac);
         }
@@ -386,23 +376,18 @@
       // --- LINK READING: Leer enlaces y mostrarlos en tabla ---
       async function runLinkReading() {
         const url = document.getElementById("url").value;
-        const openBrowser = document.getElementById("open-browser").checked;
         const anchorsDiv = document.getElementById("anchors-output");
         if (!url) {
-          alert("Por favor ingresa una URL");
+          alert("Please enter a URL");
           return;
         }
-        anchorsDiv.textContent = "⏳ Extrayendo enlaces visibles…";
+        anchorsDiv.textContent = "⏳ Extracting visible links…";
         const ac = createAbortController();
         try {
           const resp = await fetch("/api/link-reading/anchors", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              url,
-              headless: openBrowser ? false : true,
-              pauseMs: openBrowser ? 10000 : 0,
-            }),
+            body: JSON.stringify({ url }),
             signal: ac.signal,
           });
           const data = await resp.json();
@@ -412,7 +397,7 @@
           const anchors = data.anchors || [];
           if (!anchors.length) {
             anchorsDiv.textContent =
-              "No se encontraron enlaces visibles en .ddc-wrapper";
+              "No visible links were found in .ddc-wrapper";
             return;
           }
           anchorsDiv.innerHTML = buildAnchorsTable(anchors);
@@ -422,11 +407,11 @@
           } catch {}
           // Evaluación H1
           try {
-            await updateH1Check(url, openBrowser);
+            await updateH1Check(url);
           } catch {}
         } catch (error) {
           if (error.name === "AbortError") return;
-          anchorsDiv.textContent = `Error al extraer enlaces: ${error.message}`;
+          anchorsDiv.textContent = `Error extracting links: ${error.message}`;
         } finally {
           removeAbortController(ac);
         }
@@ -447,7 +432,7 @@
         return `
                 <table class="anchors-table">
                     <thead>
-                        <tr><th>#</th><th>Texto</th><th>URL</th><th>Estado</th></tr>
+                <tr><th>#</th><th>Text</th><th>URL</th><th>Status</th></tr>
                     </thead>
                     <tbody>
                         ${rows}
@@ -474,23 +459,19 @@
         });
       }
 
-      async function updateH1Check(url, openBrowser) {
+      async function updateH1Check(url) {
         const h1Summary = document.getElementById("h1-summary");
         const h1Details = document.getElementById("h1-details");
-        h1Summary.textContent = "⏳ Evaluando H1…";
+        h1Summary.textContent = "⏳ Evaluating H1…";
         h1Details.textContent = "";
         const resp = await fetch("/api/link-reading/h1-check", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            url,
-            headless: openBrowser ? false : true,
-            pauseMs: openBrowser ? 10000 : 0,
-          }),
+          body: JSON.stringify({ url }),
         });
         const data = await resp.json();
         if (!resp.ok) {
-          h1Summary.textContent = "Error al evaluar H1";
+          h1Summary.textContent = "Error evaluating H1";
           h1Summary.className = "h1-summary status-fail";
           return;
         }
@@ -500,7 +481,7 @@
 
         // Regla 1: más de un h1 (excluyendo sr-only) => rojo
         if (count > 1) {
-          h1Summary.textContent = `🔴 Hay ${count} H1 visibles (se espera 1)`;
+          h1Summary.textContent = `🔴 There are ${count} visible H1s (expected: 1)`;
           h1Summary.className = "h1-summary status-fail";
           h1Details.innerHTML = h1Texts
             .map((t) => `• ${escapeHtml(t)}`)
@@ -515,7 +496,7 @@
           normalizeStr(h1Texts[0]) === normalizeStr(srOnlyText)
         ) {
           h1Summary.textContent =
-            "🟢 Solo hay un H1 y coincide con el H1 sr-only";
+            "🟢 There is only one H1 and it matches the sr-only H1";
           h1Summary.className = "h1-summary status-ok";
           h1Details.innerHTML = `H1: ${escapeHtml(h1Texts[0])}<br>sr-only: ${escapeHtml(srOnlyText)}`;
           return;
@@ -527,7 +508,7 @@
           srOnlyText &&
           normalizeStr(h1Texts[0]) !== normalizeStr(srOnlyText)
         ) {
-          h1Summary.textContent = "🟠 H1 y H1 sr-only son distintos";
+          h1Summary.textContent = "🟠 H1 and sr-only H1 are different";
           h1Summary.className = "h1-summary status-partial";
           h1Details.innerHTML = `H1: ${escapeHtml(h1Texts[0])}<br>sr-only: ${escapeHtml(srOnlyText)}`;
           return;
@@ -537,18 +518,18 @@
         if (count === 0) {
           if (srOnlyText) {
             h1Summary.textContent =
-              "🟠 No hay H1 visible, solo H1 sr-only presente";
+              "🟠 No visible H1 found, only sr-only H1 is present";
             h1Summary.className = "h1-summary status-partial";
             h1Details.textContent = `sr-only: ${escapeHtml(srOnlyText)}`;
           } else {
-            h1Summary.textContent = "🔴 No se encontró ningún H1";
+            h1Summary.textContent = "🔴 No H1 was found";
             h1Summary.className = "h1-summary status-fail";
           }
           return;
         }
 
         // Por defecto: un H1 sin sr-only => verde
-        h1Summary.textContent = "🟢 Solo hay un H1 visible";
+        h1Summary.textContent = "🟢 There is only one visible H1";
         h1Summary.className = "h1-summary status-ok";
         h1Details.textContent = `H1: ${escapeHtml(h1Texts[0])}`;
       }
@@ -556,27 +537,22 @@
       // --- ANCHOR READING: Validar anchor links internos (#seccion) ---
       async function runAnchorReading() {
         const url = document.getElementById("url").value;
-        const openBrowser = document.getElementById("open-browser").checked;
         const anchorPanel = document.getElementById("anchor-panel");
         const anchorDiv = document.getElementById("anchor-output");
         if (!url) {
-          alert("Por favor ingresa una URL");
+          alert("Please enter a URL");
           return;
         }
 
         anchorPanel.style.display = "";
         anchorDiv.textContent =
-          "⏳ Extrayendo y validando anchor links internos…";
+          "⏳ Extracting and validating internal anchor links…";
         const ac = createAbortController();
         try {
           const resp = await fetch("/api/anchor-reading/check", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              url,
-              headless: openBrowser ? false : true,
-              pauseMs: openBrowser ? 10000 : 0,
-            }),
+            body: JSON.stringify({ url }),
             signal: ac.signal,
           });
           const data = await resp.json();
@@ -588,7 +564,7 @@
 
           // Si no hay ningún tipo de anchor
           if (!anchors.length && !misconfiguredAnchors.length) {
-            anchorDiv.textContent = "No se encontraron anchors en .ddc-wrapper";
+            anchorDiv.textContent = "No anchors were found in .ddc-wrapper";
             return;
           }
 
@@ -607,7 +583,7 @@
 
             htmlContent += `
                         <div style="margin-bottom:0.5rem;font-weight:600;">
-                            ${summaryBadge} ${anchors.length} anchors bien configurados — Destino existe: ${totalExists}/${anchors.length}, Scroll OK: ${totalScroll}/${anchors.length}
+                        ${summaryBadge} ${anchors.length} properly configured anchors — Target exists: ${totalExists}/${anchors.length}, Scroll OK: ${totalScroll}/${anchors.length}
                         </div>
                         ${buildAnchorTable(anchors)}
                     `;
@@ -618,7 +594,7 @@
             htmlContent += `
                         <div style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ccc;">
                             <div style="margin-bottom:0.5rem;font-weight:600;">
-                                ❌ ${misconfiguredAnchors.length} anchors MAL CONFIGURADOS
+                              ❌ ${misconfiguredAnchors.length} MISCONFIGURED ANCHORS
                             </div>
                             ${buildMisconfiguredAnchorTable(misconfiguredAnchors)}
                         </div>
@@ -628,7 +604,7 @@
           anchorDiv.innerHTML = htmlContent;
         } catch (error) {
           if (error.name === "AbortError") return;
-          anchorDiv.textContent = `Error al validar anchor links: ${error.message}`;
+          anchorDiv.textContent = `Error validating anchor links: ${error.message}`;
         } finally {
           removeAbortController(ac);
         }
@@ -653,7 +629,7 @@
         return `
                 <table class="anchors-table">
                     <thead>
-                        <tr><th>#</th><th>Texto</th><th>href</th><th>Destino existe</th><th>Scroll OK</th></tr>
+                <tr><th>#</th><th>Text</th><th>href</th><th>Target exists</th><th>Scroll OK</th></tr>
                     </thead>
                     <tbody>${rows}</tbody>
                 </table>
@@ -675,7 +651,7 @@
         return `
                 <table class="anchors-table">
                     <thead>
-                        <tr><th>#</th><th>Texto</th><th>href</th></tr>
+                <tr><th>#</th><th>Text</th><th>href</th></tr>
                     </thead>
                     <tbody>${rows}</tbody>
                 </table>
@@ -707,17 +683,16 @@
         document.getElementById("co").value = "";
 
         // Restaurar checkboxes a su estado original
-        document.getElementById("open-browser").checked = false;
         document.getElementById("show-content").checked = false;
 
         // Restaurar paneles desktop
         document.getElementById("cp-panel").style.display = "";
         document.getElementById("co-panel").style.display = "";
         document.getElementById("cp-output").textContent =
-          "Esperando análisis...";
+          "Waiting for analysis...";
         document.getElementById("co-output").textContent =
-          "Esperando análisis...";
-        document.getElementById("compare-summary").textContent = "Pendiente…";
+          "Waiting for analysis...";
+        document.getElementById("compare-summary").textContent = "Pending…";
         document.getElementById("compare-details").textContent = "";
 
         // Ocultar paneles mobile y restaurar texto
@@ -725,24 +700,24 @@
         document.getElementById("co-mobile-panel").style.display = "none";
         document.getElementById("compare-mobile-panel").style.display = "none";
         document.getElementById("cp-mobile-output").textContent =
-          "Esperando análisis mobile...";
+          "Waiting for mobile analysis...";
         document.getElementById("co-mobile-output").textContent =
-          "Esperando análisis mobile...";
+          "Waiting for mobile analysis...";
         document.getElementById("compare-mobile-summary").textContent =
-          "Pendiente…";
+          "Pending…";
         document.getElementById("compare-mobile-details").textContent = "";
 
         // Restaurar paneles de links y H1
         document.getElementById("anchors-output").textContent =
-          "Aún no extraídos…";
-        document.getElementById("h1-summary").textContent = "Aún no evaluado…";
+          "Not extracted yet…";
+        document.getElementById("h1-summary").textContent = "Not evaluated yet…";
         document.getElementById("h1-summary").className = "h1-summary";
         document.getElementById("h1-details").innerHTML = "";
 
         // Restaurar panel anchor
         document.getElementById("anchor-panel").style.display = "none";
         document.getElementById("anchor-output").textContent =
-          "Aún no evaluados…";
+          "Not evaluated yet…";
       }
 
       function downloadPDF() {

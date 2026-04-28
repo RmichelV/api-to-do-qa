@@ -4,6 +4,8 @@ import { normalizeText } from '../utils/normalization.js';
 // Registro global de browsers activos para poder cancelarlos
 export const activeBrowsersMobile = new Set();
 
+const HEAVY_RESOURCE_TYPES = new Set(['image', 'media', 'font']);
+
 // Emulación de iPhone 14 Pro Max
 const MOBILE_CONTEXT_OPTIONS = {
   viewport: { width: 430, height: 932 },
@@ -24,14 +26,20 @@ const extractEditorialRawMobile = async (url, options = {}) => {
     activeBrowsersMobile.add(browser);
     const context = await browser.newContext(MOBILE_CONTEXT_OPTIONS);
     const page = await context.newPage();
-    page.setDefaultTimeout(30000);
-    page.setDefaultNavigationTimeout(30000);
+    page.setDefaultTimeout(45000);
+    page.setDefaultNavigationTimeout(45000);
+    await page.route('**/*', (route) => {
+      const type = route.request().resourceType();
+      if (HEAVY_RESOURCE_TYPES.has(type)) {
+        return route.abort();
+      }
+      return route.continue();
+    });
 
     console.log(`[text-reading-mobile] Goto start: ${url}`);
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
     console.log(`[text-reading-mobile] Goto complete. Final URL: ${page.url()}`);
 
-    // Esperar a que .ddc-wrapper aparezca (máx 10s)
     let wrapperFound = false;
     try {
       await page.waitForSelector('.ddc-wrapper', { timeout: 10000 });
@@ -41,12 +49,14 @@ const extractEditorialRawMobile = async (url, options = {}) => {
       console.log('[text-reading-mobile] .ddc-wrapper NOT found after 10s');
     }
 
+    const rootSelectorUsed = '.ddc-wrapper';
+
     // Delay para contenido dinámico
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(600);
 
     // Diagnóstico
-    const diagInfo = await page.evaluate(() => {
-      const wrapper = document.querySelector('.ddc-wrapper');
+    const diagInfo = await page.evaluate((rootSel) => {
+      const wrapper = document.querySelector(rootSel);
       return {
         wrapperExists: !!wrapper,
         wrapperChildCount: wrapper ? wrapper.children.length : 0,
@@ -54,13 +64,120 @@ const extractEditorialRawMobile = async (url, options = {}) => {
         bodyHtmlLen: document.body.innerHTML.length,
         title: document.title
       };
-    });
+    }, rootSelectorUsed);
     console.log(`[text-reading-mobile] DIAG: ${JSON.stringify(diagInfo)}`);
 
-    // Si el wrapper no existe o está vacío, fallback al body
+    // Si no hay wrapper en mobile, limpiamos/expandimos sobre body para no perder el bloque editorial.
     if (!wrapperFound || diagInfo.wrapperTextLen === 0) {
-      console.log('[text-reading-mobile] No wrapper content, trying body fallback');
-      const bodyText = await page.evaluate(() => document.body.innerText || '');
+      console.log('[text-reading-mobile] Wrapper not available; using body cleanup + accordion expansion');
+      const bodyText = await page.evaluate(() => {
+        const root = document.body;
+        if (!root) return '';
+
+        const selectors = [
+          "[data-name^='inventory-search-results-page-filters-sort-']",
+          "[data-name^='inventory-search-results-facets-']",
+          '#inventory-results1-app-root',
+          '#inventory-search1-app-root',
+          '#inventory-filters1-app-root',
+          '#inventory-facets1-app-root',
+          '#kbb-leaddriver-search',
+          "[data-name^='form-centered']",
+          "[data-widget-name='contact-form']",
+          "[data-name^='map-hours']",
+          "[data-name='map-1']",
+          "[data-widget-name='map-dynamic']",
+          '.facetmulti.BLANK',
+          '#compareForm',
+          '.ws-inv-text-search',
+          '.ws-inv-filters',
+          '.ws-inv-facets',
+          '.srp-wrapper-facets',
+          'header', 'footer', '.global-header', '.global-footer', '.site-header', '.site-footer', '.ddc-header', '.ddc-footer', 'nav', '.primary-nav', '.site-nav',
+          '.breadcrumbs', '.bread-crumbs', '.topbar', '.sitewide-bar',
+          '.cookie-banner', '#onetrust-banner-sdk', '[role="dialog"][aria-label*="cookie"]', '.notification-banner', '.promo-banner',
+          '[data-widget-name="chat"]', '.chat-widget', '.ws-hours', '.ws-social', '.ws-share'
+        ];
+
+        selectors.forEach(sel => {
+          root.querySelectorAll(sel).forEach(el => el.remove());
+        });
+
+        const forceOpenPanel = (toggleEl) => {
+          if (!(toggleEl instanceof HTMLElement)) return;
+          toggleEl.setAttribute('aria-expanded', 'true');
+          toggleEl.classList.remove('collapsed');
+
+          const href = toggleEl.getAttribute('href') || '';
+          const ariaControls = toggleEl.getAttribute('aria-controls') || '';
+          const targetSelector = ariaControls
+            ? `#${ariaControls}`
+            : (href.startsWith('#') && href.length > 1)
+              ? href
+              : '';
+
+            const openPanel = (target) => {
+              if (!(target instanceof HTMLElement)) return;
+              target.classList.remove('collapse');
+              target.classList.add('show', 'in');
+              target.style.display = 'block';
+              target.style.height = 'auto';
+              target.style.maxHeight = 'none';
+              target.style.overflow = 'visible';
+              target.style.visibility = 'visible';
+              target.style.opacity = '1';
+              target.setAttribute('aria-hidden', 'false');
+            };
+
+            let target = null;
+            if (targetSelector) {
+              try {
+                target = root.querySelector(targetSelector) || document.querySelector(targetSelector);
+              } catch {
+                target = null;
+              }
+            }
+
+            if (!target) {
+              const panelContainer = toggleEl.closest('.panel, .accordion-item, .panel-group, [data-testid="accordion-content-item"]');
+              target = panelContainer?.querySelector?.('.panel-collapse, .accordion-collapse, .collapse') || null;
+            }
+
+            openPanel(target);
+        };
+
+        root.querySelectorAll('[aria-expanded="false"]').forEach(el => {
+          el.setAttribute('aria-expanded', 'true');
+          el.classList.remove('collapsed');
+        });
+        root.querySelectorAll('.panel-collapse, .accordion-collapse, .collapse').forEach(panel => {
+          panel.classList.remove('collapse');
+          panel.classList.add('show', 'in');
+          panel.style.display = 'block';
+          panel.style.height = 'auto';
+          panel.style.maxHeight = 'none';
+          panel.style.overflow = 'visible';
+          panel.style.visibility = 'visible';
+          panel.style.opacity = '1';
+          panel.setAttribute('aria-hidden', 'false');
+        });
+
+        const toggles = Array.from(
+          root.querySelectorAll('a[role="button"], button[aria-expanded], [data-toggle="collapse"], [data-bs-toggle="collapse"]')
+        );
+        toggles.forEach(toggle => {
+          forceOpenPanel(toggle);
+          if (toggle instanceof HTMLElement) {
+            try { toggle.click(); } catch {}
+            forceOpenPanel(toggle);
+          }
+        });
+
+        return root.innerText || '';
+      });
+
+      await page.waitForTimeout(450);
+
       if (bodyText.trim().length > 0) {
         console.log(`[text-reading-mobile] Body fallback: ${bodyText.length} chars`);
         return bodyText;
@@ -68,9 +185,56 @@ const extractEditorialRawMobile = async (url, options = {}) => {
       return '';
     }
 
+    // Abrir acordeones en el DOM original (antes de aislar), por si el contenido se renderiza bajo evento.
+    await page.evaluate((rootSel) => {
+      const root = document.querySelector(rootSel);
+      if (!root) return;
+
+      const forceOpenPanel = (toggleEl) => {
+        if (!(toggleEl instanceof HTMLElement)) return;
+        toggleEl.setAttribute('aria-expanded', 'true');
+        toggleEl.classList.remove('collapsed');
+
+        const href = toggleEl.getAttribute('href') || '';
+        const ariaControls = toggleEl.getAttribute('aria-controls') || '';
+        const targetSelector = ariaControls
+          ? `#${ariaControls}`
+          : href.startsWith('#')
+            ? href
+            : '';
+
+        if (!targetSelector) return;
+        const target = root.querySelector(targetSelector) || document.querySelector(targetSelector);
+        if (!(target instanceof HTMLElement)) return;
+        target.classList.remove('collapse');
+        target.classList.add('show', 'in');
+        target.style.display = 'block';
+        target.style.height = 'auto';
+        target.style.maxHeight = 'none';
+        target.style.overflow = 'visible';
+        target.style.visibility = 'visible';
+        target.style.opacity = '1';
+        target.setAttribute('aria-hidden', 'false');
+      };
+
+      const toggles = Array.from(
+        root.querySelectorAll('a[role="button"], button[aria-expanded], [data-toggle="collapse"], [data-bs-toggle="collapse"]')
+      );
+
+      toggles.forEach(toggle => {
+        forceOpenPanel(toggle);
+        if (toggle instanceof HTMLElement) {
+          try { toggle.click(); } catch {}
+          forceOpenPanel(toggle);
+        }
+      });
+    }, rootSelectorUsed);
+
+    await page.waitForTimeout(500);
+
     console.log('[text-reading-mobile] Cleanup start');
-    await page.evaluate(() => {
-      const wrapper = document.querySelector('.ddc-wrapper');
+    await page.evaluate((rootSel) => {
+      const wrapper = document.querySelector(rootSel);
       if (!wrapper) return;
       document.body.innerHTML = '';
       document.body.appendChild(wrapper);
@@ -101,14 +265,89 @@ const extractEditorialRawMobile = async (url, options = {}) => {
       selectors.forEach(sel => {
         wrapper.querySelectorAll(sel).forEach(el => el.remove());
       });
-    });
+
+      wrapper.querySelectorAll('[aria-expanded="false"]').forEach(el => {
+        el.setAttribute('aria-expanded', 'true');
+        el.classList.remove('collapsed');
+      });
+      wrapper.querySelectorAll('.panel-collapse, .accordion-collapse, .collapse').forEach(panel => {
+        panel.classList.remove('collapse');
+        panel.classList.add('show', 'in');
+        panel.style.display = 'block';
+        panel.style.height = 'auto';
+        panel.style.maxHeight = 'none';
+        panel.style.overflow = 'visible';
+        panel.style.visibility = 'visible';
+        panel.style.opacity = '1';
+        panel.setAttribute('aria-hidden', 'false');
+      });
+
+      // Algunos acordeones renderizan el contenido solo al hacer toggle.
+      const toggles = Array.from(
+        wrapper.querySelectorAll('a[role="button"], button[aria-expanded], [data-toggle="collapse"], [data-bs-toggle="collapse"]')
+      );
+
+      const forceOpenPanel = (toggleEl) => {
+        if (!(toggleEl instanceof HTMLElement)) return;
+        toggleEl.setAttribute('aria-expanded', 'true');
+        toggleEl.classList.remove('collapsed');
+
+        const href = toggleEl.getAttribute('href') || '';
+        const ariaControls = toggleEl.getAttribute('aria-controls') || '';
+        const targetSelector = ariaControls
+          ? `#${ariaControls}`
+          : (href.startsWith('#') && href.length > 1)
+            ? href
+            : '';
+
+        const openPanel = (target) => {
+          if (!(target instanceof HTMLElement)) return;
+          target.classList.remove('collapse');
+          target.classList.add('show', 'in');
+          target.style.display = 'block';
+          target.style.height = 'auto';
+          target.style.maxHeight = 'none';
+          target.style.overflow = 'visible';
+          target.style.visibility = 'visible';
+          target.style.opacity = '1';
+          target.setAttribute('aria-hidden', 'false');
+        };
+
+        let target = null;
+        if (targetSelector) {
+          try {
+            target = wrapper.querySelector(targetSelector) || document.querySelector(targetSelector);
+          } catch {
+            target = null;
+          }
+        }
+
+        if (!target) {
+          const panelContainer = toggleEl.closest('.panel, .accordion-item, .panel-group, [data-testid="accordion-content-item"]');
+          target = panelContainer?.querySelector?.('.panel-collapse, .accordion-collapse, .collapse') || null;
+        }
+
+        openPanel(target);
+      };
+
+      toggles.forEach(toggle => {
+        forceOpenPanel(toggle);
+        if (toggle instanceof HTMLElement) {
+          try { toggle.click(); } catch {}
+          forceOpenPanel(toggle);
+        }
+      });
+    }, rootSelectorUsed);
+
+    // Breve espera para que acordeones que renderizan bajo evento click inserten contenido.
+    await page.waitForTimeout(500);
     console.log('[text-reading-mobile] Cleanup done');
 
-    const rawText = await page.evaluate(() => {
-      const wrapper = document.querySelector('.ddc-wrapper');
+    const rawText = await page.evaluate((rootSel) => {
+      const wrapper = document.querySelector(rootSel) || document.body;
       if (!wrapper) return '';
       return wrapper.innerText || '';
-    });
+    }, rootSelectorUsed);
     const rawLines = (rawText || '').split(/\r?\n/);
     console.log(`[text-reading-mobile] Extraction done: raw lines=${rawLines.length}`);
 

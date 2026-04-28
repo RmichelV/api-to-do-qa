@@ -1,7 +1,10 @@
 import { chromium } from 'playwright';
+import { getRandomUserAgent } from '../utils/stealth.js';
 
 // Registro global de browsers activos para poder cancelarlos
 export const activeBrowsersAnchor = new Set();
+
+const HEAVY_RESOURCE_TYPES = new Set(['image', 'media', 'font']);
 
 /**
  * Extrae anchor links internos (href="#...") de .ddc-wrapper,
@@ -21,12 +24,22 @@ export const extractAndValidateAnchors = async (url, options = {}) => {
 	try {
 		browser = await chromium.launch({ headless });
 		activeBrowsersAnchor.add(browser);
-		const context = await browser.newContext();
+		const context = await browser.newContext({
+			userAgent: getRandomUserAgent(),
+			locale: 'en-US',
+		});
 		const page = await context.newPage();
-		page.setDefaultTimeout(60000);
-		page.setDefaultNavigationTimeout(60000);
+		page.setDefaultTimeout(45000);
+		page.setDefaultNavigationTimeout(45000);
+		await page.route('**/*', (route) => {
+			const type = route.request().resourceType();
+			if (HEAVY_RESOURCE_TYPES.has(type)) {
+				return route.abort();
+			}
+			return route.continue();
+		});
 
-		await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+		await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
 
 		// Esperar a que .ddc-wrapper exista
 		try {

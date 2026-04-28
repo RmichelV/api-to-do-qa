@@ -1,8 +1,29 @@
 import { chromium } from 'playwright';
 import { normalizeText } from '../utils/normalization.js';
+import { getRandomUserAgent } from '../utils/stealth.js';
 
 // Registro global de browsers activos para poder cancelarlos
 export const activeBrowsers = new Set();
+
+const HEAVY_RESOURCE_TYPES = new Set(['image', 'media', 'font']);
+
+const createOptimizedPage = async (browser) => {
+  const context = await browser.newContext({
+    userAgent: getRandomUserAgent(),
+    locale: 'en-US',
+  });
+  const page = await context.newPage();
+  page.setDefaultTimeout(45000);
+  page.setDefaultNavigationTimeout(45000);
+  await page.route('**/*', (route) => {
+    const type = route.request().resourceType();
+    if (HEAVY_RESOURCE_TYPES.has(type)) {
+      return route.abort();
+    }
+    return route.continue();
+  });
+  return page;
+};
 
 /**
  * Abre la página y elimina todo excepto el contenedor .ddc-wrapper y su contenido.
@@ -23,13 +44,11 @@ const extractEditorialRaw = async (url, options = {}) => {
     console.log(`[text-reading] Launch Chromium headless=${headless}`);
     browser = await chromium.launch({ headless });
     activeBrowsers.add(browser);
-    const context = await browser.newContext();
-    const page = await context.newPage();
-    page.setDefaultTimeout(60000);
-    page.setDefaultNavigationTimeout(60000);
+    const page = await createOptimizedPage(browser);
 
     console.log(`[text-reading] Goto start: ${url}`);
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForSelector('.ddc-wrapper', { timeout: 10000 });
     console.log('[text-reading] Goto complete (domcontentloaded)');
 
     console.log('[text-reading] Cleanup start: scope to .ddc-wrapper and remove inventory elements');
@@ -70,12 +89,30 @@ const extractEditorialRaw = async (url, options = {}) => {
         wrapper.querySelectorAll(sel).forEach(el => el.remove());
       });
 
+      const expandAccordionPanels = () => {
+        wrapper.querySelectorAll('[aria-expanded="false"]').forEach(el => {
+          el.setAttribute('aria-expanded', 'true');
+          el.classList.remove('collapsed');
+        });
+        wrapper.querySelectorAll('.panel-collapse, .accordion-collapse, .collapse').forEach(panel => {
+          panel.classList.remove('collapse');
+          panel.classList.add('show', 'in');
+          panel.style.display = 'block';
+          panel.style.height = 'auto';
+          panel.style.overflow = 'visible';
+          panel.setAttribute('aria-hidden', 'false');
+        });
+      };
+
+      expandAccordionPanels();
+
       // Reaplicar la limpieza si elementos se reinsertan dinámicamente
       const unwanted = selectors.slice();
       const observer = new MutationObserver(() => {
         unwanted.forEach(sel => {
           wrapper.querySelectorAll(sel).forEach(el => el.remove());
         });
+        expandAccordionPanels();
       });
       observer.observe(wrapper, { childList: true, subtree: true });
     });
