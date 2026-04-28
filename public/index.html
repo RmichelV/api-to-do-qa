@@ -384,6 +384,11 @@
         anchorsDiv.textContent = "⏳ Extracting visible links…";
         const ac = createAbortController();
         try {
+          // Always evaluate H1 first, even if this page has no visible links.
+          try {
+            await updateH1Check(url);
+          } catch {}
+
           const resp = await fetch("/api/link-reading/anchors", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -404,10 +409,6 @@
           // Después de renderizar, pedir estados HTTP y actualizar la columna
           try {
             await updateLinkStatuses(anchors.map((a) => a.url));
-          } catch {}
-          // Evaluación H1
-          try {
-            await updateH1Check(url);
           } catch {}
         } catch (error) {
           if (error.name === "AbortError") return;
