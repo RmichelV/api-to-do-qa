@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
@@ -7,115 +7,118 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <h1 class="app-title">QA API Tester 🤖</h1>
 
-    <div class="top-controls">
-      <button class="btn-sm btn-sm--stop" onclick="stopAllProcesses()">
-        ⏹️ Stop
-      </button>
-      <button class="btn-sm btn-sm--reset" onclick="resetAll()">
-        🔄 Reset
-      </button>
-      <button
-        class="btn-sm"
-        style="background: #2ecc71; color: black"
-        onclick="downloadPDF()"
-      >
-        📄 Download PDF
-      </button>
-    </div>
-
-    <div class="form-card">
-      <div class="input-group">
-        <label for="url">Target URL</label>
-        <input type="text" id="url" placeholder="https://example.com" />
-      </div>
-
-      <div class="input-group">
-        <label for="co">CO: Original Content</label>
-        <textarea
-          id="co"
-          placeholder="Paste your original content here..."
-        ></textarea>
-      </div>
-
-      <div class="input-group checkbox-group">
-        <label>
-          <input type="checkbox" id="show-content" /> Show extracted content
-          (CP and CO)
-        </label>
-      </div>
-    </div>
-
-    <div class="actions">
-      <button class="btn btn--text-reading" onclick="runTextReading()">
-        ▶️ Text Review
-      </button>
-      <button class="btn btn--mobile" onclick="runTextReadingMobile()">
-        📱 Mobile Text Review
-      </button>
-      <button class="btn btn--link-reading" onclick="runLinkReading()">
-        🔗 Read Links
-      </button>
-      <button class="btn btn--anchor-reading" onclick="runAnchorReading()">
-        ⚓ Read Anchors
-      </button>
-    </div>
-
-    <div class="section-label">Results</div>
-    <div id="outputs">
-      <div class="panel" id="cp-panel">
-        <h3>CP: Page Content (normalized)</h3>
-        <div id="cp-output" class="text-output">Waiting for analysis...</div>
-      </div>
-      <div class="panel" id="co-panel">
-        <h3>CO: Original Content (normalized)</h3>
-        <div id="co-output" class="text-output">Waiting for analysis...</div>
-      </div>
-      <div class="panel panel--full">
-        <h3>Line-by-line Comparison</h3>
-        <div id="compare-summary" class="text-output">Pending…</div>
-        <div id="compare-details" class="text-output"></div>
-      </div>
-      <div class="panel" id="cp-mobile-panel" style="display: none">
-        <h3>📱 CP Mobile</h3>
-        <div id="cp-mobile-output" class="text-output">
-          Waiting for mobile analysis...
+    <header class="topbar">
+      <div class="topbar__inner">
+        <div class="topbar__brand">
+          <span aria-hidden="true">🤖</span>
+          <span class="topbar__title">QA API Tester</span>
         </div>
+        <nav class="topbar__nav">
+          <button class="ctrl-btn ctrl-btn--stop"  onclick="stopAllProcesses()">⏹ Stop</button>
+          <button class="ctrl-btn ctrl-btn--reset" onclick="resetAll()">↺ Reset</button>
+          <button class="ctrl-btn ctrl-btn--pdf"   onclick="downloadPDF()">↓ PDF</button>
+        </nav>
       </div>
-      <div class="panel" id="co-mobile-panel" style="display: none">
-        <h3>📱 CO Mobile</h3>
-        <div id="co-mobile-output" class="text-output">
-          Waiting for mobile analysis...
+    </header>
+
+    <main class="app-main">
+
+      <section class="form-card">
+        <div class="input-group">
+          <label for="url">Target URL</label>
+          <input type="text" id="url" placeholder="https://example.com" autocomplete="off" spellcheck="false" />
         </div>
+        <div class="input-group">
+          <label for="co">CO · Original Content</label>
+          <textarea id="co" placeholder="Paste the original content here…"></textarea>
+        </div>
+        <div class="form-footer">
+          <label class="toggle-label">
+            <input type="checkbox" id="show-content" />
+            <span>Show extracted content (CP &amp; CO)</span>
+          </label>
+        </div>
+      </section>
+
+      <section class="actions-section">
+        <button class="btn-run-all" onclick="runFullAnalysis()">⚡ Run All</button>
+        <div class="btn-grid">
+          <button class="btn-action btn-action--desktop" onclick="runTextReading()">
+            <span class="btn-action__icon">🖥️</span>
+            <span class="btn-action__label">Text Review</span>
+            <span class="btn-action__sub">Desktop</span>
+          </button>
+          <button class="btn-action btn-action--mobile" onclick="runTextReadingMobile()">
+            <span class="btn-action__icon">📱</span>
+            <span class="btn-action__label">Text Review</span>
+            <span class="btn-action__sub">Mobile</span>
+          </button>
+          <button class="btn-action btn-action--links" onclick="runLinkReading()">
+            <span class="btn-action__icon">🔗</span>
+            <span class="btn-action__label">Read Links</span>
+            <span class="btn-action__sub">+ H1</span>
+          </button>
+          <button class="btn-action btn-action--anchors" onclick="runAnchorReading()">
+            <span class="btn-action__icon">⚓</span>
+            <span class="btn-action__label">Anchors</span>
+            <span class="btn-action__sub">Internal</span>
+          </button>
+        </div>
+      </section>
+
+      <div id="outputs">
+
+        <div class="section-header">🖥️ Desktop Analysis</div>
+
+        <div class="panel" id="cp-panel">
+          <h3>CP · Page Content <small>normalized</small></h3>
+          <div id="cp-output" class="text-output">Waiting for analysis…</div>
+        </div>
+        <div class="panel" id="co-panel">
+          <h3>CO · Original Content <small>normalized</small></h3>
+          <div id="co-output" class="text-output">Waiting for analysis…</div>
+        </div>
+        <div class="panel panel--full">
+          <h3>Line-by-line Comparison</h3>
+          <div id="compare-summary" class="text-output">Pending…</div>
+          <div id="compare-details" class="text-output"></div>
+        </div>
+
+        <div class="section-header" id="mobile-section-header" style="display:none">📱 Mobile Analysis</div>
+        <div class="panel" id="cp-mobile-panel" style="display:none">
+          <h3>CP · Mobile <small>normalized</small></h3>
+          <div id="cp-mobile-output" class="text-output">Waiting for mobile analysis…</div>
+        </div>
+        <div class="panel" id="co-mobile-panel" style="display:none">
+          <h3>CO · Mobile <small>normalized</small></h3>
+          <div id="co-mobile-output" class="text-output">Waiting for mobile analysis…</div>
+        </div>
+        <div class="panel panel--full" id="compare-mobile-panel" style="display:none">
+          <h3>Mobile Comparison</h3>
+          <div id="compare-mobile-summary" class="text-output">Pending…</div>
+          <div id="compare-mobile-details" class="text-output"></div>
+        </div>
+
+        <div class="section-header">🔗 Links &amp; H1</div>
+
+        <div class="panel panel--full anchors-panel">
+          <h3>Links</h3>
+          <div id="anchors-output">Not extracted yet…</div>
+        </div>
+        <div class="panel panel--half h1-panel">
+          <h3>H1 Review</h3>
+          <div id="h1-summary" class="h1-summary">Not evaluated yet…</div>
+          <div id="h1-details" class="h1-details"></div>
+        </div>
+        <div class="panel panel--full anchors-panel" id="anchor-panel" style="display:none">
+          <h3>⚓ Anchor Results</h3>
+          <div id="anchor-output">Not evaluated yet…</div>
+        </div>
+
       </div>
-      <div
-        class="panel panel--full"
-        id="compare-mobile-panel"
-        style="display: none"
-      >
-        <h3>📱 Mobile Comparison</h3>
-        <div id="compare-mobile-summary" class="text-output">Pending…</div>
-        <div id="compare-mobile-details" class="text-output"></div>
-      </div>
-      <div class="panel panel--full anchors-panel">
-        <h3>🔗 Links</h3>
-        <div id="anchors-output">Not extracted yet…</div>
-      </div>
-      <div class="panel panel--half h1-panel">
-        <h3>🏷️ H1 Review</h3>
-        <div id="h1-summary" class="h1-summary">Not evaluated yet…</div>
-        <div id="h1-details" class="h1-details"></div>
-      </div>
-      <div
-        class="panel panel--full anchors-panel"
-        id="anchor-panel"
-        style="display: none"
-      >
-        <h3>⚓ Anchor Results</h3>
-        <div id="anchor-output">Not evaluated yet…</div>
-      </div>
-    </div>
+
+    </main>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script>
       // --- ABORT CONTROLLERS para cancelar fetch requests ---
@@ -268,8 +271,7 @@
         } catch (error) {
           if (error.name === "AbortError") return;
           cpDiv.textContent = `Error: ${error.message}`;
-          const normalizedCO = normalizeText(coInput);
-          coDiv.textContent = normalizedCO || "";
+          coDiv.textContent = coInput || "";
           compareSummary.textContent = "Error during comparison";
         } finally {
           removeAbortController(ac);
@@ -302,6 +304,7 @@
         cpPanel.style.display = showContent ? "" : "none";
         coPanel.style.display = showContent ? "" : "none";
         comparePanel.style.display = "";
+        document.getElementById("mobile-section-header").style.display = "";
 
         cpDiv.textContent =
           "⏳ Opening page in mobile mode (430×932), cleaning, and extracting text...";
@@ -373,7 +376,7 @@
         }
       }
 
-      // --- LINK READING: Leer enlaces y mostrarlos en tabla ---
+      // --- LINK READING: Leer enlaces + H1 en un solo navegador ---
       async function runLinkReading() {
         const url = document.getElementById("url").value;
         const anchorsDiv = document.getElementById("anchors-output");
@@ -381,15 +384,13 @@
           alert("Please enter a URL");
           return;
         }
-        anchorsDiv.textContent = "⏳ Extracting visible links…";
+        anchorsDiv.textContent = "⏳ Extracting links and H1…";
+        document.getElementById("h1-summary").textContent = "⏳ Evaluating H1…";
+        document.getElementById("h1-details").textContent = "";
         const ac = createAbortController();
         try {
-          // Always evaluate H1 first, even if this page has no visible links.
-          try {
-            await updateH1Check(url);
-          } catch {}
-
-          const resp = await fetch("/api/link-reading/anchors", {
+          // Un solo navegador extrae anchors + H1
+          const resp = await fetch("/api/link-reading/anchors-and-h1", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ url }),
@@ -399,14 +400,16 @@
           if (!resp.ok)
             throw new Error((data && data.error) || resp.statusText);
 
+          // Renderizar H1
+          renderH1Panel(data.h1Texts || [], data.srOnlyText || null);
+
           const anchors = data.anchors || [];
           if (!anchors.length) {
-            anchorsDiv.textContent =
-              "No visible links were found in .ddc-wrapper";
+            anchorsDiv.textContent = "No visible links were found in .ddc-wrapper";
             return;
           }
           anchorsDiv.innerHTML = buildAnchorsTable(anchors);
-          // Después de renderizar, pedir estados HTTP y actualizar la columna
+          // Pedir estados HTTP (sin navegador)
           try {
             await updateLinkStatuses(anchors.map((a) => a.url));
           } catch {}
@@ -476,50 +479,36 @@
           h1Summary.className = "h1-summary status-fail";
           return;
         }
-        const h1Texts = data.h1Texts || [];
-        const srOnlyText = data.srOnlyText || null;
+        renderH1Panel(data.h1Texts || [], data.srOnlyText || null);
+      }
+
+      // Renderiza el panel H1 a partir de datos ya disponibles (sin llamada a la API)
+      function renderH1Panel(h1Texts, srOnlyText) {
+        const h1Summary = document.getElementById("h1-summary");
+        const h1Details = document.getElementById("h1-details");
         const count = h1Texts.length;
 
-        // Regla 1: más de un h1 (excluyendo sr-only) => rojo
         if (count > 1) {
           h1Summary.textContent = `🔴 There are ${count} visible H1s (expected: 1)`;
           h1Summary.className = "h1-summary status-fail";
-          h1Details.innerHTML = h1Texts
-            .map((t) => `• ${escapeHtml(t)}`)
-            .join("<br>");
+          h1Details.innerHTML = h1Texts.map((t) => `• ${escapeHtml(t)}`).join("<br>");
           return;
         }
-
-        // Regla 2: exactamente un h1 y uno sr-only iguales => verde
-        if (
-          count === 1 &&
-          srOnlyText &&
-          normalizeStr(h1Texts[0]) === normalizeStr(srOnlyText)
-        ) {
-          h1Summary.textContent =
-            "🟢 There is only one H1 and it matches the sr-only H1";
+        if (count === 1 && srOnlyText && normalizeStr(h1Texts[0]) === normalizeStr(srOnlyText)) {
+          h1Summary.textContent = "🟢 There is only one H1 and it matches the sr-only H1";
           h1Summary.className = "h1-summary status-ok";
           h1Details.innerHTML = `H1: ${escapeHtml(h1Texts[0])}<br>sr-only: ${escapeHtml(srOnlyText)}`;
           return;
         }
-
-        // Regla 3: exactamente un h1 y uno sr-only distintos => naranja
-        if (
-          count === 1 &&
-          srOnlyText &&
-          normalizeStr(h1Texts[0]) !== normalizeStr(srOnlyText)
-        ) {
+        if (count === 1 && srOnlyText && normalizeStr(h1Texts[0]) !== normalizeStr(srOnlyText)) {
           h1Summary.textContent = "🟠 H1 and sr-only H1 are different";
           h1Summary.className = "h1-summary status-partial";
           h1Details.innerHTML = `H1: ${escapeHtml(h1Texts[0])}<br>sr-only: ${escapeHtml(srOnlyText)}`;
           return;
         }
-
-        // Casos adicionales (no especificados): sin H1 visible
         if (count === 0) {
           if (srOnlyText) {
-            h1Summary.textContent =
-              "🟠 No visible H1 found, only sr-only H1 is present";
+            h1Summary.textContent = "🟠 No visible H1 found, only sr-only H1 is present";
             h1Summary.className = "h1-summary status-partial";
             h1Details.textContent = `sr-only: ${escapeHtml(srOnlyText)}`;
           } else {
@@ -528,8 +517,6 @@
           }
           return;
         }
-
-        // Por defecto: un H1 sin sr-only => verde
         h1Summary.textContent = "🟢 There is only one visible H1";
         h1Summary.className = "h1-summary status-ok";
         h1Details.textContent = `H1: ${escapeHtml(h1Texts[0])}`;
@@ -667,6 +654,132 @@
         return String(str).trim().replace(/\s+/g, " ").toLowerCase();
       }
 
+      // Tabla de links con status ya incluido (para Run All)
+      function buildAnchorsTableWithStatus(anchors) {
+        const rows = anchors
+          .map((a, idx) => {
+            const safeText = escapeHtml(a.text || "");
+            const safeUrl = escapeHtml(a.url || "");
+            const statusColor = a.statusOk ? "green" : "red";
+            const statusText = a.status || 0;
+            return `<tr><td>${idx + 1}</td><td>${safeText}</td><td class="anchors-url"><a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl}</a></td><td><span style="color:${statusColor}">${statusText}</span></td></tr>`;
+          })
+          .join("");
+        return `<table class="anchors-table"><thead><tr><th>#</th><th>Text</th><th>URL</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
+      }
+
+      // Helper compartido para renderizar resumen de comparación
+      function renderCompareResult(data, summaryId, detailsId) {
+        const complete = data.result && data.result.complete;
+        const ordered = data.result && data.result.ordered;
+        const badge = complete && ordered
+          ? "🟢 COMPLETE AND IN ORDER"
+          : complete && !ordered
+            ? "🟡 COMPLETE BUT OUT OF ORDER"
+            : "🔴 INCOMPLETE";
+        const details = data.details || [];
+        const counts = {
+          total: data.co && data.co.lines ? data.co.lines.length : 0,
+          presentAnywhere: details.filter((d) => d.found).length,
+          presentInOrder: details.filter((d) => d.orderTag === "ordered").length,
+          missing: details.filter((d) => !d.found).length,
+        };
+        document.getElementById(summaryId).textContent =
+          `${badge} — CO lines: ${counts.total}, present: ${counts.presentAnywhere}, in order: ${counts.presentInOrder}, missing: ${counts.missing}`;
+        const lines = details.map((d, i) => {
+          const mark = d.found ? "✔️" : "❌";
+          const where = d.found ? `(CP line ${(d.cpIndex ?? -1) + 1})` : "(not found)";
+          const orderTag = d.orderTag === "ordered" ? "↔️ order ok"
+            : d.orderTag === "out-of-order" ? "↯ out of order" : "";
+          return `${mark} [CO ${i + 1}] ${d.line} ${where} ${orderTag}`.trim();
+        });
+        document.getElementById(detailsId).textContent = complete && ordered ? "" : lines.join("\n");
+      }
+
+      // --- RUN ALL: análisis completo en 2 navegadores en paralelo ---
+      async function runFullAnalysis() {
+        const url = document.getElementById("url").value;
+        const coInput = document.getElementById("co").value;
+        if (!url) { alert("Please enter a URL"); return; }
+
+        const showContent = document.getElementById("show-content").checked;
+        document.getElementById("cp-panel").style.display = showContent ? "" : "none";
+        document.getElementById("co-panel").style.display = showContent ? "" : "none";
+        document.getElementById("cp-mobile-panel").style.display = showContent ? "" : "none";
+        document.getElementById("co-mobile-panel").style.display = showContent ? "" : "none";
+        document.getElementById("compare-mobile-panel").style.display = "";
+        document.getElementById("mobile-section-header").style.display = "";
+
+        const pending = "⏳ Running full analysis…";
+        document.getElementById("cp-output").textContent = pending;
+        document.getElementById("co-output").textContent = pending;
+        document.getElementById("compare-summary").textContent = pending;
+        document.getElementById("compare-details").textContent = "";
+        document.getElementById("cp-mobile-output").textContent = pending;
+        document.getElementById("co-mobile-output").textContent = pending;
+        document.getElementById("compare-mobile-summary").textContent = pending;
+        document.getElementById("compare-mobile-details").textContent = "";
+        document.getElementById("anchors-output").textContent = pending;
+        document.getElementById("h1-summary").textContent = pending;
+        document.getElementById("h1-details").textContent = "";
+
+        const ac = createAbortController();
+        try {
+          const resp = await fetch("/api/full-analysis/run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url, coText: coInput }),
+            signal: ac.signal,
+          });
+          const data = await resp.json();
+          if (!resp.ok) throw new Error((data && data.error) || resp.statusText);
+
+          const desktop = data.desktop || {};
+          const mobile = data.mobile || {};
+
+          // CP y CO desktop
+          document.getElementById("cp-output").textContent = (desktop.cp && desktop.cp.text) || "";
+          document.getElementById("co-output").textContent = (desktop.co && desktop.co.text) || (coInput ? "" : "—");
+
+          // Comparación desktop
+          if (coInput && desktop.result) {
+            renderCompareResult(desktop, "compare-summary", "compare-details");
+          } else {
+            document.getElementById("compare-summary").textContent = coInput
+              ? "Comparison data not available" : "No CO provided — comparison skipped";
+          }
+
+          // CP y CO mobile
+          document.getElementById("cp-mobile-output").textContent = (mobile.cp && mobile.cp.text) || "";
+          document.getElementById("co-mobile-output").textContent = (mobile.co && mobile.co.text) || (coInput ? "" : "—");
+
+          // Comparación mobile
+          if (coInput && mobile.result) {
+            renderCompareResult(mobile, "compare-mobile-summary", "compare-mobile-details");
+          } else {
+            document.getElementById("compare-mobile-summary").textContent = coInput
+              ? "Comparison data not available" : "No CO provided — comparison skipped";
+          }
+
+          // H1
+          renderH1Panel(desktop.h1Texts || [], desktop.srOnlyText || null);
+
+          // Links (status ya embebido)
+          const anchors = desktop.anchors || [];
+          if (!anchors.length) {
+            document.getElementById("anchors-output").textContent = "No visible links were found in .ddc-wrapper";
+          } else {
+            document.getElementById("anchors-output").innerHTML = buildAnchorsTableWithStatus(anchors);
+          }
+        } catch (error) {
+          if (error.name === "AbortError") return;
+          document.getElementById("cp-output").textContent = `Error: ${error.message}`;
+          document.getElementById("compare-summary").textContent = "Error during full analysis";
+        } finally {
+          removeAbortController(ac);
+        }
+      }
+
       function resetAll() {
         // Detener procesos activos primero
         activeAbortControllers.forEach((ac) => {
@@ -700,6 +813,7 @@
         document.getElementById("cp-mobile-panel").style.display = "none";
         document.getElementById("co-mobile-panel").style.display = "none";
         document.getElementById("compare-mobile-panel").style.display = "none";
+        document.getElementById("mobile-section-header").style.display = "none";
         document.getElementById("cp-mobile-output").textContent =
           "Waiting for mobile analysis...";
         document.getElementById("co-mobile-output").textContent =
@@ -757,5 +871,6 @@
         html2pdf().set(options).from(container).save();
       }
     </script>
+    </main>
   </body>
 </html>
