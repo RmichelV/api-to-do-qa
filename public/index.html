@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
@@ -7,121 +7,118 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <h1 class="app-title">QA API Tester 🤖</h1>
 
-    <div class="top-controls">
-      <button class="btn-sm btn-sm--stop" onclick="stopAllProcesses()">
-        ⏹️ Stop
-      </button>
-      <button class="btn-sm btn-sm--reset" onclick="resetAll()">
-        🔄 Reset
-      </button>
-      <button
-        class="btn-sm"
-        style="background: #2ecc71; color: black"
-        onclick="downloadPDF()"
-      >
-        📄 Download PDF
-      </button>
-    </div>
-
-    <div class="form-card">
-      <div class="input-group">
-        <label for="url">Target URL</label>
-        <input type="text" id="url" placeholder="https://example.com" />
-      </div>
-
-      <div class="input-group">
-        <label for="co">CO: Original Content</label>
-        <textarea
-          id="co"
-          placeholder="Paste your original content here..."
-        ></textarea>
-      </div>
-
-      <div class="input-group checkbox-group">
-        <label>
-          <input type="checkbox" id="show-content" /> Show extracted content
-          (CP and CO)
-        </label>
-      </div>
-    </div>
-
-    <div class="actions actions--run-all">
-      <button class="btn btn--run-all" onclick="runFullAnalysis()">
-        ⚡ Run All
-      </button>
-    </div>
-
-    <div class="actions">
-      <button class="btn btn--text-reading" onclick="runTextReading()">
-        ▶️ Text Review
-      </button>
-      <button class="btn btn--mobile" onclick="runTextReadingMobile()">
-        📱 Mobile Text Review
-      </button>
-      <button class="btn btn--link-reading" onclick="runLinkReading()">
-        🔗 Read Links
-      </button>
-      <button class="btn btn--anchor-reading" onclick="runAnchorReading()">
-        ⚓ Read Anchors
-      </button>
-    </div>
-
-    <div class="section-label">Results</div>
-    <div id="outputs">
-      <div class="panel" id="cp-panel">
-        <h3>CP: Page Content (normalized)</h3>
-        <div id="cp-output" class="text-output">Waiting for analysis...</div>
-      </div>
-      <div class="panel" id="co-panel">
-        <h3>CO: Original Content (normalized)</h3>
-        <div id="co-output" class="text-output">Waiting for analysis...</div>
-      </div>
-      <div class="panel panel--full">
-        <h3>Line-by-line Comparison</h3>
-        <div id="compare-summary" class="text-output">Pending…</div>
-        <div id="compare-details" class="text-output"></div>
-      </div>
-      <div class="panel" id="cp-mobile-panel" style="display: none">
-        <h3>📱 CP Mobile</h3>
-        <div id="cp-mobile-output" class="text-output">
-          Waiting for mobile analysis...
+    <header class="topbar">
+      <div class="topbar__inner">
+        <div class="topbar__brand">
+          <span aria-hidden="true">🤖</span>
+          <span class="topbar__title">QA API Tester</span>
         </div>
+        <nav class="topbar__nav">
+          <button class="ctrl-btn ctrl-btn--stop"  onclick="stopAllProcesses()">⏹ Stop</button>
+          <button class="ctrl-btn ctrl-btn--reset" onclick="resetAll()">↺ Reset</button>
+          <button class="ctrl-btn ctrl-btn--pdf"   onclick="downloadPDF()">↓ PDF</button>
+        </nav>
       </div>
-      <div class="panel" id="co-mobile-panel" style="display: none">
-        <h3>📱 CO Mobile</h3>
-        <div id="co-mobile-output" class="text-output">
-          Waiting for mobile analysis...
+    </header>
+
+    <main class="app-main">
+
+      <section class="form-card">
+        <div class="input-group">
+          <label for="url">Target URL</label>
+          <input type="text" id="url" placeholder="https://example.com" autocomplete="off" spellcheck="false" />
         </div>
+        <div class="input-group">
+          <label for="co">CO · Original Content</label>
+          <textarea id="co" placeholder="Paste the original content here…"></textarea>
+        </div>
+        <div class="form-footer">
+          <label class="toggle-label">
+            <input type="checkbox" id="show-content" />
+            <span>Show extracted content (CP &amp; CO)</span>
+          </label>
+        </div>
+      </section>
+
+      <section class="actions-section">
+        <button class="btn-run-all" onclick="runFullAnalysis()">⚡ Run All</button>
+        <div class="btn-grid">
+          <button class="btn-action btn-action--desktop" onclick="runTextReading()">
+            <span class="btn-action__icon">🖥️</span>
+            <span class="btn-action__label">Text Review</span>
+            <span class="btn-action__sub">Desktop</span>
+          </button>
+          <button class="btn-action btn-action--mobile" onclick="runTextReadingMobile()">
+            <span class="btn-action__icon">📱</span>
+            <span class="btn-action__label">Text Review</span>
+            <span class="btn-action__sub">Mobile</span>
+          </button>
+          <button class="btn-action btn-action--links" onclick="runLinkReading()">
+            <span class="btn-action__icon">🔗</span>
+            <span class="btn-action__label">Read Links</span>
+            <span class="btn-action__sub">+ H1</span>
+          </button>
+          <button class="btn-action btn-action--anchors" onclick="runAnchorReading()">
+            <span class="btn-action__icon">⚓</span>
+            <span class="btn-action__label">Anchors</span>
+            <span class="btn-action__sub">Internal</span>
+          </button>
+        </div>
+      </section>
+
+      <div id="outputs">
+
+        <div class="section-header">🖥️ Desktop Analysis</div>
+
+        <div class="panel" id="cp-panel">
+          <h3>CP · Page Content <small>normalized</small></h3>
+          <div id="cp-output" class="text-output">Waiting for analysis…</div>
+        </div>
+        <div class="panel" id="co-panel">
+          <h3>CO · Original Content <small>normalized</small></h3>
+          <div id="co-output" class="text-output">Waiting for analysis…</div>
+        </div>
+        <div class="panel panel--full">
+          <h3>Line-by-line Comparison</h3>
+          <div id="compare-summary" class="text-output">Pending…</div>
+          <div id="compare-details" class="text-output"></div>
+        </div>
+
+        <div class="section-header" id="mobile-section-header" style="display:none">📱 Mobile Analysis</div>
+        <div class="panel" id="cp-mobile-panel" style="display:none">
+          <h3>CP · Mobile <small>normalized</small></h3>
+          <div id="cp-mobile-output" class="text-output">Waiting for mobile analysis…</div>
+        </div>
+        <div class="panel" id="co-mobile-panel" style="display:none">
+          <h3>CO · Mobile <small>normalized</small></h3>
+          <div id="co-mobile-output" class="text-output">Waiting for mobile analysis…</div>
+        </div>
+        <div class="panel panel--full" id="compare-mobile-panel" style="display:none">
+          <h3>Mobile Comparison</h3>
+          <div id="compare-mobile-summary" class="text-output">Pending…</div>
+          <div id="compare-mobile-details" class="text-output"></div>
+        </div>
+
+        <div class="section-header">🔗 Links &amp; H1</div>
+
+        <div class="panel panel--full anchors-panel">
+          <h3>Links</h3>
+          <div id="anchors-output">Not extracted yet…</div>
+        </div>
+        <div class="panel panel--half h1-panel">
+          <h3>H1 Review</h3>
+          <div id="h1-summary" class="h1-summary">Not evaluated yet…</div>
+          <div id="h1-details" class="h1-details"></div>
+        </div>
+        <div class="panel panel--full anchors-panel" id="anchor-panel" style="display:none">
+          <h3>⚓ Anchor Results</h3>
+          <div id="anchor-output">Not evaluated yet…</div>
+        </div>
+
       </div>
-      <div
-        class="panel panel--full"
-        id="compare-mobile-panel"
-        style="display: none"
-      >
-        <h3>📱 Mobile Comparison</h3>
-        <div id="compare-mobile-summary" class="text-output">Pending…</div>
-        <div id="compare-mobile-details" class="text-output"></div>
-      </div>
-      <div class="panel panel--full anchors-panel">
-        <h3>🔗 Links</h3>
-        <div id="anchors-output">Not extracted yet…</div>
-      </div>
-      <div class="panel panel--half h1-panel">
-        <h3>🏷️ H1 Review</h3>
-        <div id="h1-summary" class="h1-summary">Not evaluated yet…</div>
-        <div id="h1-details" class="h1-details"></div>
-      </div>
-      <div
-        class="panel panel--full anchors-panel"
-        id="anchor-panel"
-        style="display: none"
-      >
-        <h3>⚓ Anchor Results</h3>
-        <div id="anchor-output">Not evaluated yet…</div>
-      </div>
-    </div>
+
+    </main>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script>
       // --- ABORT CONTROLLERS para cancelar fetch requests ---
@@ -274,8 +271,7 @@
         } catch (error) {
           if (error.name === "AbortError") return;
           cpDiv.textContent = `Error: ${error.message}`;
-          const normalizedCO = normalizeText(coInput);
-          coDiv.textContent = normalizedCO || "";
+          coDiv.textContent = coInput || "";
           compareSummary.textContent = "Error during comparison";
         } finally {
           removeAbortController(ac);
@@ -308,6 +304,7 @@
         cpPanel.style.display = showContent ? "" : "none";
         coPanel.style.display = showContent ? "" : "none";
         comparePanel.style.display = "";
+        document.getElementById("mobile-section-header").style.display = "";
 
         cpDiv.textContent =
           "⏳ Opening page in mobile mode (430×932), cleaning, and extracting text...";
@@ -711,6 +708,7 @@
         document.getElementById("cp-mobile-panel").style.display = showContent ? "" : "none";
         document.getElementById("co-mobile-panel").style.display = showContent ? "" : "none";
         document.getElementById("compare-mobile-panel").style.display = "";
+        document.getElementById("mobile-section-header").style.display = "";
 
         const pending = "⏳ Running full analysis…";
         document.getElementById("cp-output").textContent = pending;
@@ -815,6 +813,7 @@
         document.getElementById("cp-mobile-panel").style.display = "none";
         document.getElementById("co-mobile-panel").style.display = "none";
         document.getElementById("compare-mobile-panel").style.display = "none";
+        document.getElementById("mobile-section-header").style.display = "none";
         document.getElementById("cp-mobile-output").textContent =
           "Waiting for mobile analysis...";
         document.getElementById("co-mobile-output").textContent =
@@ -872,5 +871,6 @@
         html2pdf().set(options).from(container).save();
       }
     </script>
+    </main>
   </body>
 </html>
