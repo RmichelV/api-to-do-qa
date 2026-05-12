@@ -235,7 +235,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  padding: 0.35rem 0;
+  padding: 0.35rem 0.5rem;
   font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -243,9 +243,24 @@ textarea {
   color: #6b7280;
   border-bottom: 1.5px solid #e5e7eb;
   margin-top: 0.4rem;
+  border-radius: 4px 4px 0 0;
 }
 
 .section-header:first-child { margin-top: 0; }
+
+/* Section color themes */
+.section-header--h1      { color: #6d28d9; background: #f5f3ff; border-bottom-color: #c4b5fd; }
+.section-header--desktop { color: #1d4ed8; background: #eff6ff; border-bottom-color: #93c5fd; }
+.section-header--mobile  { color: #0f766e; background: #f0fdfa; border-bottom-color: #5eead4; }
+.section-header--links   { color: #b45309; background: #fffbeb; border-bottom-color: #fcd34d; }
+.section-header--anchors { color: #c2410c; background: #fff7ed; border-bottom-color: #fdba74; }
+
+/* Panel accent borders */
+.panel--h1      { border-left: 3px solid #7c3aed; }
+.panel--desktop { border-left: 3px solid #2563eb; }
+.panel--mobile  { border-left: 3px solid #0d9488; }
+.panel--links   { border-left: 3px solid #d97706; }
+.panel--anchors { border-left: 3px solid #ea580c; }
 
 /* ── Panels ── */
 .panel {
@@ -333,6 +348,13 @@ textarea {
   padding: 0.4rem 0.55rem;
   word-break: break-word;
   overflow-wrap: anywhere;
+}
+
+/* Compact variant for anchor validation results */
+.anchors-table--sm th,
+.anchors-table--sm td {
+  padding: 0.2rem 0.4rem;
+  font-size: 0.78rem;
 }
 
 .anchors-table thead {

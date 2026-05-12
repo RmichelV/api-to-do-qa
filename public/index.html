@@ -33,6 +33,10 @@
           <label for="co">CO · Original Content</label>
           <textarea id="co" placeholder="Paste the original content here…"></textarea>
         </div>
+        <div class="input-group">
+          <label for="check-links">Links to check <small style="font-weight:400;color:#6b7280">(one path per line, e.g. /new-inventory/index.htm)</small></label>
+          <textarea id="check-links" placeholder="/new-inventory/index.htm&#10;/financing/center.htm&#10;/used-inventory/index.htm" style="min-height:5rem"></textarea>
+        </div>
         <div class="form-footer">
           <label class="toggle-label">
             <input type="checkbox" id="show-content" />
@@ -69,55 +73,56 @@
 
       <div id="outputs">
 
-        <div class="section-header">🏷️ H1</div>
+        <div class="section-header section-header--h1">🏷️ H1</div>
 
-        <div class="panel panel--full h1-panel">
+        <div class="panel panel--full h1-panel panel--h1">
           <h3>H1 Review</h3>
           <div id="h1-summary" class="h1-summary">Not evaluated yet…</div>
           <div id="h1-details" class="h1-details"></div>
         </div>
 
-        <div class="section-header">🖥️ Desktop Analysis</div>
+        <div class="section-header section-header--desktop">🖥️ Desktop Analysis</div>
 
-        <div class="panel" id="cp-panel">
+        <div class="panel panel--desktop" id="cp-panel">
           <h3>CP · Page Content <small>normalized</small></h3>
           <div id="cp-output" class="text-output">Waiting for analysis…</div>
         </div>
-        <div class="panel" id="co-panel">
+        <div class="panel panel--desktop" id="co-panel">
           <h3>CO · Original Content <small>normalized</small></h3>
           <div id="co-output" class="text-output">Waiting for analysis…</div>
         </div>
-        <div class="panel panel--full">
+        <div class="panel panel--full panel--desktop">
           <h3>Line-by-line Comparison</h3>
           <div id="compare-summary" class="text-output">Pending…</div>
           <div id="compare-details" class="text-output"></div>
         </div>
 
-        <div class="section-header" id="mobile-section-header" style="display:none">📱 Mobile Analysis</div>
-        <div class="panel" id="cp-mobile-panel" style="display:none">
+        <div class="section-header section-header--mobile" id="mobile-section-header" style="display:none">📱 Mobile Analysis</div>
+        <div class="panel panel--mobile" id="cp-mobile-panel" style="display:none">
           <h3>CP · Mobile <small>normalized</small></h3>
           <div id="cp-mobile-output" class="text-output">Waiting for mobile analysis…</div>
         </div>
-        <div class="panel" id="co-mobile-panel" style="display:none">
+        <div class="panel panel--mobile" id="co-mobile-panel" style="display:none">
           <h3>CO · Mobile <small>normalized</small></h3>
           <div id="co-mobile-output" class="text-output">Waiting for mobile analysis…</div>
         </div>
-        <div class="panel panel--full" id="compare-mobile-panel" style="display:none">
+        <div class="panel panel--full panel--mobile" id="compare-mobile-panel" style="display:none">
           <h3>Mobile Comparison</h3>
           <div id="compare-mobile-summary" class="text-output">Pending…</div>
           <div id="compare-mobile-details" class="text-output"></div>
         </div>
 
-        <div class="section-header">🔗 Links</div>
+        <div class="section-header section-header--links">🔗 Links</div>
 
-        <div class="panel panel--full anchors-panel">
+        <div class="panel panel--full anchors-panel panel--links">
           <h3>Links</h3>
           <div id="anchors-output">Not extracted yet…</div>
+          <div id="link-check-output"></div>
         </div>
 
-        <div class="section-header" id="anchor-section-header" style="display:none">⚓ Anchors</div>
+        <div class="section-header section-header--anchors" id="anchor-section-header" style="display:none">⚓ Anchors</div>
 
-        <div class="panel panel--full anchors-panel" id="anchor-panel" style="display:none">
+        <div class="panel panel--full anchors-panel panel--anchors" id="anchor-panel" style="display:none">
           <div id="anchor-output">Not evaluated yet…</div>
         </div>
 
@@ -377,6 +382,7 @@
             return;
           }
           anchorsDiv.innerHTML = buildAnchorsTable(anchors);
+          renderLinkCheck(anchors);
           // Pedir estados HTTP (sin navegador)
           try {
             await updateLinkStatuses(anchors.map((a) => a.url));
@@ -387,6 +393,55 @@
         } finally {
           removeAbortController(ac);
         }
+      }
+
+      function renderLinkCheck(anchors) {
+        const raw = (document.getElementById("check-links").value || "").trim();
+        const container = document.getElementById("link-check-output");
+        if (!raw || !container) return;
+        const paths = raw.split("\n").map((l) => l.trim()).filter(Boolean);
+        if (!paths.length) { container.innerHTML = ""; return; }
+
+        // Build a set of normalized path+query from extracted anchors
+        const extractedPaths = anchors.map((a) => {
+          try {
+            const u = new URL(a.url);
+            return (u.pathname.toLowerCase().replace(/\/+$/, "") + u.search.toLowerCase());
+          } catch { return ""; }
+        });
+
+        function normalizePath(p) {
+          try {
+            const u = new URL(p, "https://placeholder.x");
+            return u.pathname.toLowerCase().replace(/\/+$/, "") + u.search.toLowerCase();
+          } catch { return p.toLowerCase().replace(/\/+$/, ""); }
+        }
+
+        const rows = paths.map((p, i) => {
+          const needle = normalizePath(p);
+          const found = extractedPaths.some((ep) => ep === needle);
+          const badge = found
+            ? `<span style="color:#16a34a;font-weight:700;font-size:0.72rem">✔</span>`
+            : `<span style="color:#dc2626;font-weight:700;font-size:0.72rem">✘</span>`;
+          return `<tr><td style="font-size:0.72rem;color:#9ca3af">${i + 1}</td><td style="font-family:monospace;font-size:0.78rem">${escapeHtml(p)}</td><td style="text-align:center">${badge}</td></tr>`;
+        }).join("");
+
+        const found = paths.filter((p) => {
+          const needle = normalizePath(p);
+          return extractedPaths.some((ep) => ep === needle);
+        }).length;
+        const badge = found === paths.length
+          ? `<span style="color:#16a34a;font-weight:700">${found}/${paths.length} ✔</span>`
+          : `<span style="color:#dc2626;font-weight:700">${found}/${paths.length}</span>`;
+
+        container.innerHTML = `
+          <div style="margin-top:0.6rem;border-top:1px solid #e5e7eb;padding-top:0.5rem">
+            <div style="font-size:0.8rem;font-weight:600;margin-bottom:0.3rem">🔎 Link Check — ${badge}</div>
+            <table class="anchors-table" style="font-size:0.78rem">
+              <thead><tr><th>#</th><th>Path</th><th>✔/✘</th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>`;
       }
 
       function buildAnchorsTable(anchors) {
@@ -403,7 +458,7 @@
         return `
                 <table class="anchors-table">
                     <thead>
-                <tr><th>#</th><th>Text</th><th>URL</th><th>Tipo</th><th>Status</th></tr>
+                <tr><th>#</th><th>Text</th><th>URL</th><th>TYPE</th><th>Status</th></tr>
                     </thead>
                     <tbody>
                         ${rows}
@@ -538,23 +593,23 @@
                   : "🔴";
 
             htmlContent += `
-                        <div style="margin-bottom:0.5rem;font-weight:600;">
-                        ${summaryBadge} ${anchors.length} properly configured anchors — Target exists: ${totalExists}/${anchors.length}, Scroll OK: ${totalScroll}/${anchors.length}
-                        </div>
-                        ${buildAnchorTable(anchors)}
-                    `;
+              <div style="margin-bottom:0.4rem;font-size:0.82rem;font-weight:600">
+              ${summaryBadge} ${anchors.length} properly configured anchors — Target exists: ${totalExists}/${anchors.length}, Scroll OK: ${totalScroll}/${anchors.length}
+              </div>
+              ${buildAnchorTable(anchors)}
+            `;
           }
 
           // Mostrar anchors mal configurados
           if (misconfiguredAnchors.length > 0) {
             htmlContent += `
-                        <div style="margin-top:2rem;padding-top:1rem;border-top:1px solid #ccc;">
-                            <div style="margin-bottom:0.5rem;font-weight:600;">
-                              ❌ ${misconfiguredAnchors.length} MISCONFIGURED ANCHORS
-                            </div>
-                            ${buildMisconfiguredAnchorTable(misconfiguredAnchors)}
-                        </div>
-                    `;
+              <div style="margin-top:0.8rem;padding-top:0.6rem;border-top:1px solid #fdba74">
+                <div style="margin-bottom:0.4rem;font-size:0.82rem;font-weight:600;color:#c2410c">
+                  ❌ ${misconfiguredAnchors.length} MISCONFIGURED ANCHORS
+                </div>
+                ${buildMisconfiguredAnchorTable(misconfiguredAnchors)}
+              </div>
+            `;
           }
 
           anchorDiv.innerHTML = htmlContent;
@@ -573,23 +628,10 @@
             const safeHref = escapeHtml(a.href);
             const existsIcon = a.targetExists ? "✅" : "❌";
             const scrollIcon = a.scrollOk ? "✅" : a.targetExists ? "❌" : "➖";
-            return `<tr>
-                    <td>${idx + 1}</td>
-                    <td>${safeText}</td>
-                    <td><code>${safeHref}</code></td>
-                    <td>${existsIcon}</td>
-                    <td>${scrollIcon}</td>
-                </tr>`;
+            return `<tr><td>${idx + 1}</td><td>${safeText}</td><td><code style="font-size:0.74rem">${safeHref}</code></td><td style="text-align:center">${existsIcon}</td><td style="text-align:center">${scrollIcon}</td></tr>`;
           })
           .join("");
-        return `
-                <table class="anchors-table">
-                    <thead>
-                <tr><th>#</th><th>Text</th><th>href</th><th>Target exists</th><th>Scroll OK</th></tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                </table>
-            `;
+        return `<table class="anchors-table anchors-table--sm"><thead><tr><th>#</th><th>Text</th><th>href</th><th>Target</th><th>Scroll</th></tr></thead><tbody>${rows}</tbody></table>`;
       }
 
       function buildMisconfiguredAnchorTable(anchors) {
@@ -597,21 +639,10 @@
           .map((a, idx) => {
             const safeText = escapeHtml(a.text);
             const safeHref = escapeHtml(a.href);
-            return `<tr>
-                    <td>${idx + 1}</td>
-                    <td>${safeText}</td>
-                    <td><code>${safeHref}</code></td>
-                </tr>`;
+            return `<tr><td>${idx + 1}</td><td>${safeText}</td><td><code style="font-size:0.74rem">${safeHref}</code></td></tr>`;
           })
           .join("");
-        return `
-                <table class="anchors-table">
-                    <thead>
-                <tr><th>#</th><th>Text</th><th>href</th></tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                </table>
-            `;
+        return `<table class="anchors-table anchors-table--sm"><thead><tr><th>#</th><th>Text</th><th>href</th></tr></thead><tbody>${rows}</tbody></table>`;
       }
 
       function escapeHtml(str) {
@@ -733,6 +764,7 @@
             document.getElementById("anchors-output").textContent = "No visible links were found in .ddc-wrapper";
           } else {
             document.getElementById("anchors-output").innerHTML = buildAnchorsTableWithStatus(anchors);
+            renderLinkCheck(anchors);
           }
         } catch (error) {
           if (error.name === "AbortError") return;
@@ -788,6 +820,7 @@
         // Restaurar paneles de links y H1
         document.getElementById("anchors-output").textContent =
           "Not extracted yet…";
+        document.getElementById("link-check-output").innerHTML = "";
         document.getElementById("h1-summary").textContent = "Not evaluated yet…";
         document.getElementById("h1-summary").className = "h1-summary";
         document.getElementById("h1-details").innerHTML = "";
