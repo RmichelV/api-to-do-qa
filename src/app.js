@@ -11,7 +11,7 @@ import { activeBrowsersAnchor } from './services/anchorReadingService.js'
 import { activeBrowsersFull } from './services/fullAnalysisService.js'
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 4000;
 
 app.use(express.json({ limit: '5mb' }));
 
