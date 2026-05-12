@@ -69,6 +69,14 @@
 
       <div id="outputs">
 
+        <div class="section-header">🏷️ H1</div>
+
+        <div class="panel panel--full h1-panel">
+          <h3>H1 Review</h3>
+          <div id="h1-summary" class="h1-summary">Not evaluated yet…</div>
+          <div id="h1-details" class="h1-details"></div>
+        </div>
+
         <div class="section-header">🖥️ Desktop Analysis</div>
 
         <div class="panel" id="cp-panel">
@@ -100,19 +108,16 @@
           <div id="compare-mobile-details" class="text-output"></div>
         </div>
 
-        <div class="section-header">🔗 Links &amp; H1</div>
+        <div class="section-header">🔗 Links</div>
 
         <div class="panel panel--full anchors-panel">
           <h3>Links</h3>
           <div id="anchors-output">Not extracted yet…</div>
         </div>
-        <div class="panel panel--half h1-panel">
-          <h3>H1 Review</h3>
-          <div id="h1-summary" class="h1-summary">Not evaluated yet…</div>
-          <div id="h1-details" class="h1-details"></div>
-        </div>
+
+        <div class="section-header" id="anchor-section-header" style="display:none">⚓ Anchors</div>
+
         <div class="panel panel--full anchors-panel" id="anchor-panel" style="display:none">
-          <h3>⚓ Anchor Results</h3>
           <div id="anchor-output">Not evaluated yet…</div>
         </div>
 
@@ -230,44 +235,25 @@
 
           // Resumen y detalle
           const complete = data.result && data.result.complete;
-          const ordered = data.result && data.result.ordered;
-          const badge =
-            complete && ordered
-              ? "🟢 COMPLETE AND IN ORDER"
-              : complete && !ordered
-                ? "🟡 COMPLETE BUT OUT OF ORDER"
-                : "🔴 INCOMPLETE";
+          const badge = complete ? "🟢 COMPLETE" : "🔴 INCOMPLETE";
 
           const details = data.details || [];
           const counts = {
             total: data.co && data.co.lines ? data.co.lines.length : 0,
-            presentAnywhere: details.filter((d) => d.found).length,
-            presentInOrder: details.filter((d) => d.orderTag === "ordered")
-              .length,
+            present: details.filter((d) => d.found).length,
             missing: details.filter((d) => !d.found).length,
           };
-          compareSummary.textContent = `${badge} — CO lines: ${counts.total}, present: ${counts.presentAnywhere}, in order: ${counts.presentInOrder}, missing: ${counts.missing}`;
+          compareSummary.textContent = `${badge} — CO lines: ${counts.total}, present: ${counts.present}, missing: ${counts.missing}`;
 
           const lines = details.map((d, i) => {
             const mark = d.found ? "✔️" : "❌";
             const where = d.found
               ? `(CP line ${(d.cpIndex ?? -1) + 1})`
               : "(not found)";
-            const orderTag =
-              d.orderTag === "ordered"
-                ? "↔️ order ok"
-                : d.orderTag === "out-of-order"
-                  ? "↯ out of order"
-                  : "";
-            return `${mark} [CO ${i + 1}] ${d.line} ${where} ${orderTag}`.trim();
+            return `${mark} [CO ${i + 1}] ${d.line} ${where}`.trim();
           });
 
-          // Mostrar líneas detalladas solo si no está completo o está fuera de orden
-          if (complete && ordered) {
-            compareDetails.textContent = "";
-          } else {
-            compareDetails.textContent = lines.join("\n");
-          }
+          compareDetails.textContent = complete ? "" : lines.join("\n");
         } catch (error) {
           if (error.name === "AbortError") return;
           cpDiv.textContent = `Error: ${error.message}`;
@@ -330,43 +316,25 @@
           coDiv.textContent = (data.co && data.co.text) || "";
 
           const complete = data.result && data.result.complete;
-          const ordered = data.result && data.result.ordered;
-          const badge =
-            complete && ordered
-              ? "🟢 COMPLETE AND IN ORDER"
-              : complete && !ordered
-                ? "🟡 COMPLETE BUT OUT OF ORDER"
-                : "🔴 INCOMPLETE";
+          const badge = complete ? "🟢 COMPLETE" : "🔴 INCOMPLETE";
 
           const details = data.details || [];
           const counts = {
             total: data.co && data.co.lines ? data.co.lines.length : 0,
-            presentAnywhere: details.filter((d) => d.found).length,
-            presentInOrder: details.filter((d) => d.orderTag === "ordered")
-              .length,
+            present: details.filter((d) => d.found).length,
             missing: details.filter((d) => !d.found).length,
           };
-          compareSummary.textContent = `${badge} — CO lines: ${counts.total}, present: ${counts.presentAnywhere}, in order: ${counts.presentInOrder}, missing: ${counts.missing}`;
+          compareSummary.textContent = `${badge} — CO lines: ${counts.total}, present: ${counts.present}, missing: ${counts.missing}`;
 
           const lines = details.map((d, i) => {
             const mark = d.found ? "✔️" : "❌";
             const where = d.found
               ? `(CP line ${(d.cpIndex ?? -1) + 1})`
               : "(not found)";
-            const orderTag =
-              d.orderTag === "ordered"
-                ? "↔️ order ok"
-                : d.orderTag === "out-of-order"
-                  ? "↯ out of order"
-                  : "";
-            return `${mark} [CO ${i + 1}] ${d.line} ${where} ${orderTag}`.trim();
+            return `${mark} [CO ${i + 1}] ${d.line} ${where}`.trim();
           });
 
-          if (complete && ordered) {
-            compareDetails.textContent = "";
-          } else {
-            compareDetails.textContent = lines.join("\n");
-          }
+          compareDetails.textContent = complete ? "" : lines.join("\n");
         } catch (error) {
           if (error.name === "AbortError") return;
           cpDiv.textContent = `Error: ${error.message}`;
@@ -424,19 +392,18 @@
       function buildAnchorsTable(anchors) {
         const rows = anchors
           .map((a, idx) => {
-            const safeText = (a.text || "")
-              .replace(/</g, "&lt;")
-              .replace(/>/g, "&gt;");
-            const safeUrl = (a.url || "")
-              .replace(/</g, "&lt;")
-              .replace(/>/g, "&gt;");
-            return `<tr><td>${idx + 1}</td><td>${safeText}</td><td class="anchors-url"><a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl}</a></td><td><span id="link-status-${idx}">…</span></td></tr>`;
+            const safeText = escapeHtml(a.text || "");
+            const safeUrl = escapeHtml(a.url || "");
+            const relBadge = a.isRelative === false
+              ? `<span style="color:#dc2626;font-weight:700;font-size:0.75rem">ABS</span>`
+              : `<span style="color:#16a34a;font-weight:700;font-size:0.75rem">REL</span>`;
+            return `<tr><td>${idx + 1}</td><td>${safeText}</td><td class="anchors-url"><a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl}</a></td><td style="text-align:center">${relBadge}</td><td><span id="link-status-${idx}">…</span></td></tr>`;
           })
           .join("");
         return `
                 <table class="anchors-table">
                     <thead>
-                <tr><th>#</th><th>Text</th><th>URL</th><th>Status</th></tr>
+                <tr><th>#</th><th>Text</th><th>URL</th><th>Tipo</th><th>Status</th></tr>
                     </thead>
                     <tbody>
                         ${rows}
@@ -533,6 +500,7 @@
         }
 
         anchorPanel.style.display = "";
+        document.getElementById("anchor-section-header").style.display = "";
         anchorDiv.textContent =
           "⏳ Extracting and validating internal anchor links…";
         const ac = createAbortController();
@@ -662,38 +630,33 @@
             const safeUrl = escapeHtml(a.url || "");
             const statusColor = a.statusOk ? "green" : "red";
             const statusText = a.status || 0;
-            return `<tr><td>${idx + 1}</td><td>${safeText}</td><td class="anchors-url"><a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl}</a></td><td><span style="color:${statusColor}">${statusText}</span></td></tr>`;
+            const relBadge = a.isRelative === false
+              ? `<span style="color:#dc2626;font-weight:700;font-size:0.75rem">ABS</span>`
+              : `<span style="color:#16a34a;font-weight:700;font-size:0.75rem">REL</span>`;
+            return `<tr><td>${idx + 1}</td><td>${safeText}</td><td class="anchors-url"><a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl}</a></td><td style="text-align:center">${relBadge}</td><td><span style="color:${statusColor}">${statusText}</span></td></tr>`;
           })
           .join("");
-        return `<table class="anchors-table"><thead><tr><th>#</th><th>Text</th><th>URL</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
+        return `<table class="anchors-table"><thead><tr><th>#</th><th>Text</th><th>URL</th><th>Tipo</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
       }
 
       // Helper compartido para renderizar resumen de comparación
       function renderCompareResult(data, summaryId, detailsId) {
         const complete = data.result && data.result.complete;
-        const ordered = data.result && data.result.ordered;
-        const badge = complete && ordered
-          ? "🟢 COMPLETE AND IN ORDER"
-          : complete && !ordered
-            ? "🟡 COMPLETE BUT OUT OF ORDER"
-            : "🔴 INCOMPLETE";
+        const badge = complete ? "🟢 COMPLETE" : "🔴 INCOMPLETE";
         const details = data.details || [];
         const counts = {
           total: data.co && data.co.lines ? data.co.lines.length : 0,
-          presentAnywhere: details.filter((d) => d.found).length,
-          presentInOrder: details.filter((d) => d.orderTag === "ordered").length,
+          present: details.filter((d) => d.found).length,
           missing: details.filter((d) => !d.found).length,
         };
         document.getElementById(summaryId).textContent =
-          `${badge} — CO lines: ${counts.total}, present: ${counts.presentAnywhere}, in order: ${counts.presentInOrder}, missing: ${counts.missing}`;
+          `${badge} — CO lines: ${counts.total}, present: ${counts.present}, missing: ${counts.missing}`;
         const lines = details.map((d, i) => {
           const mark = d.found ? "✔️" : "❌";
           const where = d.found ? `(CP line ${(d.cpIndex ?? -1) + 1})` : "(not found)";
-          const orderTag = d.orderTag === "ordered" ? "↔️ order ok"
-            : d.orderTag === "out-of-order" ? "↯ out of order" : "";
-          return `${mark} [CO ${i + 1}] ${d.line} ${where} ${orderTag}`.trim();
+          return `${mark} [CO ${i + 1}] ${d.line} ${where}`.trim();
         });
-        document.getElementById(detailsId).textContent = complete && ordered ? "" : lines.join("\n");
+        document.getElementById(detailsId).textContent = complete ? "" : lines.join("\n");
       }
 
       // --- RUN ALL: análisis completo en 2 navegadores en paralelo ---
@@ -831,6 +794,7 @@
 
         // Restaurar panel anchor
         document.getElementById("anchor-panel").style.display = "none";
+        document.getElementById("anchor-section-header").style.display = "none";
         document.getElementById("anchor-output").textContent =
           "Not evaluated yet…";
       }

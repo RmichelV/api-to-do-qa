@@ -120,9 +120,11 @@ export const scrapePageContent = async (url) => {
     const href = $(el).attr('href') || '';
     const text = $(el).text().trim();
     if (!text || !href || href === '#') return;
+    // Un link es relativo si NO tiene esquema (http/https/mailto/tel/etc.)
+    const isRelative = !/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(href) && !href.startsWith('mailto:') && !href.startsWith('tel:');
     // Construir URL absoluta
     const absUrl = href.startsWith('http') ? href : new URL(href, url).href;
-    anchors.push({ text, url: absUrl });
+    anchors.push({ text, url: absUrl, originalHref: href, isRelative });
   });
 
   return { rawText, h1Texts, srOnlyText, anchors };

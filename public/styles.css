@@ -360,9 +360,15 @@ textarea {
   color: #9ca3af;
 }
 
+.anchors-table th:nth-child(4),
+.anchors-table td:nth-child(4) {
+  width: 3.5rem;
+  text-align: center;
+}
+
 .anchors-table th:last-child,
 .anchors-table td:last-child {
-  width: 5.5rem;
+  width: 5rem;
   text-align: center;
 }
 
