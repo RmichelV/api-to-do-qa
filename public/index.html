@@ -667,7 +667,7 @@
             return `<tr><td>${idx + 1}</td><td>${safeText}</td><td class="anchors-url"><a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl}</a></td><td style="text-align:center">${relBadge}</td><td><span style="color:${statusColor}">${statusText}</span></td></tr>`;
           })
           .join("");
-        return `<table class="anchors-table"><thead><tr><th>#</th><th>Text</th><th>URL</th><th>Tipo</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
+        return `<table class="anchors-table"><thead><tr><th>#</th><th>Text</th><th>URL</th><th>Type</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
       }
 
       // Helper compartido para renderizar resumen de comparación
@@ -790,6 +790,7 @@
         // Limpiar inputs
         document.getElementById("url").value = "";
         document.getElementById("co").value = "";
+        document.getElementById("check-links").value = "";
 
         // Restaurar checkboxes a su estado original
         document.getElementById("show-content").checked = false;
