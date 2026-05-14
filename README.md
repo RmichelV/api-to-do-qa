@@ -1,118 +1,141 @@
-# QA API con Node.js y Playwright
+# QA API Tester
 
-Este proyecto es una API REST diseñada para realizar tareas de QA automatizado utilizando Playwright.
-El objetivo es analizar, limpiar y verificar contenido web.
-
-## Objetivos del Estudiante
-1. Aprender a estructurar un proyecto backend profesional con Node.js.
-2. Implementar arquitectura por capas (Controladores, Servicios, Rutas).
-3. Integrar Playwright para scraping y testing.
-
-## Comandos Útiles (Multiplataforma)
-
-Esta guía sirve para macOS, Linux y Windows (usando PowerShell o Git Bash).
-
-### Instalación y Ejecución
-
-1.  **Instalar dependencias:**
-    ```bash
-    npm install
-    ```
-2.  **Iniciar modo desarrollo (con auto-reload):**
-    ```bash
-    npm run dev
-    ```
-3.  **Iniciar modo producción:**
-    ```bash
-    npm start
-    ```
-
-### Historial de Comandos de Inicialización
-
-Estos comandos ya se ejecutaron, pero quedan como referencia:
-
-1.  **Crear e iniciar proyecto:**
-    ```bash
-    npm init -y
-    mkdir -p src/controllers src/routes src/services src/utils
-    ```
-    *(En Windows CMD usar `mkdir src\controllers`, etc.)*
-
-2.  **Instalar Express (Servidor Web):**
-    ```bash
-    npm install express
-    ```
-
-3.  **Instalar Playwright (Motor de Navegación):**
-    ```bash
-    npm install playwright
-    ```
-
-4.  **Instalar Navegadores de Playwright:**
-    ```bash
-    npx playwright install
-    ```
-    *Nota: Necesario la primera vez para descargar los binarios de Chromium.*
-
-## Bitácora de Clases y Explicaciones
-
-### Clase 1: Conceptos Básicos y Estructura
-**Profesor:** Establecimos la importancia de `package.json` y la estructura de carpetas.
-**Alumno:** Entendí que usar `import/export` (Module) es más moderno que `require` y requiere `"type": "module"` en package.json.
-
-### Clase 2: MVC y Rutas
-**Profesor:** Separamos responsabilidades.
-- **Controller:** Recibe `req` y devuelve `res`. No contiene lógica pesada.
-- **Router:** Define las URLs y llama al Controller adecuado.
-- **Service:** (Próximamente) Contendrá la lógica de negocio (scraping).
-
-**Alumno:**
-- Aprendí que `request` y `response` son estándares, no debo cambiarles el nombre.
-- Entendí que las rutas se anidan. `app.use('/api', route)` + `router.get('/status')` da como resultado `/api/status`.
-
-### Clase 5: Primera Conexión y Debugging
-- **Error Controlado:** El servidor respondió con un error 500 explicativo gracias al `try/catch`.
-- **Binarios:** Se ejecutó `npx playwright install` para descargar los navegadores (Chromium, Firefox, WebKit) que Playwright necesita para funcionar "sin cabeza" (headless).
-- **Éxito:** La API logró visitar una web real y devolver su título.
-
-### Clase 6: Manipulación del DOM y Validación de Tipos
-- **Manipulación:** Inyección de código en el navegador con `page.evaluate` para eliminar elementos (`remove()`).
-- **Validación Defensiva:** El controlador ahora verifica que `remove` sea un Array antes de pasarlo al servicio, evitando errores `TypeError: .forEach is not a function`.
-
-### Clase 7: Lógica de Comparación de Textos (Laboratorio)
-**Profesor:** Introducción de la lógica de "Normalización" para comparar textos sucios (HTML) contra textos esperados.
-- **Concepto Clave:** "Planchar" el texto (quitar espacios dobles, trim, lowerCase) antes de comparar.
-- **Metáfora:** La suma. Procesar una lista de verificaciones una por una (`.map`).
-- **Archivo de estudio:** `src/examples/laboratorio_texto.js`.
-
-### Reto Actual #1: El Juez de Texto ⚖️
-**Objetivo:** Integrar la lógica del laboratorio en la API real.
-
-**Tu Tarea:**
-1.  **Estudiar:** Ejecuta `node src/examples/laboratorio_texto.js` y entiende cómo transformamos la entrada sucia y la lista esperada en un reporte limpio.
-2.  **Implementar en `qaController.js`:**
-    *   Habilitar la recepción de `expectedTexts` (Array) en el body.
-3.  **Implementar en `scrapeService.js`:**
-    *   Importar lógica de normalización.
-    *   Recibir `expectedTexts`.
-    *   Cambiar el retorno: DE `content string` -> A `results array` (Objeto con título y detalles de qué se encontró y qué no).
+A web-based QA tool for analyzing page content, comparing text, reading links, and validating internal anchor links on DDC dealership pages.
 
 ---
-### Clase 8: Pasar datos al Navegador (`page.evaluate`)
-**Pregunta del Alumno:** *"¿Por qué usamos `selectors` dentro de `page.evaluate` si afuera se llama `finalSelectors`?"*
 
-**Explicación Práctica:**
-El código dentro de `page.evaluate(() => { ... })` **SE EJECUTA EN EL NAVEGADOR (Chrome)**, no en tu terminal.
-La variable `finalSelectors` existe en Node.js, pero "Browser Land" (el navegador) no la conoce.
+## Requirements
 
-**El Puente Mágico:**
-```javascript
-//                (1. Argumento en Node)  (2. Puente)         (3. Argumento en Navegador)
-await page.evaluate( (misDatosEnBrowser)      =>       { ... }, finalSelectors );
+- **Node.js** — version **20 LTS** or higher is recommended (the project uses native `fetch`, which requires Node 18+). Node 22 LTS is also supported.
+  - Download: https://nodejs.org/en/download
+
+---
+
+## Installation
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/RmichelV/api-to-do-qa.git
+cd api-to-do-qa
 ```
-1.  **Node.js** toma `finalSelectors`.
-2.  Playwright lo serializa (lo convierte en texto/JSON) y lo envía a través del puente (protocolo de depuración).
-3.  **Chrome** lo recibe y lo asigna al primer argumento de la función (`misDatosEnBrowser`).
-4.  El nombre del argumento dentro de la función (`selectors`, `x`, `lista`) **NO IMPORTA**, lo que importa es el orden.
+
+### 2. Install dependencies
+
+```bash
+npm install
+```
+
+### 3. Install Playwright's Chromium browser
+
+```bash
+npx playwright install chromium
+```
+
+If the command above fails (e.g. npx not available), use this alternative:
+
+```bash
+node node_modules/playwright/cli.js install chromium
+```
+
+> Chromium is only required for the **Anchor Reading** feature (internal `#id` link validation). All other features (Text Reading, Link Reading, Full Analysis) use plain `fetch` + `cheerio` and do not need a browser.
 
 ---
+
+## Running the server
+
+**Production mode:**
+
+```bash
+npm start
+```
+
+**Development mode** (auto-restarts on file changes):
+
+```bash
+npm run dev
+```
+
+The server starts on **http://localhost:4000** by default. Open that URL in your browser to access the tool.
+
+Port 4000 is used to avoid conflicts with other common local services (port 3000 is frequently taken by React dev servers, Next.js, etc.).
+
+**To change the port**, edit line 14 of `src/app.js`:
+
+```js
+// src/app.js — line 14
+const PORT = process.env.PORT || 4000;  // change 4000 to any available port
+```
+
+Examples:
+
+```js
+const PORT = process.env.PORT || 3000;  // use port 3000
+const PORT = process.env.PORT || 8080;  // use port 8080
+```
+
+After saving, restart the server and open the new URL in your browser (e.g. `http://localhost:3000`).
+
+---
+
+## Features
+
+### ⚡ Run All
+Runs everything in one click:
+- Checks the **H1** tag (visible vs sr-only)
+- Extracts and compares **desktop text** against your CO, line by line with word-level diff
+- Extracts and compares **mobile text** (iPhone viewport) against your CO
+- Reads all **links** in the page, checks their **HTTP status**, and flags each one as **REL** (relative) or **ABS** (absolute)
+- Verifies whether the **paths you listed** in the "Links to check" field are present in the extracted links
+
+---
+
+### 🖥️ Text Review — Desktop
+Fetches the page in desktop mode, normalizes the text, and compares it line by line against the CO you pasted. For each CO line that doesn't match exactly, it finds the closest line in the page and shows a **word-level diff** highlighting what was added or removed.
+
+### 📱 Text Review — Mobile
+Same as Desktop Text Review, but fetches the page using a mobile user agent (iPhone, 430×932 viewport). Useful for pages that serve different content depending on the device.
+
+### 🔗 Read Links + H1
+- Extracts all visible links inside `.ddc-wrapper` with their text, full URL, HTTP status code, and REL/ABS type
+- Evaluates the **H1** tag: checks if there is exactly one visible H1 and whether it matches the sr-only H1
+- If you filled in the **"Links to check"** field, it will report which of those paths were found in the extracted links and which were not
+
+### ⚓ Anchor Reading
+Validates internal anchor links (`href="#section-id"`): checks that the target element actually exists on the page and that it can be reached by scrolling.
+
+> **Why is this button separate?**
+> All other features work by simply fetching the page HTML — no browser needed. Anchor validation is different: it requires loading the page in a **real browser**, clicking the link, and confirming the page actually scrolls to the target. For this reason it uses Playwright (Chromium) and runs independently. Mixing it into Run All would significantly slow down every analysis even when anchor checking isn't needed.
+
+---
+
+## Usage
+
+1. Open **http://localhost:3000** in your browser.
+2. Paste the **Target URL** of the page you want to analyze.
+3. *(Optional)* Paste the **CO · Original Content** to compare against the page text.
+4. *(Optional)* Paste a list of **paths to check** (one per line, e.g. `/new-inventory/index.htm`) to verify they appear in the extracted links.
+5. Click the desired action button or **⚡ Run All**.
+
+---
+
+## Project structure
+
+```
+src/
+  app.js                         # Express entry point
+  controllers/                   # Route handlers
+  routes/                        # Express routers
+  services/
+    textReadingService.js        # Desktop text extraction (fetch + cheerio)
+    textReadingMobileService.js  # Mobile text extraction (fetch + cheerio)
+    linkReadingService.js        # Link and H1 extraction (fetch + cheerio)
+    anchorReadingService.js      # Anchor validation (Playwright)
+    fullAnalysisService.js       # Parallel desktop + mobile + links
+  utils/
+    scrapeUtils.js               # Shared fetch/cheerio scraping utilities
+    normalization.js             # Text normalization helpers
+public/
+  index.html                     # Frontend UI
+  styles.css                     # Styles
+```
