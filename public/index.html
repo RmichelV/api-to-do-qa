@@ -250,15 +250,9 @@
           };
           compareSummary.textContent = `${badge} — CO lines: ${counts.total}, present: ${counts.present}, missing: ${counts.missing}`;
 
-          const lines = details.map((d, i) => {
-            const mark = d.found ? "✔️" : "❌";
-            const where = d.found
-              ? `(CP line ${(d.cpIndex ?? -1) + 1})`
-              : "(not found)";
-            return `${mark} [CO ${i + 1}] ${d.line} ${where}`.trim();
-          });
+          const lines = renderDetailLines(details, data.cp && data.cp.lines ? data.cp.lines : []);
 
-          compareDetails.textContent = complete ? "" : lines.join("\n");
+          compareDetails.innerHTML = complete ? "" : lines;
         } catch (error) {
           if (error.name === "AbortError") return;
           cpDiv.textContent = `Error: ${error.message}`;
@@ -331,15 +325,9 @@
           };
           compareSummary.textContent = `${badge} — CO lines: ${counts.total}, present: ${counts.present}, missing: ${counts.missing}`;
 
-          const lines = details.map((d, i) => {
-            const mark = d.found ? "✔️" : "❌";
-            const where = d.found
-              ? `(CP line ${(d.cpIndex ?? -1) + 1})`
-              : "(not found)";
-            return `${mark} [CO ${i + 1}] ${d.line} ${where}`.trim();
-          });
+          const lines = renderDetailLines(details, data.cp && data.cp.lines ? data.cp.lines : []);
 
-          compareDetails.textContent = complete ? "" : lines.join("\n");
+          compareDetails.innerHTML = complete ? "" : lines;
         } catch (error) {
           if (error.name === "AbortError") return;
           cpDiv.textContent = `Error: ${error.message}`;
@@ -436,12 +424,72 @@
 
         container.innerHTML = `
           <div style="margin-top:0.6rem;border-top:1px solid #e5e7eb;padding-top:0.5rem">
-            <div style="font-size:0.8rem;font-weight:600;margin-bottom:0.3rem">🔎 Link Check — ${badge}</div>
+            <div style="font-size:0.8rem;font-weight:600;margin-bottom:0.3rem">🔎 Links on the page — ${badge}</div>
             <table class="anchors-table" style="font-size:0.78rem">
               <thead><tr><th>#</th><th>Path</th><th>✔/✘</th></tr></thead>
               <tbody>${rows}</tbody>
             </table>
           </div>`;
+      }
+
+      // --- WORD DIFF HELPERS (LCS a nivel de palabras) ---
+      function lcsWordOps(a, b) {
+        const m = a.length, n = b.length;
+        const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+        for (let i = 1; i <= m; i++)
+          for (let j = 1; j <= n; j++)
+            dp[i][j] = a[i-1] === b[j-1]
+              ? dp[i-1][j-1] + 1
+              : Math.max(dp[i-1][j], dp[i][j-1]);
+        const ops = [];
+        let i = m, j = n;
+        while (i > 0 || j > 0) {
+          if (i > 0 && j > 0 && a[i-1] === b[j-1]) {
+            ops.unshift({ t: 'eq', v: a[i-1] }); i--; j--;
+          } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+            ops.unshift({ t: 'ins', v: b[j-1] }); j--;
+          } else {
+            ops.unshift({ t: 'del', v: a[i-1] }); i--;
+          }
+        }
+        return ops;
+      }
+
+      function renderWordDiff(coLine, cpLine) {
+        const ops = lcsWordOps(coLine.split(/\s+/), cpLine.split(/\s+/));
+        const coHtml = ops
+          .filter((o) => o.t !== 'ins')
+          .map((o) => o.t === 'del' ? `<mark class="diff-del">${escapeHtml(o.v)}</mark>` : escapeHtml(o.v))
+          .join(' ');
+        const cpHtml = ops
+          .filter((o) => o.t !== 'del')
+          .map((o) => o.t === 'ins' ? `<mark class="diff-ins">${escapeHtml(o.v)}</mark>` : escapeHtml(o.v))
+          .join(' ');
+        return { coHtml, cpHtml };
+      }
+
+      function findClosestCpLine(coLine, cpLines) {
+        const coWords = new Set(coLine.toLowerCase().split(/\s+/));
+        let best = -1, bestScore = 0;
+        cpLines.forEach((cp, i) => {
+          const score = cp.toLowerCase().split(/\s+/).filter((w) => coWords.has(w)).length;
+          if (score > bestScore) { bestScore = score; best = i; }
+        });
+        return bestScore > 0 ? best : -1;
+      }
+
+      function renderDetailLines(details, cpLines) {
+        return details.map((d, i) => {
+          if (d.found) {
+            return `<div class="diff-line diff-line--ok">✔️ <span class="diff-line__num">[CO ${i + 1}]</span> <span class="diff-line__text">${escapeHtml(d.line)}</span> <span class="diff-line__where">(CP line ${(d.cpIndex ?? -1) + 1})</span></div>`;
+          }
+          const closestIdx = findClosestCpLine(d.line, cpLines);
+          if (closestIdx === -1) {
+            return `<div class="diff-line diff-line--miss">❌ <span class="diff-line__num">[CO ${i + 1}]</span> <mark class="diff-del">${escapeHtml(d.line)}</mark> <span class="diff-line__where">(not found)</span></div>`;
+          }
+          const { coHtml, cpHtml } = renderWordDiff(d.line, cpLines[closestIdx]);
+          return `<div class="diff-line diff-line--miss">❌ <span class="diff-line__num">[CO ${i + 1}]</span> <span class="diff-line__where">(not found — closest: CP line ${closestIdx + 1})</span><div class="diff-line__row"><span class="diff-line__label">CO</span><span class="diff-line__co">${coHtml}</span></div><div class="diff-line__row"><span class="diff-line__label">CP</span><span class="diff-line__cp">${cpHtml}</span></div></div>`;
+        }).join('');
       }
 
       function buildAnchorsTable(anchors) {
@@ -682,12 +730,8 @@
         };
         document.getElementById(summaryId).textContent =
           `${badge} — CO lines: ${counts.total}, present: ${counts.present}, missing: ${counts.missing}`;
-        const lines = details.map((d, i) => {
-          const mark = d.found ? "✔️" : "❌";
-          const where = d.found ? `(CP line ${(d.cpIndex ?? -1) + 1})` : "(not found)";
-          return `${mark} [CO ${i + 1}] ${d.line} ${where}`.trim();
-        });
-        document.getElementById(detailsId).textContent = complete ? "" : lines.join("\n");
+        const lines = renderDetailLines(details, data.cp && data.cp.lines ? data.cp.lines : []);
+        document.getElementById(detailsId).innerHTML = complete ? "" : lines;
       }
 
       // --- RUN ALL: análisis completo en 2 navegadores en paralelo ---

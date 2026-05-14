@@ -318,6 +318,19 @@ textarea {
 .status-fail    { color: #dc2626; font-weight: 700; }
 .status-partial { color: #d97706; font-weight: 700; }
 
+/* ── Word diff ── */
+mark.diff-del { background: #fecaca; color: #991b1b; border-radius: 2px; padding: 0 2px; font-style: normal; }
+mark.diff-ins { background: #bbf7d0; color: #166534; border-radius: 2px; padding: 0 2px; font-style: normal; }
+.diff-line { margin-bottom: 0.3rem; font-size: 0.8rem; line-height: 1.5; white-space: normal; }
+.diff-line--ok { opacity: 0.5; }
+.diff-line--ok .diff-line__text { color: #374151; }
+.diff-line__num   { color: #9ca3af; font-size: 0.72rem; }
+.diff-line__where { color: #9ca3af; font-size: 0.72rem; }
+.diff-line__row   { display: flex; gap: 0.4rem; align-items: baseline; padding-left: 1.2rem; margin-top: 0.1rem; }
+.diff-line__label { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; min-width: 1.6rem; color: #9ca3af; flex-shrink: 0; }
+.diff-line__co    { color: #7f1d1d; }
+.diff-line__cp    { color: #14532d; }
+
 /* ── H1 panel ── */
 .h1-panel .h1-summary {
   font-weight: 600;
