@@ -250,15 +250,12 @@
           };
           compareSummary.textContent = `${badge} — CO lines: ${counts.total}, present: ${counts.present}, missing: ${counts.missing}`;
 
-          const lines = details.map((d, i) => {
-            const mark = d.found ? "✔️" : "❌";
-            const where = d.found
-              ? `(CP line ${(d.cpIndex ?? -1) + 1})`
-              : "(not found)";
-            return `${mark} [CO ${i + 1}] ${d.line} ${where}`.trim();
-          });
+          const lines = renderDetailLines(
+            details,
+            data.cp && data.cp.lines ? data.cp.lines : [],
+          );
 
-          compareDetails.textContent = complete ? "" : lines.join("\n");
+          compareDetails.innerHTML = complete ? "" : lines;
         } catch (error) {
           if (error.name === "AbortError") return;
           cpDiv.textContent = `Error: ${error.message}`;
@@ -331,15 +328,12 @@
           };
           compareSummary.textContent = `${badge} — CO lines: ${counts.total}, present: ${counts.present}, missing: ${counts.missing}`;
 
-          const lines = details.map((d, i) => {
-            const mark = d.found ? "✔️" : "❌";
-            const where = d.found
-              ? `(CP line ${(d.cpIndex ?? -1) + 1})`
-              : "(not found)";
-            return `${mark} [CO ${i + 1}] ${d.line} ${where}`.trim();
-          });
+          const lines = renderDetailLines(
+            details,
+            data.cp && data.cp.lines ? data.cp.lines : [],
+          );
 
-          compareDetails.textContent = complete ? "" : lines.join("\n");
+          compareDetails.innerHTML = complete ? "" : lines;
         } catch (error) {
           if (error.name === "AbortError") return;
           cpDiv.textContent = `Error: ${error.message}`;
@@ -379,14 +373,23 @@
           const anchors = data.anchors || [];
           if (!anchors.length) {
             anchorsDiv.textContent = "No visible links were found in .ddc-wrapper";
+            await renderLinkCheck([], url);
             return;
           }
           anchorsDiv.innerHTML = buildAnchorsTable(anchors);
-          renderLinkCheck(anchors);
           // Pedir estados HTTP (sin navegador)
           try {
-            await updateLinkStatuses(anchors.map((a) => a.url));
+            const statuses = await updateLinkStatuses(anchors.map((a) => a.url));
+            const withStatus = anchors.map((a, idx) => ({
+              ...a,
+              status: statuses[idx] ? statuses[idx].status : 0,
+              statusOk: statuses[idx] ? statuses[idx].ok : false,
+            }));
+            await renderLinkCheck(withStatus, url);
           } catch {}
+          if (!document.getElementById("link-check-output").innerHTML) {
+            await renderLinkCheck(anchors, url);
+          }
         } catch (error) {
           if (error.name === "AbortError") return;
           anchorsDiv.textContent = `Error extracting links: ${error.message}`;
@@ -395,53 +398,199 @@
         }
       }
 
-      function renderLinkCheck(anchors) {
+      async function renderLinkCheck(anchors, pageUrl) {
         const raw = (document.getElementById("check-links").value || "").trim();
         const container = document.getElementById("link-check-output");
-        if (!raw || !container) return;
+        if (!container) return;
+        if (!raw) { container.innerHTML = ""; return; }
         const paths = raw.split("\n").map((l) => l.trim()).filter(Boolean);
         if (!paths.length) { container.innerHTML = ""; return; }
 
-        // Build a set of normalized path+query from extracted anchors
-        const extractedPaths = anchors.map((a) => {
-          try {
-            const u = new URL(a.url);
-            return (u.pathname.toLowerCase().replace(/\/+$/, "") + u.search.toLowerCase());
-          } catch { return ""; }
-        });
+        function resolveRequestedUrl(input, basePageUrl) {
+          const rawValue = String(input || "").trim();
+          if (!rawValue) return "";
 
-        function normalizePath(p) {
+          if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(rawValue)) {
+            return rawValue;
+          }
+
+          if (/^\/\//.test(rawValue)) {
+            return `https:${rawValue}`;
+          }
+
+          if (/^[^\s/]+\.[^\s/]+(\/.*)?$/.test(rawValue)) {
+            return `https://${rawValue}`;
+          }
+
           try {
-            const u = new URL(p, "https://placeholder.x");
-            return u.pathname.toLowerCase().replace(/\/+$/, "") + u.search.toLowerCase();
-          } catch { return p.toLowerCase().replace(/\/+$/, ""); }
+            const baseOrigin = new URL(basePageUrl).origin;
+            const normalizedPath = rawValue.startsWith("/") ? rawValue : `/${rawValue}`;
+            return new URL(normalizedPath, baseOrigin).href;
+          } catch {
+            return rawValue;
+          }
         }
 
+        function getRelativePath(input) {
+          try {
+            const u = new URL(String(input || ""), "https://placeholder.x");
+            return `${u.pathname}${u.search}`.toLowerCase().replace(/\/+$/, "");
+          } catch {
+            return String(input || "").trim().toLowerCase().replace(/\/+$/, "");
+          }
+        }
+
+        function removeQueryAndHash(path) {
+          return String(path || "").split("?")[0].split("#")[0];
+        }
+
+        function canonicalPathNoQuery(path) {
+          let p = String(path || "").trim().toLowerCase();
+          if (!p) return "/";
+          if (!p.startsWith("/")) p = `/${p}`;
+          p = p.replace(/\/+/g, "/");
+          if (p.length > 1) p = p.replace(/\/+$/, "");
+
+          if (p === "/index.htm" || p === "/index.html") return "/";
+          if (p.endsWith("/index.htm")) {
+            const base = p.slice(0, -"/index.htm".length);
+            return base || "/";
+          }
+          if (p.endsWith("/index.html")) {
+            const base = p.slice(0, -"/index.html".length);
+            return base || "/";
+          }
+
+          return p;
+        }
+
+        function buildEntry(a) {
+          const relFromAbs = getRelativePath(a.url || "");
+          const relFromOrig = getRelativePath(a.originalHref || "");
+          const relBest = relFromOrig || relFromAbs;
+          return {
+            anchor: a,
+            relFull: relBest,
+            relNoQuery: removeQueryAndHash(relBest),
+            canonicalNoQuery: canonicalPathNoQuery(removeQueryAndHash(relBest)),
+          };
+        }
+
+        function findRelativeMatch(requested, entries) {
+          const reqRel = getRelativePath(requested);
+          const reqNoQuery = canonicalPathNoQuery(removeQueryAndHash(reqRel));
+          return entries.find((e) => {
+            if (!reqNoQuery) return false;
+            // Exact canonical comparison (prevents '/' from matching every route)
+            return e.canonicalNoQuery === reqNoQuery;
+          }) || null;
+        }
+
+        const entries = anchors.map(buildEntry);
+
+        const requestedUrls = paths.map((p) => resolveRequestedUrl(p, pageUrl));
+        let requestedStatuses = [];
+        try {
+          const resp = await fetch("/api/link-reading/statuses", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ urls: requestedUrls, timeoutMs: 8000, concurrency: 6 }),
+          });
+          const data = await resp.json();
+          if (resp.ok) {
+            requestedStatuses = data.statuses || [];
+          }
+        } catch {}
+
         const rows = paths.map((p, i) => {
-          const needle = normalizePath(p);
-          const found = extractedPaths.some((ep) => ep === needle);
+          const match = findRelativeMatch(p, entries);
+          const found = !!match;
+          const reqStatus = requestedStatuses[i] || {};
+          const status = reqStatus.status || 0;
+          const statusOk = !!reqStatus.ok;
           const badge = found
-            ? `<span style="color:#16a34a;font-weight:700;font-size:0.72rem">✔</span>`
-            : `<span style="color:#dc2626;font-weight:700;font-size:0.72rem">✘</span>`;
-          return `<tr><td style="font-size:0.72rem;color:#9ca3af">${i + 1}</td><td style="font-family:monospace;font-size:0.78rem">${escapeHtml(p)}</td><td style="text-align:center">${badge}</td></tr>`;
+            ? `<span style="color:#16a34a;font-weight:700;font-size:0.72rem">IN PAGE</span>`
+            : `<span style="color:#dc2626;font-weight:700;font-size:0.72rem">NOT FOUND</span>`;
+          const statusHtml = status
+            ? `<span style="color:${statusOk ? "#16a34a" : "#dc2626"};font-weight:700">${escapeHtml(String(status || "—"))}</span>`
+            : `<span style="color:#9ca3af">—</span>`;
+          const searchTerm = found ? (match.canonicalNoQuery || p) : p;
+
+          return `<tr>
+            <td style="font-size:0.72rem;color:#9ca3af">${i + 1}</td>
+            <td style="font-family:monospace;font-size:0.78rem">${escapeHtml(p)}</td>
+            <td style="text-align:center">${badge}</td>
+            <td style="text-align:center">${statusHtml}</td>
+            <td style="text-align:center">
+              <button class="link-check-btn" onclick="focusLinkInLinks(decodeURIComponent('${encodeURIComponent(searchTerm)}'))">Find</button>
+            </td>
+          </tr>`;
         }).join("");
 
-        const found = paths.filter((p) => {
-          const needle = normalizePath(p);
-          return extractedPaths.some((ep) => ep === needle);
-        }).length;
+        const found = paths.filter((p) => !!findRelativeMatch(p, entries)).length;
         const badge = found === paths.length
-          ? `<span style="color:#16a34a;font-weight:700">${found}/${paths.length} ✔</span>`
+          ? `<span style="color:#16a34a;font-weight:700">${found}/${paths.length} found</span>`
           : `<span style="color:#dc2626;font-weight:700">${found}/${paths.length}</span>`;
 
         container.innerHTML = `
           <div style="margin-top:0.6rem;border-top:1px solid #e5e7eb;padding-top:0.5rem">
-            <div style="font-size:0.8rem;font-weight:600;margin-bottom:0.3rem">🔎 Link Check — ${badge}</div>
+            <div style="font-size:0.8rem;font-weight:600;margin-bottom:0.3rem">🔎 Links Present in Page — ${badge}</div>
             <table class="anchors-table" style="font-size:0.78rem">
-              <thead><tr><th>#</th><th>Path</th><th>✔/✘</th></tr></thead>
+              <thead><tr><th>#</th><th>Requested Link</th><th>Presence</th><th>HTTP</th><th>Check</th></tr></thead>
               <tbody>${rows}</tbody>
             </table>
           </div>`;
+      }
+
+      function focusLinkInLinks(searchTerm) {
+        const rows = Array.from(document.querySelectorAll("#anchors-output .anchors-table tbody tr"));
+        if (!rows.length) return;
+
+        rows.forEach((row) => row.classList.remove("link-find-hit"));
+
+        function getRelativePath(input) {
+          try {
+            const u = new URL(String(input || ""), "https://placeholder.x");
+            return `${u.pathname}${u.search}`.toLowerCase();
+          } catch {
+            return String(input || "").toLowerCase();
+          }
+        }
+
+        function canonicalPathNoQuery(path) {
+          let p = String(path || "").trim().toLowerCase();
+          if (!p) return "/";
+          if (!p.startsWith("/")) p = `/${p}`;
+          p = p.replace(/\/+/g, "/");
+          if (p.length > 1) p = p.replace(/\/+$/, "");
+
+          if (p === "/index.htm" || p === "/index.html") return "/";
+          if (p.endsWith("/index.htm")) {
+            const base = p.slice(0, -"/index.htm".length);
+            return base || "/";
+          }
+          if (p.endsWith("/index.html")) {
+            const base = p.slice(0, -"/index.html".length);
+            return base || "/";
+          }
+
+          return p;
+        }
+
+        const needle = canonicalPathNoQuery(getRelativePath(searchTerm).split("?")[0].split("#")[0]);
+        if (!needle) return;
+
+        const foundRow = rows.find((row) => {
+          const linkEl = row.querySelector(".anchors-url a");
+          const href = linkEl ? linkEl.getAttribute("href") || linkEl.textContent || "" : row.textContent || "";
+          const rel = getRelativePath(href);
+          const relNoQuery = canonicalPathNoQuery(rel.split("?")[0].split("#")[0]);
+          return relNoQuery === needle;
+        });
+
+        if (!foundRow) return;
+        foundRow.classList.add("link-find-hit");
+        foundRow.scrollIntoView({ behavior: "smooth", block: "center" });
       }
 
       function buildAnchorsTable(anchors) {
@@ -483,6 +632,7 @@
             el.style.color = s.ok ? "green" : "red";
           }
         });
+        return statuses;
       }
 
       async function updateH1Check(url) {
@@ -653,6 +803,107 @@
         return String(str).trim().replace(/\s+/g, " ").toLowerCase();
       }
 
+      // --- Word diff with similarity threshold ---
+      const MIN_SIMILARITY_FOR_PARTIAL = 0.4;
+
+      function splitWords(str) {
+        return String(str || "").trim().split(/\s+/).filter(Boolean);
+      }
+
+      function lcsWordOps(a, b) {
+        const m = a.length;
+        const n = b.length;
+        const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+
+        for (let i = 1; i <= m; i++) {
+          for (let j = 1; j <= n; j++) {
+            if (a[i - 1] === b[j - 1]) {
+              dp[i][j] = dp[i - 1][j - 1] + 1;
+            } else {
+              dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+            }
+          }
+        }
+
+        const ops = [];
+        let i = m;
+        let j = n;
+        while (i > 0 || j > 0) {
+          if (i > 0 && j > 0 && a[i - 1] === b[j - 1]) {
+            ops.unshift({ t: "eq", v: a[i - 1] });
+            i--;
+            j--;
+          } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+            ops.unshift({ t: "ins", v: b[j - 1] });
+            j--;
+          } else {
+            ops.unshift({ t: "del", v: a[i - 1] });
+            i--;
+          }
+        }
+
+        return { ops, common: dp[m][n] };
+      }
+
+      function renderWordDiff(coLine, cpLine) {
+        const coWords = splitWords(coLine);
+        const cpWords = splitWords(cpLine);
+        const { ops, common } = lcsWordOps(coWords, cpWords);
+
+        const coHtml = ops
+          .filter((o) => o.t !== "ins")
+          .map((o) => (o.t === "del" ? `<mark class="diff-del">${escapeHtml(o.v)}</mark>` : escapeHtml(o.v)))
+          .join(" ");
+
+        const cpHtml = ops
+          .filter((o) => o.t !== "del")
+          .map((o) => (o.t === "ins" ? `<mark class="diff-ins">${escapeHtml(o.v)}</mark>` : escapeHtml(o.v)))
+          .join(" ");
+
+        const similarity = Math.max(coWords.length, cpWords.length) > 0
+          ? common / Math.max(coWords.length, cpWords.length)
+          : 0;
+
+        return { coHtml, cpHtml, similarity };
+      }
+
+      function findClosestCpLine(coLine, cpLines) {
+        let bestIdx = -1;
+        let bestSimilarity = 0;
+
+        cpLines.forEach((cpLine, idx) => {
+          const { similarity } = renderWordDiff(coLine, cpLine);
+          if (similarity > bestSimilarity) {
+            bestSimilarity = similarity;
+            bestIdx = idx;
+          }
+        });
+
+        return { index: bestIdx, similarity: bestSimilarity };
+      }
+
+      function renderDetailLines(details, cpLines) {
+        return details
+          .map((d, i) => {
+            if (d.found) {
+              return `<div class="diff-line diff-line--ok">✔️ [CO ${i + 1}] ${escapeHtml(d.line)} <span class="diff-meta">(CP line ${(d.cpIndex ?? -1) + 1})</span></div>`;
+            }
+
+            const closest = findClosestCpLine(d.line, cpLines || []);
+
+            if (closest.index === -1 || closest.similarity < MIN_SIMILARITY_FOR_PARTIAL) {
+              return `<div class="diff-line diff-line--missing">❌ [CO ${i + 1}] <span class="diff-badge diff-badge--missing">MISSING PARAGRAPH</span> <span class="diff-meta">(not found)</span><div class="diff-row diff-row--co"><span class="diff-label">CO</span><span class="diff-text"><mark class="diff-del">${escapeHtml(d.line)}</mark></span></div></div>`;
+            }
+
+            const cpLine = cpLines[closest.index] || "";
+            const { coHtml, cpHtml, similarity } = renderWordDiff(d.line, cpLine);
+            const simPct = Math.round(similarity * 100);
+
+            return `<div class="diff-line diff-line--partial">❌ [CO ${i + 1}] <span class="diff-badge diff-badge--partial">PARTIAL PARAGRAPH</span> <span class="diff-meta">(closest CP line ${closest.index + 1}, ~${simPct}% similar)</span><div class="diff-row diff-row--co"><span class="diff-label">CO</span><span class="diff-text">${coHtml}</span></div><div class="diff-row diff-row--cp"><span class="diff-label">CP</span><span class="diff-text">${cpHtml}</span></div></div>`;
+          })
+          .join("");
+      }
+
       // Tabla de links con status ya incluido (para Run All)
       function buildAnchorsTableWithStatus(anchors) {
         const rows = anchors
@@ -682,12 +933,11 @@
         };
         document.getElementById(summaryId).textContent =
           `${badge} — CO lines: ${counts.total}, present: ${counts.present}, missing: ${counts.missing}`;
-        const lines = details.map((d, i) => {
-          const mark = d.found ? "✔️" : "❌";
-          const where = d.found ? `(CP line ${(d.cpIndex ?? -1) + 1})` : "(not found)";
-          return `${mark} [CO ${i + 1}] ${d.line} ${where}`.trim();
-        });
-        document.getElementById(detailsId).textContent = complete ? "" : lines.join("\n");
+        const lines = renderDetailLines(
+          details,
+          data.cp && data.cp.lines ? data.cp.lines : [],
+        );
+        document.getElementById(detailsId).innerHTML = complete ? "" : lines;
       }
 
       // --- RUN ALL: análisis completo en 2 navegadores en paralelo ---
@@ -762,9 +1012,10 @@
           const anchors = desktop.anchors || [];
           if (!anchors.length) {
             document.getElementById("anchors-output").textContent = "No visible links were found in .ddc-wrapper";
+            await renderLinkCheck([], url);
           } else {
             document.getElementById("anchors-output").innerHTML = buildAnchorsTableWithStatus(anchors);
-            renderLinkCheck(anchors);
+            await renderLinkCheck(anchors, url);
           }
         } catch (error) {
           if (error.name === "AbortError") return;
