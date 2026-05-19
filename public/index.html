@@ -8,300 +8,304 @@
   </head>
   <body>
 
-          // --- WORD DIFF HELPERS (LCS a nivel de palabras) ---
-          function lcsWordOps(a, b) {
-            const m = a.length, n = b.length;
-            const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
-            for (let i = 1; i <= m; i++)
-              for (let j = 1; j <= n; j++)
-                dp[i][j] = a[i-1] === b[j-1]
-                  ? dp[i-1][j-1] + 1
-                  : Math.max(dp[i-1][j], dp[i][j-1]);
-            const ops = [];
-            let i = m, j = n;
-            while (i > 0 || j > 0) {
-              if (i > 0 && j > 0 && a[i-1] === b[j-1]) {
-                ops.unshift({ t: 'eq', v: a[i-1] }); i--; j--;
-              } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
-                ops.unshift({ t: 'ins', v: b[j-1] }); j--;
-              } else {
-                ops.unshift({ t: 'del', v: a[i-1] }); i--;
-              }
-            const anchors = data.anchors || [];
-            if (!anchors.length) {
-              anchorsDiv.textContent = "No visible links were found in .ddc-wrapper";
-              await renderLinkCheck([], url);
-              return;
-            }
+    <header class="topbar">
+      <div class="topbar__inner">
+        <div class="topbar__brand">
+          <span aria-hidden="true">🤖</span>
+          <span class="topbar__title">QA API Tester</span>
+        </div>
+        <nav class="topbar__nav">
+          <button class="ctrl-btn ctrl-btn--stop"  onclick="stopAllProcesses()">⏹ Stop</button>
+          <button class="ctrl-btn ctrl-btn--reset" onclick="resetAll()">↺ Reset</button>
+          <button class="ctrl-btn ctrl-btn--pdf"   onclick="downloadPDF()">↓ PDF</button>
+        </nav>
+      </div>
+    </header>
 
-            anchorsDiv.innerHTML = buildAnchorsTable(anchors);
+    <main class="app-main">
 
-            try {
-              const statuses = await updateLinkStatuses(anchors.map((a) => a.url));
-              const withStatus = anchors.map((a, idx) => ({
-                ...a,
-                status: statuses[idx] ? statuses[idx].status : 0,
-                statusOk: statuses[idx] ? statuses[idx].ok : false,
-              }));
-              await renderLinkCheck(withStatus, url);
-            } catch {
-              await renderLinkCheck(anchors, url);
-            }
+      <section class="form-card">
+        <div class="input-group">
+          <label for="url">Target URL</label>
+          <input type="text" id="url" placeholder="https://example.com" autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="input-group">
+          <label for="co">CO · Original Content</label>
+          <textarea id="co" placeholder="Paste the original content here…"></textarea>
+        </div>
+        <div class="input-group">
+          <label for="check-links">Links to check <small style="font-weight:400;color:#6b7280">(one path per line, e.g. /new-inventory/index.htm)</small></label>
+          <textarea id="check-links" placeholder="/new-inventory/index.htm&#10;/financing/center.htm&#10;/used-inventory/index.htm" style="min-height:5rem"></textarea>
+        </div>
+        <div class="form-footer">
+          <label class="toggle-label">
+            <input type="checkbox" id="show-content" />
+            <span>Show extracted content (CP &amp; CO)</span>
+          </label>
+        </div>
+      </section>
+
+      <section class="actions-section">
+        <button class="btn-run-all" onclick="runFullAnalysis()">⚡ Run All</button>
+        <div class="btn-grid">
+          <button class="btn-action btn-action--desktop" onclick="runTextReading()">
+            <span class="btn-action__icon">🖥️</span>
+            <span class="btn-action__label">Text Review</span>
+            <span class="btn-action__sub">Desktop</span>
+          </button>
+          <button class="btn-action btn-action--mobile" onclick="runTextReadingMobile()">
+            <span class="btn-action__icon">📱</span>
+            <span class="btn-action__label">Text Review</span>
+            <span class="btn-action__sub">Mobile</span>
+          </button>
+          <button class="btn-action btn-action--links" onclick="runLinkReading()">
+            <span class="btn-action__icon">🔗</span>
+            <span class="btn-action__label">Read Links</span>
+            <span class="btn-action__sub">+ H1</span>
+          </button>
+          <button class="btn-action btn-action--anchors" onclick="runAnchorReading()">
+            <span class="btn-action__icon">⚓</span>
+            <span class="btn-action__label">Anchors</span>
+            <span class="btn-action__sub">Internal</span>
+          </button>
+        </div>
+      </section>
+
+      <div id="outputs">
+
+        <div class="section-header section-header--h1">🏷️ H1</div>
+
+        <div class="panel panel--full h1-panel panel--h1">
+          <h3>H1 Review</h3>
+          <div id="h1-summary" class="h1-summary">Not evaluated yet…</div>
+          <div id="h1-details" class="h1-details"></div>
+        </div>
+
+        <div class="section-header section-header--desktop">🖥️ Desktop Analysis</div>
+
+        <div class="panel panel--desktop" id="cp-panel">
+          <h3>CP · Page Content <small>normalized</small></h3>
+          <div id="cp-output" class="text-output">Waiting for analysis…</div>
+        </div>
+        <div class="panel panel--desktop" id="co-panel">
+          <h3>CO · Original Content <small>normalized</small></h3>
+          <div id="co-output" class="text-output">Waiting for analysis…</div>
+        </div>
+        <div class="panel panel--full panel--desktop">
+          <h3>Line-by-line Comparison</h3>
+          <div id="compare-summary" class="text-output">Pending…</div>
+          <div id="compare-details" class="text-output"></div>
+        </div>
+
+        <div class="section-header section-header--mobile" id="mobile-section-header" style="display:none">📱 Mobile Analysis</div>
+        <div class="panel panel--mobile" id="cp-mobile-panel" style="display:none">
+          <h3>CP · Mobile <small>normalized</small></h3>
+          <div id="cp-mobile-output" class="text-output">Waiting for mobile analysis…</div>
+        </div>
+        <div class="panel panel--mobile" id="co-mobile-panel" style="display:none">
+          <h3>CO · Mobile <small>normalized</small></h3>
+          <div id="co-mobile-output" class="text-output">Waiting for mobile analysis…</div>
+        </div>
+        <div class="panel panel--full panel--mobile" id="compare-mobile-panel" style="display:none">
+          <h3>Mobile Comparison</h3>
+          <div id="compare-mobile-summary" class="text-output">Pending…</div>
+          <div id="compare-mobile-details" class="text-output"></div>
+        </div>
+
+        <div class="section-header section-header--links">🔗 Links</div>
+
+        <div class="panel panel--full anchors-panel panel--links">
+          <h3>Links</h3>
+          <div id="anchors-output">Not extracted yet…</div>
+          <div id="link-check-output"></div>
+        </div>
+
+        <div class="section-header section-header--anchors" id="anchor-section-header" style="display:none">⚓ Anchors</div>
+
+        <div class="panel panel--full anchors-panel panel--anchors" id="anchor-panel" style="display:none">
+          <div id="anchor-output">Not evaluated yet…</div>
+        </div>
+
+      </div>
+
+    </main>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script>
+      // --- ABORT CONTROLLERS para cancelar fetch requests ---
+      let activeAbortControllers = [];
+
+      function createAbortController() {
+        const ac = new AbortController();
+        activeAbortControllers.push(ac);
+        return ac;
+      }
+
+      function removeAbortController(ac) {
+        activeAbortControllers = activeAbortControllers.filter((c) => c !== ac);
+      }
+
+      async function stopAllProcesses() {
+        // 1. Cancelar todos los fetch activos en el frontend
+        activeAbortControllers.forEach((ac) => {
+          try {
+            ac.abort();
+          } catch {}
+        });
+        activeAbortControllers = [];
+
+        // 2. Pedir al backend que cierre todos los browsers
+        try {
+          await fetch("/api/cancel", { method: "POST" });
+        } catch {}
+
+        // 3. Actualizar paneles con mensaje de cancelación
+        const cancelMsg = "⏹️ Process stopped by user";
+        [
+          "cp-output",
+          "co-output",
+          "compare-summary",
+          "cp-mobile-output",
+          "co-mobile-output",
+          "compare-mobile-summary",
+        ].forEach((id) => {
+          const el = document.getElementById(id);
+          if (
+            el &&
+            (el.textContent.startsWith("⏳") ||
+              el.textContent.startsWith("Waiting"))
+          ) {
+            el.textContent = cancelMsg;
+          }
+        });
+        ["compare-details", "compare-mobile-details"].forEach((id) => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = "";
+        });
+        const anchorsEl = document.getElementById("anchors-output");
+        if (anchorsEl && anchorsEl.textContent.startsWith("⏳"))
+          anchorsEl.textContent = cancelMsg;
+        const h1El = document.getElementById("h1-summary");
+        if (h1El && h1El.textContent.startsWith("⏳"))
+          h1El.textContent = cancelMsg;
+        const anchorEl = document.getElementById("anchor-output");
+        if (anchorEl && anchorEl.textContent.startsWith("⏳"))
+          anchorEl.textContent = cancelMsg;
+      }
+
+      // --- TEXT READING ---
+
+      async function runTextReading() {
+        const url = document.getElementById("url").value;
+        const coInput = document.getElementById("co").value;
+        const cpDiv = document.getElementById("cp-output");
+        const coDiv = document.getElementById("co-output");
+        const compareSummary = document.getElementById("compare-summary");
+        const compareDetails = document.getElementById("compare-details");
+        const cpPanel = document.getElementById("cp-panel");
+        const coPanel = document.getElementById("co-panel");
+
+        if (!url) {
+          alert("Please enter a URL");
+          return;
+        }
+
+        // Controlar visibilidad de paneles según checkbox
+        const showContent = document.getElementById("show-content").checked;
+        cpPanel.style.display = showContent ? "" : "none";
+        coPanel.style.display = showContent ? "" : "none";
+
+        cpDiv.textContent =
+          "⏳ Opening page, cleaning, and extracting text...";
+        coDiv.textContent = "⏳ Normalizing CO...";
+        compareSummary.textContent = "⏳ Comparing lines...";
+        compareDetails.textContent = "";
+        const ac = createAbortController();
+        try {
+          const resp = await fetch("/api/text-reading/compare", {
+            method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-        async function renderLinkCheck(anchors, pageUrl) {
-          const raw = (document.getElementById("check-links").value || "").trim();
-          const container = document.getElementById("link-check-output");
-          if (!container) return;
-          if (!raw) { container.innerHTML = ""; return; }
-          const paths = raw.split("\n").map((l) => l.trim()).filter(Boolean);
-          if (!paths.length) { container.innerHTML = ""; return; }
-
-          function resolveRequestedUrl(input, basePageUrl) {
-            const rawValue = String(input || "").trim();
-            if (!rawValue) return "";
-
-            if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(rawValue)) {
-              return rawValue;
-            }
-
-            if (/^\/\//.test(rawValue)) {
-              return `https:${rawValue}`;
-            }
-
-            if (/^[^\s/]+\.[^\s/]+(\/.*)?$/.test(rawValue)) {
-              return `https://${rawValue}`;
-            }
-
-            try {
-              const baseOrigin = new URL(basePageUrl).origin;
-              const normalizedPath = rawValue.startsWith("/") ? rawValue : `/${rawValue}`;
-              return new URL(normalizedPath, baseOrigin).href;
-            } catch {
-              return rawValue;
-            }
-          }
-
-          function getRelativePath(input) {
-            try {
-              const u = new URL(String(input || ""), "https://placeholder.x");
-              return `${u.pathname}${u.search}`.toLowerCase().replace(/\/+$/, "");
-            } catch {
-              return String(input || "").trim().toLowerCase().replace(/\/+$/, "");
-            }
-          }
-
-          function removeQueryAndHash(path) {
-            return String(path || "").split("?")[0].split("#")[0];
-          }
-
-          function canonicalPathNoQuery(path) {
-            let p = String(path || "").trim().toLowerCase();
-            if (!p) return "/";
-            if (!p.startsWith("/")) p = `/${p}`;
-            p = p.replace(/\/+/g, "/");
-            if (p.length > 1) p = p.replace(/\/+$/, "");
-
-            if (p === "/index.htm" || p === "/index.html") return "/";
-            if (p.endsWith("/index.htm")) {
-              const base = p.slice(0, -"/index.htm".length);
-              return base || "/";
-            }
-            if (p.endsWith("/index.html")) {
-              const base = p.slice(0, -"/index.html".length);
-              return base || "/";
-            }
-
-            return p;
-          }
-
-          function buildEntry(a) {
-            const relFromAbs = getRelativePath(a.url || "");
-            const relFromOrig = getRelativePath(a.originalHref || "");
-            const relBest = relFromOrig || relFromAbs;
-            return {
-              anchor: a,
-              relFull: relBest,
-              relNoQuery: removeQueryAndHash(relBest),
-              canonicalNoQuery: canonicalPathNoQuery(removeQueryAndHash(relBest)),
-            };
-          }
-
-          function findRelativeMatch(requested, entries) {
-            const reqRel = getRelativePath(requested);
-            const reqNoQuery = canonicalPathNoQuery(removeQueryAndHash(reqRel));
-            return entries.find((e) => {
-              if (!reqNoQuery) return false;
-              return e.canonicalNoQuery === reqNoQuery;
-            }) || null;
-          }
-
-          const entries = anchors.map(buildEntry);
-          const requestedUrls = paths.map((p) => resolveRequestedUrl(p, pageUrl));
-
-          let requestedStatuses = [];
-          try {
-            const resp = await fetch("/api/link-reading/statuses", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ urls: requestedUrls, timeoutMs: 8000, concurrency: 6 }),
-            });
-            const data = await resp.json();
-            if (resp.ok) requestedStatuses = data.statuses || [];
-          } catch {}
-
-          const rows = paths.map((p, i) => {
-            const match = findRelativeMatch(p, entries);
-            const found = !!match;
-            const reqStatus = requestedStatuses[i] || {};
-            const status = reqStatus.status || 0;
-            const statusOk = !!reqStatus.ok;
-            const badge = found
-              ? `<span style="color:#16a34a;font-weight:700;font-size:0.72rem">IN PAGE</span>`
-              : `<span style="color:#dc2626;font-weight:700;font-size:0.72rem">NOT FOUND</span>`;
-            const statusHtml = status
-              ? `<span style="color:${statusOk ? "#16a34a" : "#dc2626"};font-weight:700">${escapeHtml(String(status || "—"))}</span>`
-              : `<span style="color:#9ca3af">—</span>`;
-            const searchTerm = found ? (match.canonicalNoQuery || p) : p;
-
-            return `<tr>
-              <td style="font-size:0.72rem;color:#9ca3af">${i + 1}</td>
-              <td style="font-family:monospace;font-size:0.78rem">${escapeHtml(p)}</td>
-              <td style="text-align:center">${badge}</td>
-              <td style="text-align:center">${statusHtml}</td>
-              <td style="text-align:center">
-                <button class="link-check-btn" onclick="focusLinkInLinks(decodeURIComponent('${encodeURIComponent(searchTerm)}'))">Find</button>
-              </td>
-            </tr>`;
-          }).join("");
-
-          const found = paths.filter((p) => !!findRelativeMatch(p, entries)).length;
-          const badge = found === paths.length
-            ? `<span style="color:#16a34a;font-weight:700">${found}/${paths.length} found</span>`
-            : `<span style="color:#dc2626;font-weight:700">${found}/${paths.length}</span>`;
-
-          container.innerHTML = `
-            <div style="margin-top:0.6rem;border-top:1px solid #e5e7eb;padding-top:0.5rem">
-              <div style="font-size:0.8rem;font-weight:600;margin-bottom:0.3rem">🔎 Links Present in Page — ${badge}</div>
-              <table class="anchors-table" style="font-size:0.78rem">
-                <thead><tr><th>#</th><th>Requested Link</th><th>Presence</th><th>HTTP</th><th>Check</th></tr></thead>
-                <tbody>${rows}</tbody>
-              </table>
-            </div>`;
-        }
-
-        function focusLinkInLinks(searchTerm) {
-          const rows = Array.from(document.querySelectorAll("#anchors-output .anchors-table tbody tr"));
-          if (!rows.length) return;
-
-          rows.forEach((row) => row.classList.remove("link-find-hit"));
-
-          function getRelativePath(input) {
-            try {
-              const u = new URL(String(input || ""), "https://placeholder.x");
-              return `${u.pathname}${u.search}`.toLowerCase();
-            } catch {
-              return String(input || "").toLowerCase();
-            }
-          }
-
-          function canonicalPathNoQuery(path) {
-            let p = String(path || "").trim().toLowerCase();
-            if (!p) return "/";
-            if (!p.startsWith("/")) p = `/${p}`;
-            p = p.replace(/\/+/g, "/");
-            if (p.length > 1) p = p.replace(/\/+$/, "");
-
-            if (p === "/index.htm" || p === "/index.html") return "/";
-            if (p.endsWith("/index.htm")) {
-              const base = p.slice(0, -"/index.htm".length);
-              return base || "/";
-            }
-            if (p.endsWith("/index.html")) {
-              const base = p.slice(0, -"/index.html".length);
-              return base || "/";
-            }
-
-            return p;
-          }
-
-          const needle = canonicalPathNoQuery(getRelativePath(searchTerm).split("?")[0].split("#")[0]);
-          if (!needle) return;
-
-          const foundRow = rows.find((row) => {
-            const linkEl = row.querySelector(".anchors-url a");
-            const href = linkEl ? linkEl.getAttribute("href") || linkEl.textContent || "" : row.textContent || "";
-            const rel = getRelativePath(href);
-            const relNoQuery = canonicalPathNoQuery(rel.split("?")[0].split("#")[0]);
-            return relNoQuery === needle;
+              url,
+              coText: coInput,
+            }),
+            signal: ac.signal,
           });
+          const data = await resp.json();
+          if (!resp.ok)
+            throw new Error((data && data.error) || resp.statusText);
 
-          if (!foundRow) return;
-          foundRow.classList.add("link-find-hit");
-          foundRow.scrollIntoView({ behavior: "smooth", block: "center" });
+          // Mostrar CP y CO normalizados del backend
+          cpDiv.textContent = (data.cp && data.cp.text) || "";
+          coDiv.textContent = (data.co && data.co.text) || "";
+
+          // Resumen y detalle
+          const complete = data.result && data.result.complete;
+          const badge = complete ? "🟢 COMPLETE" : "🔴 INCOMPLETE";
+
+          const details = data.details || [];
+          const counts = {
+            total: data.co && data.co.lines ? data.co.lines.length : 0,
+            present: details.filter((d) => d.found).length,
+            missing: details.filter((d) => !d.found).length,
+          };
+          compareSummary.textContent = `${badge} — CO lines: ${counts.total}, present: ${counts.present}, missing: ${counts.missing}`;
+
+          const lines = renderDetailLines(
+            details,
+            data.cp && data.cp.lines ? data.cp.lines : [],
+          );
+
+          compareDetails.innerHTML = complete ? "" : lines;
+        } catch (error) {
+          if (error.name === "AbortError") return;
+          cpDiv.textContent = `Error: ${error.message}`;
+          coDiv.textContent = coInput || "";
+          compareSummary.textContent = "Error during comparison";
+        } finally {
+          removeAbortController(ac);
+        }
+      }
+
+      // --- TEXT READING MOBILE ---
+      async function runTextReadingMobile() {
+        const url = document.getElementById("url").value;
+        const coInput = document.getElementById("co").value;
+        const cpDiv = document.getElementById("cp-mobile-output");
+        const coDiv = document.getElementById("co-mobile-output");
+        const compareSummary = document.getElementById(
+          "compare-mobile-summary",
+        );
+        const compareDetails = document.getElementById(
+          "compare-mobile-details",
+        );
+        const cpPanel = document.getElementById("cp-mobile-panel");
+        const coPanel = document.getElementById("co-mobile-panel");
+        const comparePanel = document.getElementById("compare-mobile-panel");
+
+        if (!url) {
+          alert("Please enter a URL");
+          return;
         }
 
-        // --- WORD DIFF HELPERS (LCS a nivel de palabras) ---
-        function lcsWordOps(a, b) {
-          const m = a.length, n = b.length;
-          const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
-          for (let i = 1; i <= m; i++)
-            for (let j = 1; j <= n; j++)
-              dp[i][j] = a[i-1] === b[j-1]
-                ? dp[i-1][j-1] + 1
-                : Math.max(dp[i-1][j], dp[i][j-1]);
-          const ops = [];
-          let i = m, j = n;
-          while (i > 0 || j > 0) {
-            if (i > 0 && j > 0 && a[i-1] === b[j-1]) {
-              ops.unshift({ t: 'eq', v: a[i-1] }); i--; j--;
-            } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
-              ops.unshift({ t: 'ins', v: b[j-1] }); j--;
-            } else {
-              ops.unshift({ t: 'del', v: a[i-1] }); i--;
-            }
-          }
-          return ops;
-        }
+        // Siempre mostrar paneles mobile al ejecutar
+        const showContent = document.getElementById("show-content").checked;
+        cpPanel.style.display = showContent ? "" : "none";
+        coPanel.style.display = showContent ? "" : "none";
+        comparePanel.style.display = "";
+        document.getElementById("mobile-section-header").style.display = "";
 
-        function renderWordDiff(coLine, cpLine) {
-          const ops = lcsWordOps(coLine.split(/\s+/), cpLine.split(/\s+/));
-          const coHtml = ops
-            .filter((o) => o.t !== 'ins')
-            .map((o) => o.t === 'del' ? `<mark class="diff-del">${escapeHtml(o.v)}</mark>` : escapeHtml(o.v))
-            .join(' ');
-          const cpHtml = ops
-            .filter((o) => o.t !== 'del')
-            .map((o) => o.t === 'ins' ? `<mark class="diff-ins">${escapeHtml(o.v)}</mark>` : escapeHtml(o.v))
-            .join(' ');
-          return { coHtml, cpHtml };
-        }
-
-        function findClosestCpLine(coLine, cpLines) {
-          const coWords = new Set(coLine.toLowerCase().split(/\s+/));
-          let best = -1, bestScore = 0;
-          cpLines.forEach((cp, i) => {
-            const score = cp.toLowerCase().split(/\s+/).filter((w) => coWords.has(w)).length;
-            if (score > bestScore) { bestScore = score; best = i; }
-          });
-          return bestScore > 0 ? best : -1;
-        }
-
-        function renderDetailLines(details, cpLines) {
-          return details.map((d, i) => {
-            if (d.found) {
-              return `<div class="diff-line diff-line--ok">✔️ <span class="diff-line__num">[CO ${i + 1}]</span> <span class="diff-line__text">${escapeHtml(d.line)}</span> <span class="diff-line__where">(CP line ${(d.cpIndex ?? -1) + 1})</span></div>`;
-            }
-            const closestIdx = findClosestCpLine(d.line, cpLines);
-            if (closestIdx === -1) {
-              return `<div class="diff-line diff-line--miss">❌ <span class="diff-line__num">[CO ${i + 1}]</span> <mark class="diff-del">${escapeHtml(d.line)}</mark> <span class="diff-line__where">(not found)</span></div>`;
-            }
-            const { coHtml, cpHtml } = renderWordDiff(d.line, cpLines[closestIdx]);
-            return `<div class="diff-line diff-line--miss">❌ <span class="diff-line__num">[CO ${i + 1}]</span> <span class="diff-line__where">(not found — closest: CP line ${closestIdx + 1})</span><div class="diff-line__row"><span class="diff-line__label">CO</span><span class="diff-line__co">${coHtml}</span></div><div class="diff-line__row"><span class="diff-line__label">CP</span><span class="diff-line__cp">${cpHtml}</span></div></div>`;
-          }).join('');
-        }
-
-        function buildAnchorsTable(anchors) {
+        cpDiv.textContent =
+          "⏳ Opening page in mobile mode (430×932), cleaning, and extracting text...";
+        coDiv.textContent = "⏳ Normalizing CO...";
+        compareSummary.textContent = "⏳ Comparing lines...";
+        compareDetails.textContent = "";
+        const ac = createAbortController();
+        try {
+          const resp = await fetch("/api/text-reading-mobile/compare", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              url,
               coText: coInput,
             }),
             signal: ac.signal,
@@ -367,116 +371,74 @@
           renderH1Panel(data.h1Texts || [], data.srOnlyText || null);
 
           const anchors = data.anchors || [];
-                // --- WORD DIFF HELPERS (LCS a nivel de palabras) ---
-                function lcsWordOps(a, b) {
-                  const m = a.length, n = b.length;
-                  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
-                  for (let i = 1; i <= m; i++)
-                    for (let j = 1; j <= n; j++)
-                      dp[i][j] = a[i-1] === b[j-1]
-                        ? dp[i-1][j-1] + 1
-                        : Math.max(dp[i-1][j], dp[i][j-1]);
-                  const ops = [];
-                  let i = m, j = n;
-                  while (i > 0 || j > 0) {
-                    if (i > 0 && j > 0 && a[i-1] === b[j-1]) {
-                      ops.unshift({ t: 'eq', v: a[i-1] }); i--; j--;
-                    } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
-                      ops.unshift({ t: 'ins', v: b[j-1] }); j--;
-                    } else {
-                      ops.unshift({ t: 'del', v: a[i-1] }); i--;
-                    }
-                  }
-                  return ops;
-                }
+          if (!anchors.length) {
+            anchorsDiv.textContent = "No visible links were found in .ddc-wrapper";
+            await renderLinkCheck([], url);
+            return;
+          }
+          anchorsDiv.innerHTML = buildAnchorsTable(anchors);
+          // Pedir estados HTTP (sin navegador)
+          try {
+            const statuses = await updateLinkStatuses(anchors.map((a) => a.url));
+            const withStatus = anchors.map((a, idx) => ({
+              ...a,
+              status: statuses[idx] ? statuses[idx].status : 0,
+              statusOk: statuses[idx] ? statuses[idx].ok : false,
+            }));
+            await renderLinkCheck(withStatus, url);
+          } catch {}
+          if (!document.getElementById("link-check-output").innerHTML) {
+            await renderLinkCheck(anchors, url);
+          }
+        } catch (error) {
+          if (error.name === "AbortError") return;
+          anchorsDiv.textContent = `Error extracting links: ${error.message}`;
+        } finally {
+          removeAbortController(ac);
+        }
+      }
 
-                function renderWordDiff(coLine, cpLine) {
-                  const ops = lcsWordOps(coLine.split(/\s+/), cpLine.split(/\s+/));
-                  const coHtml = ops
-                    .filter((o) => o.t !== 'ins')
-                    .map((o) => o.t === 'del' ? `<mark class="diff-del">${escapeHtml(o.v)}</mark>` : escapeHtml(o.v))
-                    .join(' ');
-                  const cpHtml = ops
-                    .filter((o) => o.t !== 'del')
-                    .map((o) => o.t === 'ins' ? `<mark class="diff-ins">${escapeHtml(o.v)}</mark>` : escapeHtml(o.v))
-                    .join(' ');
-                  return { coHtml, cpHtml };
-                }
+      async function renderLinkCheck(anchors, pageUrl) {
+        const raw = (document.getElementById("check-links").value || "").trim();
+        const container = document.getElementById("link-check-output");
+        if (!container) return;
+        if (!raw) { container.innerHTML = ""; return; }
+        const paths = raw.split("\n").map((l) => l.trim()).filter(Boolean);
+        if (!paths.length) { container.innerHTML = ""; return; }
 
-                function findClosestCpLine(coLine, cpLines) {
-                  const coWords = new Set(coLine.toLowerCase().split(/\s+/));
-                  let best = -1, bestScore = 0;
-                  cpLines.forEach((cp, i) => {
-                    const score = cp.toLowerCase().split(/\s+/).filter((w) => coWords.has(w)).length;
-                    if (score > bestScore) { bestScore = score; best = i; }
-                  });
-                  return bestScore > 0 ? best : -1;
-                }
+        function resolveRequestedUrl(input, basePageUrl) {
+          const rawValue = String(input || "").trim();
+          if (!rawValue) return "";
 
-                function renderDetailLines(details, cpLines) {
-                  return details.map((d, i) => {
-                    if (d.found) {
-                      return `<div class="diff-line diff-line--ok">✔️ <span class="diff-line__num">[CO ${i + 1}]</span> <span class="diff-line__text">${escapeHtml(d.line)}</span> <span class="diff-line__where">(CP line ${(d.cpIndex ?? -1) + 1})</span></div>`;
-                    }
-                    const closestIdx = findClosestCpLine(d.line, cpLines);
-                    if (closestIdx === -1) {
-                      return `<div class="diff-line diff-line--miss">❌ <span class="diff-line__num">[CO ${i + 1}]</span> <mark class="diff-del">${escapeHtml(d.line)}</mark> <span class="diff-line__where">(not found)</span></div>`;
-                    }
-                    const { coHtml, cpHtml } = renderWordDiff(d.line, cpLines[closestIdx]);
-                    return `<div class="diff-line diff-line--miss">❌ <span class="diff-line__num">[CO ${i + 1}]</span> <span class="diff-line__where">(not found — closest: CP line ${closestIdx + 1})</span><div class="diff-line__row"><span class="diff-line__label">CO</span><span class="diff-line__co">${coHtml}</span></div><div class="diff-line__row"><span class="diff-line__label">CP</span><span class="diff-line__cp">${cpHtml}</span></div></div>`;
-                  }).join('');
-                }
+          if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(rawValue)) {
+            return rawValue;
+          }
 
-                function focusLinkInLinks(searchTerm) {
-                  const rows = Array.from(document.querySelectorAll("#anchors-output .anchors-table tbody tr"));
-                  if (!rows.length) return;
+          if (/^\/\//.test(rawValue)) {
+            return `https:${rawValue}`;
+          }
 
-                  rows.forEach((row) => row.classList.remove("link-find-hit"));
+          if (/^[^\s/]+\.[^\s/]+(\/.*)?$/.test(rawValue)) {
+            return `https://${rawValue}`;
+          }
 
-                  function getRelativePath(input) {
-                    try {
-                      const u = new URL(String(input || ""), "https://placeholder.x");
-                      return `${u.pathname}${u.search}`.toLowerCase();
-                    } catch {
-                      return String(input || "").toLowerCase();
-                    }
-                  }
+          try {
+            const baseOrigin = new URL(basePageUrl).origin;
+            const normalizedPath = rawValue.startsWith("/") ? rawValue : `/${rawValue}`;
+            return new URL(normalizedPath, baseOrigin).href;
+          } catch {
+            return rawValue;
+          }
+        }
 
-                  function canonicalPathNoQuery(path) {
-                    let p = String(path || "").trim().toLowerCase();
-                    if (!p) return "/";
-                    if (!p.startsWith("/")) p = `/${p}`;
-                    p = p.replace(/\/+/g, "/");
-                    if (p.length > 1) p = p.replace(/\/+$/, "");
-
-                    if (p === "/index.htm" || p === "/index.html") return "/";
-                    if (p.endsWith("/index.htm")) {
-                      const base = p.slice(0, -"/index.htm".length);
-                      return base || "/";
-                    }
-                    if (p.endsWith("/index.html")) {
-                      const base = p.slice(0, -"/index.html".length);
-                      return base || "/";
-                    }
-
-                    return p;
-                  }
-
-                  const needle = canonicalPathNoQuery(getRelativePath(searchTerm).split("?")[0].split("#")[0]);
-                  if (!needle) return;
-
-                  const foundRow = rows.find((row) => {
-                    const linkEl = row.querySelector(".anchors-url a");
-                    const href = linkEl ? linkEl.getAttribute("href") || linkEl.textContent || "" : row.textContent || "";
-                    const rel = getRelativePath(href);
-                    const relNoQuery = canonicalPathNoQuery(rel.split("?")[0].split("#")[0]);
-                    return relNoQuery === needle;
-                  });
-
-                  if (!foundRow) return;
-                  foundRow.classList.add("link-find-hit");
-                  foundRow.scrollIntoView({ behavior: "smooth", block: "center" });
-                }
+        function getRelativePath(input) {
+          try {
+            const u = new URL(String(input || ""), "https://placeholder.x");
+            return `${u.pathname}${u.search}`.toLowerCase().replace(/\/+$/, "");
+          } catch {
+            return String(input || "").trim().toLowerCase().replace(/\/+$/, "");
+          }
+        }
 
         function removeQueryAndHash(path) {
           return String(path || "").split("?")[0].split("#")[0];
@@ -580,66 +542,6 @@
           </div>`;
       }
 
-      // --- WORD DIFF HELPERS (LCS a nivel de palabras) ---
-      function lcsWordOps(a, b) {
-        const m = a.length, n = b.length;
-        const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
-        for (let i = 1; i <= m; i++)
-          for (let j = 1; j <= n; j++)
-            dp[i][j] = a[i-1] === b[j-1]
-              ? dp[i-1][j-1] + 1
-              : Math.max(dp[i-1][j], dp[i][j-1]);
-        const ops = [];
-        let i = m, j = n;
-        while (i > 0 || j > 0) {
-          if (i > 0 && j > 0 && a[i-1] === b[j-1]) {
-            ops.unshift({ t: 'eq', v: a[i-1] }); i--; j--;
-          } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
-            ops.unshift({ t: 'ins', v: b[j-1] }); j--;
-          } else {
-            ops.unshift({ t: 'del', v: a[i-1] }); i--;
-          }
-        }
-        return ops;
-      }
-
-      function renderWordDiff(coLine, cpLine) {
-        const ops = lcsWordOps(coLine.split(/\s+/), cpLine.split(/\s+/));
-        const coHtml = ops
-          .filter((o) => o.t !== 'ins')
-          .map((o) => o.t === 'del' ? `<mark class="diff-del">${escapeHtml(o.v)}</mark>` : escapeHtml(o.v))
-          .join(' ');
-        const cpHtml = ops
-          .filter((o) => o.t !== 'del')
-          .map((o) => o.t === 'ins' ? `<mark class="diff-ins">${escapeHtml(o.v)}</mark>` : escapeHtml(o.v))
-          .join(' ');
-        return { coHtml, cpHtml };
-      }
-
-      function findClosestCpLine(coLine, cpLines) {
-        const coWords = new Set(coLine.toLowerCase().split(/\s+/));
-        let best = -1, bestScore = 0;
-        cpLines.forEach((cp, i) => {
-          const score = cp.toLowerCase().split(/\s+/).filter((w) => coWords.has(w)).length;
-          if (score > bestScore) { bestScore = score; best = i; }
-        });
-        return bestScore > 0 ? best : -1;
-      }
-
-      function renderDetailLines(details, cpLines) {
-        return details.map((d, i) => {
-          if (d.found) {
-            return `<div class="diff-line diff-line--ok">✔️ <span class="diff-line__num">[CO ${i + 1}]</span> <span class="diff-line__text">${escapeHtml(d.line)}</span> <span class="diff-line__where">(CP line ${(d.cpIndex ?? -1) + 1})</span></div>`;
-          }
-          const closestIdx = findClosestCpLine(d.line, cpLines);
-          if (closestIdx === -1) {
-            return `<div class="diff-line diff-line--miss">❌ <span class="diff-line__num">[CO ${i + 1}]</span> <mark class="diff-del">${escapeHtml(d.line)}</mark> <span class="diff-line__where">(not found)</span></div>`;
-          }
-          const { coHtml, cpHtml } = renderWordDiff(d.line, cpLines[closestIdx]);
-          return `<div class="diff-line diff-line--miss">❌ <span class="diff-line__num">[CO ${i + 1}]</span> <span class="diff-line__where">(not found — closest: CP line ${closestIdx + 1})</span><div class="diff-line__row"><span class="diff-line__label">CO</span><span class="diff-line__co">${coHtml}</span></div><div class="diff-line__row"><span class="diff-line__label">CP</span><span class="diff-line__cp">${cpHtml}</span></div></div>`;
-        }).join('');
-      }
-
       function focusLinkInLinks(searchTerm) {
         const rows = Array.from(document.querySelectorAll("#anchors-output .anchors-table tbody tr"));
         if (!rows.length) return;
@@ -703,16 +605,16 @@
           })
           .join("");
         return `
-            <table class="anchors-table">
-              <thead>
-            <tr><th>#</th><th>Text</th><th>URL</th><th>TYPE</th><th>Status</th></tr>
-              </thead>
-              <tbody>
-                ${rows}
-              </tbody>
-            </table>
-          `;
-        }
+                <table class="anchors-table">
+                    <thead>
+                <tr><th>#</th><th>Text</th><th>URL</th><th>TYPE</th><th>Status</th></tr>
+                    </thead>
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>
+            `;
+      }
 
       async function updateLinkStatuses(urls) {
         const resp = await fetch("/api/link-reading/statuses", {
