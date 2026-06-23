@@ -15,6 +15,7 @@
           <span class="topbar__title">QA API Tester</span>
         </div>
         <nav class="topbar__nav">
+          <button class="ctrl-btn ctrl-btn--todo"  onclick="toggleTodoPanel()">☑ QA Todo</button>
           <button class="ctrl-btn ctrl-btn--stop"  onclick="stopAllProcesses()">⏹ Stop</button>
           <button class="ctrl-btn ctrl-btn--reset" onclick="resetAll()">↺ Reset</button>
           <button class="ctrl-btn ctrl-btn--pdf"   onclick="downloadPDF()">↓ PDF</button>
@@ -22,7 +23,27 @@
       </div>
     </header>
 
-    <main class="app-main">
+    <main class="app-main" id="app-main">
+
+      <section class="todo-panel" id="todo-panel" style="display:none">
+        <div class="todo-panel__header">
+          <h3>QA Todo List</h3>
+          <span>Auto: H1, Link Statuses, Links Added in Page</span>
+        </div>
+        <div class="todo-grid">
+          <label class="todo-item"><input type="checkbox" id="todo-inventory" /><span>Inventory</span></label>
+          <label class="todo-item todo-item--auto"><input type="checkbox" id="todo-h1" /><span>H1 (auto + manual)</span></label>
+          <label class="todo-item"><input type="checkbox" id="todo-text-desktop" /><span>Text Desktop</span></label>
+          <label class="todo-item"><input type="checkbox" id="todo-text-mobile" /><span>Text Mobile</span></label>
+          <label class="todo-item todo-item--auto"><input type="checkbox" id="todo-link-statuses" /><span>Link Statuses (all 200) (auto + manual)</span></label>
+          <label class="todo-item todo-item--auto"><input type="checkbox" id="todo-links-present" /><span>Links Added in Page (auto + manual)</span></label>
+          <label class="todo-item"><input type="checkbox" id="todo-breadcrumbs" /><span>Breadcrumbs</span></label>
+          <label class="todo-item"><input type="checkbox" id="todo-anchors" /><span>Anchors</span></label>
+          <label class="todo-item"><input type="checkbox" id="todo-sitemap" /><span>Sitemap</span></label>
+          <label class="todo-item"><input type="checkbox" id="todo-images" /><span>Images</span></label>
+          <label class="todo-item"><input type="checkbox" id="todo-text-borders" /><span>Text don't touching the borders</span></label>
+        </div>
+      </section>
 
       <section class="form-card">
         <div class="input-group">
@@ -34,8 +55,8 @@
           <textarea id="co" placeholder="Paste the original content here…"></textarea>
         </div>
         <div class="input-group">
-          <label for="check-links">Links to check <small style="font-weight:400;color:#6b7280">(one path per line, e.g. /new-inventory/index.htm)</small></label>
-          <textarea id="check-links" placeholder="/new-inventory/index.htm&#10;/financing/center.htm&#10;/used-inventory/index.htm" style="min-height:5rem"></textarea>
+          <label for="check-links">Links to check <small style="font-weight:400;color:#6b7280">(one path per line — paste raw HTML, labels or comma-separated paths, they will be cleaned automatically)</small></label>
+          <textarea id="check-links" placeholder="/new-inventory/index.htm&#10;/financing/center.htm&#10;/used-inventory/index.htm" style="min-height:5rem" onpaste="setTimeout(cleanLinksInput,0)" onblur="cleanLinksInput()"></textarea>
         </div>
         <div class="form-footer">
           <label class="toggle-label">
@@ -142,6 +163,87 @@
 
       function removeAbortController(ac) {
         activeAbortControllers = activeAbortControllers.filter((c) => c !== ac);
+      }
+
+      function toggleTodoPanel() {
+        const panel = document.getElementById("todo-panel");
+        const appMain = document.getElementById("app-main");
+        if (!panel) return;
+        const willShow = panel.style.display === "none";
+        panel.style.display = willShow ? "" : "none";
+        if (appMain) {
+          appMain.classList.toggle("app-main--todo-open", willShow);
+        }
+      }
+
+      function setTodoItem(id, checked) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.checked = !!checked;
+      }
+
+      function cleanLinksInput() {
+        const ta = document.getElementById("check-links");
+        if (!ta) return;
+        const raw = ta.value;
+        if (!raw.trim()) return;
+
+        // Split by newline first, then flatten comma-separated items
+        const lines = raw.split(/\n/);
+        const tokens = [];
+        lines.forEach((line) => {
+          line.split(/,/).forEach((t) => tokens.push(t.trim()));
+        });
+
+        const paths = [];
+        const hrefRe = /href=["']([^"']+)["']/gi;
+        const urlLikeRe = /(?:https?:\/\/[^\s"'<>,]+|\/[^\s"'<>,]*)/g;
+
+        tokens.forEach((token) => {
+          if (!token) return;
+
+          // 1. Extract href values from HTML tags: <a href="...">...
+          let m;
+          hrefRe.lastIndex = 0;
+          while ((m = hrefRe.exec(token)) !== null) {
+            const val = m[1].trim();
+            if (val && !paths.includes(val)) paths.push(val);
+          }
+          if (hrefRe.lastIndex > 0 || /<[a-zA-Z]/.test(token)) return; // had HTML, done
+
+          // 2. Strip leading label: anything before the first / or http
+          const strippedToken = token.replace(/^[^/\w]*(?=[/]|https?:\/\/)/, "").trim();
+
+          // 3. Extract URL-like pattern
+          urlLikeRe.lastIndex = 0;
+          const matches = strippedToken.match(urlLikeRe);
+          if (matches) {
+            matches.forEach((val) => {
+              const v = val.trim();
+              if (v && !paths.includes(v)) paths.push(v);
+            });
+          }
+        });
+
+        if (paths.length) {
+          ta.value = paths.join("\n");
+        }
+      }
+
+      function resetTodoList() {
+        [
+          "todo-inventory",
+          "todo-h1",
+          "todo-text-desktop",
+          "todo-text-mobile",
+          "todo-link-statuses",
+          "todo-links-present",
+          "todo-breadcrumbs",
+          "todo-anchors",
+          "todo-sitemap",
+          "todo-images",
+          "todo-text-borders",
+        ].forEach((id) => setTodoItem(id, false));
       }
 
       async function stopAllProcesses() {
@@ -373,6 +475,7 @@
           const anchors = data.anchors || [];
           if (!anchors.length) {
             anchorsDiv.textContent = "No visible links were found in .ddc-wrapper";
+            setTodoItem("todo-link-statuses", false);
             await renderLinkCheck([], url);
             return;
           }
@@ -402,9 +505,9 @@
         const raw = (document.getElementById("check-links").value || "").trim();
         const container = document.getElementById("link-check-output");
         if (!container) return;
-        if (!raw) { container.innerHTML = ""; return; }
+        if (!raw) { container.innerHTML = ""; setTodoItem("todo-links-present", false); return; }
         const paths = raw.split("\n").map((l) => l.trim()).filter(Boolean);
-        if (!paths.length) { container.innerHTML = ""; return; }
+        if (!paths.length) { container.innerHTML = ""; setTodoItem("todo-links-present", false); return; }
 
         function resolveRequestedUrl(input, basePageUrl) {
           const rawValue = String(input || "").trim();
@@ -528,6 +631,7 @@
         }).join("");
 
         const found = paths.filter((p) => !!findRelativeMatch(p, entries)).length;
+        setTodoItem("todo-links-present", paths.length > 0 && found === paths.length);
         const badge = found === paths.length
           ? `<span style="color:#16a34a;font-weight:700">${found}/${paths.length} found</span>`
           : `<span style="color:#dc2626;font-weight:700">${found}/${paths.length}</span>`;
@@ -632,6 +736,8 @@
             el.style.color = s.ok ? "green" : "red";
           }
         });
+        const all200 = statuses.length > 0 && statuses.every((s) => Number(s.status) === 200);
+        setTodoItem("todo-link-statuses", all200);
         return statuses;
       }
 
@@ -667,6 +773,7 @@
           return;
         }
         if (count === 1 && srOnlyText && normalizeStr(h1Texts[0]) === normalizeStr(srOnlyText)) {
+          setTodoItem("todo-h1", true);
           h1Summary.textContent = "🟢 There is only one H1 and it matches the sr-only H1";
           h1Summary.className = "h1-summary status-ok";
           h1Details.innerHTML = `H1: ${escapeHtml(h1Texts[0])}<br>sr-only: ${escapeHtml(srOnlyText)}`;
@@ -679,6 +786,7 @@
           return;
         }
         if (count === 0) {
+          setTodoItem("todo-h1", false);
           if (srOnlyText) {
             h1Summary.textContent = "🟠 No visible H1 found, only sr-only H1 is present";
             h1Summary.className = "h1-summary status-partial";
@@ -689,6 +797,7 @@
           }
           return;
         }
+        setTodoItem("todo-h1", true);
         h1Summary.textContent = "🟢 There is only one visible H1";
         h1Summary.className = "h1-summary status-ok";
         h1Details.textContent = `H1: ${escapeHtml(h1Texts[0])}`;
@@ -1012,9 +1121,12 @@
           const anchors = desktop.anchors || [];
           if (!anchors.length) {
             document.getElementById("anchors-output").textContent = "No visible links were found in .ddc-wrapper";
+            setTodoItem("todo-link-statuses", false);
             await renderLinkCheck([], url);
           } else {
             document.getElementById("anchors-output").innerHTML = buildAnchorsTableWithStatus(anchors);
+            const all200 = anchors.length > 0 && anchors.every((a) => Number(a.status) === 200);
+            setTodoItem("todo-link-statuses", all200);
             await renderLinkCheck(anchors, url);
           }
         } catch (error) {
@@ -1082,6 +1194,15 @@
         document.getElementById("anchor-section-header").style.display = "none";
         document.getElementById("anchor-output").textContent =
           "Not evaluated yet…";
+
+        // Limpiar checklist QA
+        resetTodoList();
+
+        // Cerrar panel QA Todo
+        const todoPanel = document.getElementById("todo-panel");
+        if (todoPanel) todoPanel.style.display = "none";
+        const appMain = document.getElementById("app-main");
+        if (appMain) appMain.classList.remove("app-main--todo-open");
       }
 
       function downloadPDF() {
