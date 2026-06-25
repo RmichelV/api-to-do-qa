@@ -843,17 +843,11 @@
           // Mostrar anchors bien configurados
           if (anchors.length > 0) {
             const totalExists = anchors.filter((a) => a.targetExists).length;
-            const totalScroll = anchors.filter((a) => a.scrollOk).length;
-            const summaryBadge =
-              totalExists === anchors.length && totalScroll === anchors.length
-                ? "🟢"
-                : totalExists === anchors.length
-                  ? "🟡"
-                  : "🔴";
+            const summaryBadge = totalExists === anchors.length ? "🟢" : "🔴";
 
             htmlContent += `
               <div style="margin-bottom:0.4rem;font-size:0.82rem;font-weight:600">
-              ${summaryBadge} ${anchors.length} properly configured anchors — Target exists: ${totalExists}/${anchors.length}, Scroll OK: ${totalScroll}/${anchors.length}
+              ${summaryBadge} ${anchors.length} properly configured anchors — Target exists: ${totalExists}/${anchors.length}
               </div>
               ${buildAnchorTable(anchors)}
             `;
@@ -886,11 +880,10 @@
             const safeText = escapeHtml(a.text);
             const safeHref = escapeHtml(a.href);
             const existsIcon = a.targetExists ? "✅" : "❌";
-            const scrollIcon = a.scrollOk ? "✅" : a.targetExists ? "❌" : "➖";
-            return `<tr><td>${idx + 1}</td><td>${safeText}</td><td><code style="font-size:0.74rem">${safeHref}</code></td><td style="text-align:center">${existsIcon}</td><td style="text-align:center">${scrollIcon}</td></tr>`;
+            return `<tr><td>${idx + 1}</td><td>${safeText}</td><td><code style="font-size:0.74rem">${safeHref}</code></td><td style="text-align:center">${existsIcon}</td></tr>`;
           })
           .join("");
-        return `<table class="anchors-table anchors-table--sm"><thead><tr><th>#</th><th>Text</th><th>href</th><th>Target</th><th>Scroll</th></tr></thead><tbody>${rows}</tbody></table>`;
+        return `<table class="anchors-table anchors-table--sm"><thead><tr><th>#</th><th>Text</th><th>href</th><th>Target</th></tr></thead><tbody>${rows}</tbody></table>`;
       }
 
       function buildMisconfiguredAnchorTable(anchors) {

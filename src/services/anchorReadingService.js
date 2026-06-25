@@ -1,4 +1,5 @@
 import { chromium } from 'playwright';
+import * as cheerio from 'cheerio';
 import { getRandomUserAgent } from '../utils/stealth.js';
 
 // Registro global de browsers activos para poder cancelarlos
@@ -6,184 +7,173 @@ export const activeBrowsersAnchor = new Set();
 
 const HEAVY_RESOURCE_TYPES = new Set(['image', 'media', 'font']);
 
-/**
- * Extrae anchor links internos (href="#...") de .ddc-wrapper,
- * luego verifica para cada uno:
- *   1. ¿Existe el elemento destino en el DOM?
- *   2. ¿El scroll (posición Y) cambia al hacer click?
- *
- * IMPORTANTE: Solo se elimina lo que está FUERA de .ddc-wrapper.
- * Todo lo que está DENTRO se conserva intacto para que los destinos
- * de los anchors existan y el scroll funcione correctamente.
- */
-export const extractAndValidateAnchors = async (url, options = {}) => {
-	const headless = options.headless ?? true;
-	const pauseMs = options.pauseMs ?? 0;
+// ─────────────────────────────────────────────
+// Helpers compartidos
+// ─────────────────────────────────────────────
 
+function classifyAnchorsFromHtml(html, pageUrl) {
+	const $ = cheerio.load(html);
+	const well = [];
+	const misc = [];
+	const seen = new Set();
+
+	$('.ddc-wrapper a').each((_, el) => {
+		const href = $(el).attr('href') || '';
+		const text = $(el).text().trim();
+		if (!text || !href.includes('#') || seen.has(href)) return;
+		seen.add(href);
+
+		const hashIdx = href.indexOf('#');
+		const base = href.substring(0, hashIdx);
+		const id = href.substring(hashIdx + 1);
+		if (!id) return;
+
+		if (base === '' || base === pageUrl) {
+			well.push({ text, href, targetId: id });
+		} else {
+			misc.push({ text, href });
+		}
+	});
+
+	return { wellConfigured: well, misconfigured: misc };
+}
+
+function checkTargetsInHtml(html, anchors) {
+	// Usa atributo selector en lugar de CSS.escape (no disponible en Node.js)
+	const $ = cheerio.load(html);
+	return anchors.map(a => ({
+		text: a.text,
+		href: a.href,
+		targetExists: $(`[id="${a.targetId}"]`).length > 0,
+	}));
+}
+
+// ─────────────────────────────────────────────
+// Estrategia 1: fetch + cheerio (sin browser)
+// ─────────────────────────────────────────────
+
+async function tryFetchStrategy(url) {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), 15000);
+
+	let html;
+	try {
+		const resp = await fetch(url, {
+			headers: {
+				'User-Agent': getRandomUserAgent(),
+				'Accept-Language': 'en-US,en;q=0.9',
+			},
+			signal: controller.signal,
+		});
+		if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+		html = await resp.text();
+	} finally {
+		clearTimeout(timer);
+	}
+
+	const $ = cheerio.load(html);
+	if (!$('.ddc-wrapper').length) return null; // sin wrapper → fallback
+
+	const { wellConfigured, misconfigured } = classifyAnchorsFromHtml(html, url);
+	if (!wellConfigured.length && !misconfigured.length) return null; // sin anchors → fallback
+
+	const anchors = checkTargetsInHtml(html, wellConfigured);
+	return { anchors, misconfiguredAnchors: misconfigured };
+}
+
+// ─────────────────────────────────────────────
+// Estrategia 2: Playwright — solo DOM, sin click ni scroll
+// ─────────────────────────────────────────────
+
+async function tryPlaywrightStrategy(url, options = {}) {
+	const headless = options.headless ?? true;
 	let browser;
 	try {
 		browser = await chromium.launch({ headless });
 		activeBrowsersAnchor.add(browser);
+
 		const context = await browser.newContext({
 			userAgent: getRandomUserAgent(),
 			locale: 'en-US',
 		});
 		const page = await context.newPage();
-		page.setDefaultTimeout(45000);
-		page.setDefaultNavigationTimeout(45000);
+		page.setDefaultTimeout(30000);
+		page.setDefaultNavigationTimeout(30000);
+
 		await page.route('**/*', (route) => {
 			const type = route.request().resourceType();
-			if (HEAVY_RESOURCE_TYPES.has(type)) {
-				return route.abort();
-			}
+			if (HEAVY_RESOURCE_TYPES.has(type)) return route.abort();
 			return route.continue();
 		});
 
-		await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+		await page.goto(url, { waitUntil: 'load', timeout: 30000 });
 
-		// Esperar a que .ddc-wrapper exista
 		try {
 			await page.waitForSelector('.ddc-wrapper', { timeout: 10000 });
 		} catch {
-			return { anchors: [], error: 'No se encontró .ddc-wrapper' };
+			return { anchors: [], misconfiguredAnchors: [], error: 'No se encontró .ddc-wrapper' };
 		}
 
-		// Paso 1: Aislar .ddc-wrapper (eliminar todo fuera, mantener todo dentro intacto)
-		await page.evaluate(() => {
-			const wrapper = document.querySelector('.ddc-wrapper');
-			if (!wrapper) return;
-			document.body.innerHTML = '';
-			document.body.appendChild(wrapper);
-		});
-
-		// Breve espera para que el layout se estabilice
-		await new Promise(resolve => setTimeout(resolve, 1000));
-
-		// Paso 2: Extraer TODOS los links con # (bien y mal configurados)
-		const { wellConfigured, misconfigured } = await page.evaluate((currentUrl) => {
+		// Extraer links desde .ddc-wrapper (sin aislar el DOM)
+		const { wellConfigured, misconfigured } = await page.evaluate((pageUrl) => {
 			const wrapper = document.querySelector('.ddc-wrapper');
 			if (!wrapper) return { wellConfigured: [], misconfigured: [] };
-
-			const wellConfiguredResults = [];
-			const misconfiguredResults = [];
+			const seen = new Set();
+			const well = [];
+			const misc = [];
 
 			wrapper.querySelectorAll('a').forEach(a => {
 				const href = a.getAttribute('href') || '';
 				const text = (a.innerText || '').trim();
-				if (text.length === 0) return;
+				if (!text || !href.includes('#') || seen.has(href)) return;
+				seen.add(href);
 
-				// Verificar que el link sea visible
-				const style = window.getComputedStyle(a);
-				if (style.display === 'none' || style.visibility === 'hidden') return;
-				const rect = a.getBoundingClientRect();
-				if (rect.width === 0 || rect.height === 0) return;
+				const hashIdx = href.indexOf('#');
+				const base = href.substring(0, hashIdx);
+				const id = href.substring(hashIdx + 1);
+				if (!id) return;
 
-				// Solo procesar si hay un #
-				if (!href.includes('#')) return;
-
-				const hashIndex = href.indexOf('#');
-				const baseUrl = href.substring(0, hashIndex); // parte antes del #
-				const anchorId = href.substring(hashIndex + 1); // parte después del #
-
-				if (!anchorId) return; // No hay ID después del #
-
-				const isSimpleAnchor = baseUrl === ''; // solo "#algo"
-				const baseUrlMatchesCurrent = baseUrl === currentUrl; // "url-actual#algo"
-
-				if (isSimpleAnchor || baseUrlMatchesCurrent) {
-					// BIEN configurado
-					wellConfiguredResults.push({
-						text,
-						href,
-						targetId: anchorId
-					});
+				if (base === '' || base === pageUrl) {
+					well.push({ text, href, targetId: id });
 				} else {
-					// MAL configurado
-					misconfiguredResults.push({
-						text,
-						href
-					});
+					misc.push({ text, href });
 				}
 			});
+			return { wellConfigured: well, misconfigured: misc };
+		}, url);
 
-			// Deduplicar por href
-			const deduplicate = (arr) => {
-				const seen = new Set();
-				return arr.filter(r => {
-					if (seen.has(r.href)) return false;
-					seen.add(r.href);
-					return true;
-				});
-			};
+		// Verificar todos los destinos en un solo evaluate (sin loop de awaits)
+		const anchors = await page.evaluate((items) => {
+			return items.map(a => ({
+				text: a.text,
+				href: a.href,
+				targetExists: !!(document.getElementById(a.targetId)
+					|| document.querySelector(`[id="${a.targetId}"]`)),
+			}));
+		}, wellConfigured);
 
-			return {
-				wellConfigured: deduplicate(wellConfiguredResults),
-				misconfigured: deduplicate(misconfiguredResults)
-			};
-		}, url); // Pasar la URL actual
-
-		if (wellConfigured.length === 0 && misconfigured.length === 0) {
-			return { anchors: [], misconfiguredAnchors: [] };
-		}
-
-		const anchorLinks = wellConfigured;
-
-		// Paso 3: Para cada anchor, verificar existencia del destino y scroll
-		const results = [];
-		for (const anchor of anchorLinks) {
-			// Verificar si el elemento destino existe
-			const targetExists = await page.evaluate((id) => {
-				return !!document.getElementById(id);
-			}, anchor.targetId);
-
-			let scrollOk = false;
-			if (targetExists) {
-				try {
-					// Registrar posición Y antes del click
-					const yBefore = await page.evaluate(() => window.scrollY);
-
-					// Primero hacer scroll al top para tener un punto de partida limpio
-					await page.evaluate(() => window.scrollTo(0, 0));
-					await new Promise(resolve => setTimeout(resolve, 200));
-
-					// Click en el anchor link
-					const linkSelector = `a[href="${anchor.href}"]`;
-					await page.click(linkSelector, { timeout: 5000 });
-
-					// Esperar a que el scroll termine (smooth scroll puede tardar)
-					await new Promise(resolve => setTimeout(resolve, 800));
-
-					// Registrar posición Y después del click
-					const yAfter = await page.evaluate(() => window.scrollY);
-
-					// El scroll es OK si la posición Y cambió (se movió de 0)
-					scrollOk = yAfter !== 0 || anchor.href === '#top';
-				} catch {
-					// Si el click falla, el scroll no se pudo verificar
-					scrollOk = false;
-				}
-			}
-
-			results.push({
-				text: anchor.text,
-				href: anchor.href,
-				targetExists,
-				scrollOk
-			});
-		}
-
-		if (pauseMs && pauseMs > 0) {
-			await new Promise(resolve => setTimeout(resolve, pauseMs));
-		}
-
-		return { 
-			anchors: results,
-			misconfiguredAnchors: misconfigured
-		};
+		return { anchors, misconfiguredAnchors: misconfigured };
 	} finally {
 		if (browser) {
 			activeBrowsersAnchor.delete(browser);
 			try { await browser.close(); } catch {}
 		}
 	}
+}
+
+// ─────────────────────────────────────────────
+// Punto de entrada
+// ─────────────────────────────────────────────
+
+export const extractAndValidateAnchors = async (url, options = {}) => {
+	// Estrategia 1: rápida, sin browser
+	try {
+		const result = await tryFetchStrategy(url);
+		if (result) return result;
+	} catch {
+		// fetch falló → continuar al fallback
+	}
+
+	// Estrategia 2: fallback con Playwright (sin click, sin scroll, sin aislación)
+	return tryPlaywrightStrategy(url, options);
 };
