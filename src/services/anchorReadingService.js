@@ -49,7 +49,7 @@ function checkTargetsInHtml(html, anchors) {
 }
 
 // ─────────────────────────────────────────────
-// Estrategia 1: fetch + cheerio (sin browser)
+// Strategy 1: fetch + cheerio (no browser)
 // ─────────────────────────────────────────────
 
 async function tryFetchStrategy(url) {
@@ -72,17 +72,17 @@ async function tryFetchStrategy(url) {
 	}
 
 	const $ = cheerio.load(html);
-	if (!$('.ddc-wrapper').length) return null; // sin wrapper → fallback
+	if (!$('.ddc-wrapper').length) return null; // no wrapper → fallback
 
 	const { wellConfigured, misconfigured } = classifyAnchorsFromHtml(html, url);
-	if (!wellConfigured.length && !misconfigured.length) return null; // sin anchors → fallback
+	if (!wellConfigured.length && !misconfigured.length) return null; // no anchors → fallback
 
 	const anchors = checkTargetsInHtml(html, wellConfigured);
 	return { anchors, misconfiguredAnchors: misconfigured };
 }
 
 // ─────────────────────────────────────────────
-// Estrategia 2: Playwright — solo DOM, sin click ni scroll
+// Strategy 2: Playwright — DOM only, no clicks or scrolls
 // ─────────────────────────────────────────────
 
 async function tryPlaywrightStrategy(url, options = {}) {
@@ -111,7 +111,7 @@ async function tryPlaywrightStrategy(url, options = {}) {
 		try {
 			await page.waitForSelector('.ddc-wrapper', { timeout: 10000 });
 		} catch {
-			return { anchors: [], misconfiguredAnchors: [], error: 'No se encontró .ddc-wrapper' };
+			return { anchors: [], misconfiguredAnchors: [], error: '.ddc-wrapper not found' };
 		}
 
 		// Extraer links desde .ddc-wrapper (sin aislar el DOM)
@@ -166,14 +166,14 @@ async function tryPlaywrightStrategy(url, options = {}) {
 // ─────────────────────────────────────────────
 
 export const extractAndValidateAnchors = async (url, options = {}) => {
-	// Estrategia 1: rápida, sin browser
+	// Strategy 1: fast, no browser
 	try {
 		const result = await tryFetchStrategy(url);
 		if (result) return result;
 	} catch {
-		// fetch falló → continuar al fallback
+		// fetch failed → continue to fallback
 	}
 
-	// Estrategia 2: fallback con Playwright (sin click, sin scroll, sin aislación)
+	// Strategy 2: fallback with Playwright (no clicks, no scrolls, no isolation)
 	return tryPlaywrightStrategy(url, options);
 };

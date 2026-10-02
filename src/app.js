@@ -15,7 +15,7 @@ const PORT = process.env.PORT || 4000;
 
 app.use(express.json({ limit: '5mb' }));
 
-// Servir la carpeta 'public' como archivos estáticos (HTML, CSS, JS)
+// Serve the 'public' folder as static files (HTML, CSS, JS)
 app.use(express.static('public'));
 
 // Ruta antigua desactivada mientras arrancamos text-reading desde cero
@@ -26,7 +26,7 @@ app.use('/api/link-reading', linkReadingRoutes);
 app.use('/api/anchor-reading', anchorReadingRoutes);
 app.use('/api/full-analysis', fullAnalysisRoutes);
 
-// Endpoint para cancelar/detener todos los procesos activos
+// Endpoint to cancel/stop all active processes
 app.post('/api/cancel', async (req, res) => {
   let closed = 0;
   const allSets = [activeBrowsers, activeBrowsersMobile, activeBrowsersLink, activeBrowsersAnchor, activeBrowsersFull];
@@ -36,7 +36,7 @@ app.post('/api/cancel', async (req, res) => {
     }
     set.clear();
   }
-  console.log(`[cancel] Cerrados ${closed} browsers activos`);
+  console.log(`[cancel] Closed ${closed} active browsers`);
   res.json({ cancelled: true, browsersClosed: closed });
 });
 

@@ -10,7 +10,7 @@ export const analyzeContent = async(req, res)=>{
 
         if(!url){
             return res.status(400).json({
-                error: 'Falta la url de la pagina a analizar'
+                error: 'Missing URL of the page to analyze'
             });
         }
 
@@ -24,8 +24,8 @@ export const analyzeContent = async(req, res)=>{
     }
     catch(error){
         res.status(500).json({
-            error: 'No se pudo analizar la URL',
-            detalles: error.message
+            error: 'Could not analyze the URL',
+            details: error.message
         });
     }
 }

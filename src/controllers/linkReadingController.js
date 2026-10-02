@@ -5,13 +5,13 @@ export const linkReadingRun = async (req, res) => {
 	try {
 		const { url, headless, pauseMs } = req.body || {};
 		if (!url) {
-			return res.status(400).type('text/plain').send('falta parámetro: url');
+			return res.status(400).type('text/plain').send('missing parameter: url');
 		}
 		await runLinkReading(url, { headless, pauseMs });
-		// No devolver contenido (por ahora): 204 No Content
+		// Don't return content (for now): 204 No Content
 		return res.status(204).send();
 	} catch (err) {
-		return res.status(500).type('text/plain').send('no se pudo ejecutar link-reading');
+		return res.status(500).type('text/plain').send('could not execute link-reading');
 	}
 };
 

@@ -1,89 +1,89 @@
 // src/examples/laboratorio_texto.js
 
 // ---------------------------------------------------------
-// 🎓 CLASE: VALIDACIÓN ESTRICTA DE CONTENIDO (Texto 1 en Texto 2)
+// 🎓 CLASS: STRICT CONTENT VALIDATION (Text 1 in Text 2)
 // ---------------------------------------------------------
 
-// OBJETIVO: Verificar que lo que el usuario pide (Texto 1) 
-// esté integrado al 100% dentro del contenido de la página (Texto 2).
+// OBJECTIVE: Verify that what the user asks (Text 1) 
+// is integrated at 100% within the page content (Text 2).
 
 // ---------------------------------------------------------
-// 1. LOS INSUMOS (Simulación de la Realidad)
+// 1. THE INPUTS (Simulation of Reality)
 // ---------------------------------------------------------
 
-// TEXTO 1: Lo que tú (el usuario) nos envías en el JSON para buscar.
-// "Quiero saber si estas frases exactas existen en la web".
+// TEXT 1: What you (the user) send us in JSON to search for.
+// "I want to know if these exact phrases exist on the web".
 const LISTA_INPUT_USUARIO = [
     "Bienvenido al Portal de QA",       // Caso A: Existe exacto
-    "Aprende automatización avanzada",  // Caso B: Texto similar pero diferente (queremos que falle)
-    "Copyright 2024"                    // Caso C: Pie de página
+    "Learn advanced automation",  // Case B: Similar but different text (we want it to fail)
+    "Copyright 2024"                    // Case C: Footer
 ];
 
-// TEXTO 2: El contenido REAL que Playwright extrae de la página.
+// TEXT 2: The REAL content that Playwright extracts from the page.
 // Nota: Viene con "ruido" (espacios, enters) que debemos limpiar.
 const CONTENIDO_PAGINA_RAW = `
     Bienvenido al   Portal de    QA    
     
-    Aprende automatización paso a paso.
+    Learn automation step by step.
     Copyright 2024. Todos los derechos reservados.
 `;
 
 
 // ---------------------------------------------------------
-// 2. LA LÓGICA DE NEGOCIO (El Cerebro)
+// 2. BUSINESS LOGIC (The Brain)
 // ---------------------------------------------------------
 
-// Función auxiliar para estandarizar (normalizar) ambos textos
-// para que la comparación sea justa (ignorando espacios invisibles).
+// Helper function to standardize (normalize) both texts
+// so the comparison is fair (ignoring invisible spaces).
 function normalizar(texto) {
     if (!texto) return "";
     return texto
         .replace(/\s+/g, ' ') // Unifica espacios
         .trim()               // Quita bordes
-        .toLowerCase();       // Ignora mayúsculas/minúsculas
+        .toLowerCase();       // Ignore uppercase/lowercase
 }
 
-console.log("--- 🕵️‍♂️ INICIANDO ANÁLISIS QA ---");
+console.log("--- 🕵️‍♂️ STARTING QA ANALYSIS ---");
 
-// PASO A: Preparamos el "Tablero" (Texto 2)
-// Normalizamos el contenido de la página UNA sola vez.
+// STEP A: We prepare the "Board" (Text 2)
+// We normalize page content ONCE.
 const texto2_Pagina = normalizar(CONTENIDO_PAGINA_RAW);
-console.log(`\n📄 CONTENIDO PÁGINA (Normalizado):\n"${texto2_Pagina}"\n`);
+console.log(`\n📄 PAGE CONTENT (Normalized):\n"${texto2_Pagina}"\n`);
 
 
-// PASO B: Verificamos cada petición (Texto 1) contra el Tablero
+// STEP B: We verify each request (Text 1) against the Board
 const reporteQA = LISTA_INPUT_USUARIO.map((texto1_Input) => {
     
     // 1. Normalizamos lo que buscamos (para ser consistentes)
     const buscado = normalizar(texto1_Input);
     
-    // 2. LA PREGUNTA DEL MILLÓN:
-    // ¿El Texto 1 está INTEGRADO completamente en el Texto 2?
+    // 2. THE MILLION DOLLAR QUESTION:
+    // Is Text 1 INTEGRATED completely in Text 2?
     const estaIntegrado = texto2_Pagina.includes(buscado);
 
     // 3. Resultado
     return {
         buscamos: texto1_Input,
         encontrado: estaIntegrado,
-        // Mensaje extra para entender qué pasó
+        // Extra message to understand what happened
         nota: estaIntegrado 
-            ? "✅ ÉXITO: El texto existe íntegramente en la página." 
-            : "❌ FALLO: No se encontró exactamente esa frase."
+            ? "✅ SUCCESS: The text exists entirely on the page."
+            : "❌ FAILED: That phrase was not found exactly.";
     };
 });
 
 
 // ---------------------------------------------------------
-// 3. LA SALIDA (Lo que verá el usuario en Postman/Thunder)
+// 3. THE OUTPUT (What the user will see in Postman/Thunder)
 // ---------------------------------------------------------
-console.log("📊 RESULTADO DEL ANÁLISIS:");
+console.log("📊 ANALYSIS RESULT:");
 console.table(reporteQA);
 
 /* 
-   CONCLUSIÓN PARA EL ALUMNO:
+   CONCLUSION FOR THE STUDENT:
    En el servicio real (scrapeService.js):
-   - LISTA_INPUT_USUARIO vendrá de `req.body.expectedTexts`
-   - CONTENIDO_PAGINA_RAW vendrá de `await page.evaluate(...)`
-   - La lógica del `map` y `normalizar` es la misma.
+   - USER_INPUT_LIST will come from `req.body.expectedTexts`
+   - RAW_PAGE_CONTENT will come from `await page.evaluate(...)`
+   - The logic of `map` and `normalize` is the same.
 */
 

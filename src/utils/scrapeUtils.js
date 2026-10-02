@@ -1,14 +1,14 @@
 /**
  * scrapeUtils.js
- * Extrae y limpia el contenido de .ddc-wrapper usando fetch + cheerio.
- * Sin navegador — funciona con contenido SSR (server-side rendered).
+ * Extracts and cleans .ddc-wrapper content using fetch + cheerio.
+ * No browser — works with SSR (server-side rendered) content.
  */
 
 import { load } from 'cheerio';
 import { buildBrowserHeaders } from './stealth.js';
 import { normalizeText } from './normalization.js';
 
-// Selectores a eliminar dentro del wrapper (inventario, mapas, formularios, UI)
+// Selectors to remove inside the wrapper (inventory, maps, forms, UI)
 const CLEANUP_SELECTORS = [
   "[data-name^='inventory-search-results-page-filters-sort-']",
   "[data-name^='inventory-search-results-facets-']",
@@ -29,8 +29,8 @@ const CLEANUP_SELECTORS = [
 ];
 
 /**
- * Descarga el HTML de la URL y devuelve el objeto $ de cheerio + el html crudo.
- * Usa headers de navegador real para evitar bloqueos.
+ * Downloads the HTML from the URL and returns the cheerio $ object + raw html.
+ * Uses real browser headers to avoid blocks.
  */
 export const fetchPage = async (url) => {
   const headers = buildBrowserHeaders(url);
@@ -44,28 +44,28 @@ export const fetchPage = async (url) => {
 };
 
 /**
- * Extrae el texto limpio del wrapper, expansando acordeones/tabs mediante CSS-override.
- * Con cheerio trabajamos sobre HTML estático, así que los acordeones colapsados
- * simplemente los "abrimos" quitando los atributos que los ocultan.
+ * Extracts clean text from the wrapper, expanding accordions/tabs via CSS override.
+ * With cheerio we work on static HTML, so collapsed accordions
+ * we simply "open" them by removing the attributes that hide them.
  */
 export const extractCleanText = ($, wrapper) => {
-  // Eliminar elementos de inventario / UI
+  // Remove inventory / UI elements
   CLEANUP_SELECTORS.forEach(sel => {
     try { wrapper.find(sel).remove(); } catch {}
   });
 
-  // "Abrir" acordeones: eliminar atributos CSS que ocultan contenido
+  // "Open" accordions: remove CSS attributes that hide content
   wrapper.find('[aria-expanded="false"]').attr('aria-expanded', 'true');
   wrapper.find('[aria-hidden="true"]').attr('aria-hidden', 'false');
   wrapper.find('.collapse').removeClass('collapse');
   wrapper.find('.panel-collapse, .accordion-collapse').addClass('show in');
 
-  // "Abrir" tabs: activar todos los paneles
+  // "Open" tabs: activate all panels
   wrapper.find('.tab-pane').addClass('active show in');
   wrapper.find('[role="tab"]').attr('aria-selected', 'true');
 
-  // Extraer texto: convertir block tags a saltos de línea
-  // Usamos el HTML interno y lo parseamos manualmente para preservar estructura de líneas
+  // Extract text: convert block tags to line breaks
+  // We use the inner HTML and parse it manually to preserve line structure
   const blockTags = new Set(['p', 'div', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
     'section', 'article', 'blockquote', 'tr', 'dt', 'dd', 'figcaption']);
 
@@ -73,8 +73,8 @@ export const extractCleanText = ($, wrapper) => {
   const walk = (el) => {
     if (!el) return;
     if (el.type === 'text') {
-      // Colapsar saltos de línea/tabulaciones dentro del nodo de texto
-      // (son artefactos del HTML fuente, no separadores reales de contenido)
+      // Collapse line breaks/tabs within text node
+      // (they are artifacts of the source HTML, not real content separators)
       const t = (el.data || '').replace(/[\n\r\t]+/g, ' ');
       text += t;
       return;
@@ -93,7 +93,7 @@ export const extractCleanText = ($, wrapper) => {
 };
 
 /**
- * Descarga la página, aísla .ddc-wrapper, limpia y devuelve texto normalizado + metadatos.
+ * Downloads the page, isolates .ddc-wrapper, cleans and returns normalized text + metadata.
  * @param {string} url
  * @returns {{ rawText: string, h1Texts: string[], srOnlyText: string|null, anchors: Array }}
  */
@@ -131,9 +131,9 @@ export const scrapePageContent = async (url) => {
 };
 
 /**
- * Versión mobile: misma extracción pero con UA de iPhone.
- * El contenido SSR es idéntico (el servidor devuelve el mismo HTML).
- * Para diferencias reales de mobile habría que usar viewport/CSS,
+ * Mobile version: same extraction but with iPhone UA.
+ * SSR content is identical (server returns the same HTML).
+ * For real mobile differences would need to use viewport/CSS,
  * pero a nivel de texto el contenido es el mismo.
  */
 export const scrapePageContentMobile = async (url) => {
@@ -159,7 +159,7 @@ export const scrapePageContentMobile = async (url) => {
 };
 
 /**
- * Compara líneas normalizadas de CP contra CO.
+ * Compares normalized CP lines against CO.
  */
 export const compareLines = (normalizedCP, normalizedCO) => {
   const cpLines = normalizedCP.split('\n').filter(l => l.trim().length > 0);

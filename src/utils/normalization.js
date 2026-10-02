@@ -1,4 +1,4 @@
-// Función de normalización compartida (cliente/servidor debería usar esta como fuente de verdad)
+// Shared normalization function (client/server should use this as source of truth)
 
 const BLOCK_TAGS_REGEX = /<(\/)?(address|article|aside|blockquote|br|div|dl|dt|dd|fieldset|figcaption|figure|footer|form|h[1-6]|header|hr|li|main|nav|ol|p|pre|section|table|tbody|thead|tfoot|tr|td|th|ul)\b[^>]*>/gi;
 const HTML_TAG_REGEX = /<[^>]+>/g;

@@ -5,7 +5,7 @@ import { scrapePageContent, compareLines } from '../utils/scrapeUtils.js';
 export const activeBrowsers = new Set();
 
 /**
- * Extrae el texto editorial de la página y lo devuelve normalizado.
+ * Extracts editorial text from the page and returns it normalized.
  */
 export const previewTextReading = async (url) => {
   console.log(`[text-reading] Fetch+parse: ${url}`);
@@ -17,7 +17,7 @@ export const previewTextReading = async (url) => {
 };
 
 /**
- * Extrae CP, normaliza CO y compara línea por línea.
+ * Extracts CP, normalizes CO and compares line by line.
  */
 export const compareTextReading = async (url, coText) => {
   console.log(`[text-reading] Compare fetch+parse: ${url}`);

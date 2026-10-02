@@ -1,12 +1,12 @@
 import { chromium } from "playwright";
 
 /**
- * Servicio para investigar una página web con verificación de texto mejorada.
- * Basado en la lógica de v4.py para coinc idencias exactas y parciales.
- * @param {string} url - La dirección web a visitar.
- * @param {array<string>} selectorsToRemove - selectores como clases, styles o js que se eliminaran
- * @param {array<string>} expectedTexts - textos esperados para comparar
- * @return {Promise<object>}- resultados de comparación
+ * Service to investigate a web page with improved text verification.
+ * Based on v4.py logic for exact and partial matches.
+ * @param {string} url - The web address to visit.
+ * @param {array<string>} selectorsToRemove - selectors like classes, styles or js that will be removed
+ * @param {array<string>} expectedTexts - expected texts to compare
+ * @return {Promise<object>}- comparison results
  */
 
 export const scrapePage = async (url, selectorsToRemove = [], expectedTexts = [])=> {
@@ -15,7 +15,7 @@ export const scrapePage = async (url, selectorsToRemove = [], expectedTexts = []
         browser = await chromium.launch({ headless: true });
         const context = await browser.newContext();
         const page = await context.newPage();
-        // Timeouts más relajados por sitios pesados
+        // More relaxed timeouts for heavy sites
         page.setDefaultTimeout(90000);
         page.setDefaultNavigationTimeout(90000);
         
@@ -49,7 +49,7 @@ export const scrapePage = async (url, selectorsToRemove = [], expectedTexts = []
             "[aria-labelledby='ws-inv-filters-modal-label']"
         ];
 
-        // Selectores adicionales para páginas tipo inventario E2 (se aplican condicionalmente)
+        // Additional selectors for E2 inventory-type pages (applied conditionally)
         const extraInventorySelectors = [
             // UI de inventario (buscador, filtros, facetas, listado)
             '.ws-inv-text-search',
@@ -66,7 +66,7 @@ export const scrapePage = async (url, selectorsToRemove = [], expectedTexts = []
             '#inventory-data-bus2-app-root'
         ];
 
-        // Detectar si la página actual es del tipo inventario E2 y fusionar selectores
+        // Detect if the current page is E2 inventory type and merge selectors
         const hasInventoryE2 = await page.$("[data-name^='inventory-search-results']")
             || await page.$('.ws-inv-text-search')
             || await page.$('.ws-inv-filters');
@@ -78,12 +78,12 @@ export const scrapePage = async (url, selectorsToRemove = [], expectedTexts = []
         ];
 
         await page.evaluate((selectors) => {
-            // 1) Remover UI general y de inventario según selectores
+            // 1) Remove general and inventory UI according to selectors
             selectors.forEach(selector => {
                 document.querySelectorAll(selector).forEach(el=>el.remove());
             });
 
-            // 2) Remover el bloque de inventario SOLO si no contiene contenido editorial
+            // 2) Remove the inventory block ONLY if it doesn't contain editorial content
             const isInventoryUI = (el) => !!(el.closest('.ws-inv-text-search')
                 || el.closest('.ws-inv-filters')
                 || el.closest('.srp-wrapper-facets')
@@ -104,16 +104,16 @@ export const scrapePage = async (url, selectorsToRemove = [], expectedTexts = []
                 const headings = Array.from(w.querySelectorAll('h1,h2,h3'))
                     .filter(el => !isInventoryUI(el))
                     .map(el => (el.innerText || '').trim())
-                    .filter(txt => txt.length >= 10); // evitar títulos vacíos o muy cortos
+                    .filter(txt => txt.length >= 10); // avoid empty or very short titles
                 const headingCount = headings.length;
-                // Regla: eliminar inventario si no hay más de un encabezado significativo
+                // Rule: remove inventory if there is not more than one significant heading
                 if (headingCount <= 1) {
                     w.remove();
                 }
             });
         }, finalSelectors);
         
-        // Extraer contenido editorial en todo .ddc-wrapper (arriba/abajo del inventario), excluyendo UI e INVENTARIO
+        // Extract editorial content across .ddc-wrapper (above/below inventory), excluding UI and INVENTORY
         const cleanedContent = await page.evaluate(() => {
             const root = document.querySelector('.ddc-wrapper') || document.body;
             const isInventoryUI = (el) => !!(el.closest('.ws-inv-text-search')
@@ -125,7 +125,7 @@ export const scrapePage = async (url, selectorsToRemove = [], expectedTexts = []
                 || el.closest('[data-name^="inventory-search-results-page-primary-banner-"]')
                 || el.closest('.content-alert-banner')
                 || el.closest('.ws-tps-placeholder'));
-            // Excluir SOLO el contenido dentro del listado de inventario, sin excluir el wrapper combinado
+            // Exclude ONLY content within the inventory listing, without excluding the combined wrapper
             const isInventoryContent = (el) => !!(el.closest('.srp-wrapper-listing')
                 || el.closest('[data-name="srp-wrapper-listing-inner-inventory-results"]')
                 || el.closest('[data-name="srp-wrapper-listing-inner-inventory-paging"]')
@@ -150,7 +150,7 @@ export const scrapePage = async (url, selectorsToRemove = [], expectedTexts = []
                 if (txt) {
                     pushLine(txt);
                     if (/^H[1-6]$/i.test(el.tagName)) {
-                        // Capturar texto suelto inmediatamente después del heading (hermanos TEXT_NODE)
+                        // Capture loose text immediately after the heading (TEXT_NODE siblings)
                         let sib = el.nextSibling;
                         let collected = '';
                         while (sib && sib.nodeType === Node.TEXT_NODE) {
@@ -164,7 +164,7 @@ export const scrapePage = async (url, selectorsToRemove = [], expectedTexts = []
                     }
                 }
             });
-            // Capturar nodos de texto sueltos dentro de contenedores editoriales
+            // Capture loose text nodes within editorial containers
             const contentContainers = Array.from(root.querySelectorAll(
                 '.text-content-container, [data-widget-name="content-default"], [data-widget-name="content-raw"], .content-default, .mod .content, .content'
             )).filter(el => !isInventoryUI(el) && !isInventoryContent(el));
@@ -186,60 +186,60 @@ export const scrapePage = async (url, selectorsToRemove = [], expectedTexts = []
         });
 
         // -------------------------------------------------------------
-        // NORMALIZACIÓN Y COMPARACIÓN (Enfoque v4.py)
+        // NORMALIZATION AND COMPARISON (v4.py approach)
         // -------------------------------------------------------------
         
-        // Normalizar como v4.py: trim, guiones, pero PRESERVAR saltos de línea
+        // Normalize like v4.py: trim, hyphens, but PRESERVE line breaks
         const normalizar = (texto) => {
             if (!texto) return "";
             return texto
                 .trim()
                 .replace(/—/g, '-')
                 .replace(/–/g, '-')
-                .replace(/[ \t]+/g, ' ')  // Solo unificar espacios y tabs, NO newlines
-                .replace(/\r\n/g, '\n')   // Normalizar line endings
+                .replace(/[ \t]+/g, ' ')  // Only unify spaces and tabs, NO newlines
+                .replace(/\r\n/g, '\n')   // Normalize line endings
                 .toLowerCase();
         };
         
-        // Normalización para comparación (sin saltos de línea)
+        // Normalization for comparison (no line breaks)
         const normalizarParaComparacion = (texto) => {
             if (!texto) return "";
             return texto
                 .trim()
                 .replace(/—/g, '-')
                 .replace(/–/g, '-')
-                .replace(/\s+/g, ' ')  // Convertir todos los espacios (incluidos newlines) en espacios simples
+                .replace(/\s+/g, ' ')  // Convert all spaces (including newlines) to single spaces
                 .toLowerCase();
         };
 
-        // Buscar snippet alrededor de coincidencia en texto original
+        // Find snippet around match in original text
         const extractMatchContext = (cleanedText, normalizedText, targetNorm, charsAround = 300) => {
             const idx = normalizedText.indexOf(targetNorm);
             if (idx === -1) return null;
             
-            // Mapear posición aproximada al texto original
+            // Map approximate position to original text
             const startIdx = Math.max(0, idx - charsAround);
             const endIdx = Math.min(normalizedText.length, idx + targetNorm.length + charsAround);
             
-            // Extraer del texto original sin normalizar (aproximación por caracteres)
+            // Extract from original text without normalizing (character approximation)
             const startOrig = Math.max(0, startIdx);
             const endOrig = Math.min(cleanedText.length, endIdx + 100);
             
-            // Devolver con saltos de línea preservados
+            // Return with line breaks preserved
             return cleanedText.substring(startOrig, endOrig).trim();
         };
 
-        // Encontrar la oración completa que contiene las diferencias
+        // Find the complete sentence that contains the differences
         const encontrarOracionConDiferencias = (textoEsperado, textoPagina, cleanedContent) => {
-            // Normalizar para comparación
+            // Normalize for comparison
             const esperadoNorm = normalizarParaComparacion(textoEsperado);
             const paginaNorm = normalizarParaComparacion(cleanedContent);
             
-            // Dividir en palabras para comparar
+            // Split into words for comparison
             const palabrasEsperadas = esperadoNorm.split(' ');
             const palabrasPagina = paginaNorm.split(' ');
             
-            // Encontrar la primera palabra diferente
+            // Find the first different word
             let primeraDiferencia = -1;
             for (let i = 0; i < palabrasEsperadas.length; i++) {
                 if (!palabrasPagina.includes(palabrasEsperadas[i])) {
@@ -249,16 +249,16 @@ export const scrapePage = async (url, selectorsToRemove = [], expectedTexts = []
             }
             
             if (primeraDiferencia === -1) {
-                // No hay diferencias de palabras individuales, buscar diferencias de orden
+                // No individual word differences, look for order differences
                 return null;
             }
             
-            // Extraer la oración completa del texto esperado que contiene la diferencia
+            // Extract the complete sentence from expected text containing the difference
             const palabrasOriginales = textoEsperado.split(/\s+/);
             const palabraDiferente = palabrasOriginales[primeraDiferencia];
             
-            // Buscar delimitadores de oración (. ! ? o saltos de línea dobles)
-            // Incluir saltos de línea simples como separadores para títulos sin punto
+            // Find sentence delimiters (. ! ? or double line breaks)
+            // Include single line breaks as separators for titles without periods
             const oraciones = textoEsperado.split(/(?<=[.!?])\s+|\n+/);
             let oracionEsperada = null;
             
@@ -273,14 +273,14 @@ export const scrapePage = async (url, selectorsToRemove = [], expectedTexts = []
                 oracionEsperada = textoEsperado; // Fallback
             }
             
-            // Buscar la oración equivalente en la página
-            // Buscamos las primeras palabras de la oración para ubicarla
+            // Find the equivalent sentence on the page
+            // We search for the first words of the sentence to locate it
             const primerasPalabrasOracion = normalizarParaComparacion(oracionEsperada).split(' ').slice(0, 5).join(' ');
             const idx = paginaNorm.indexOf(primerasPalabrasOracion);
             
             let oracionPagina = null;
             if (idx !== -1) {
-                // Encontrar los límites de la oración en el contenido original
+                // Find the sentence boundaries in original content
                 const oracionesPagina = cleanedContent.split(/(?<=[.!?])\s+|\n+/);
                 for (const oracion of oracionesPagina) {
                     const oracionNorm = normalizarParaComparacion(oracion);
@@ -293,31 +293,31 @@ export const scrapePage = async (url, selectorsToRemove = [], expectedTexts = []
             
             return {
                 oracionEsperada,
-                oracionPagina: oracionPagina || '[No se encontró la oración equivalente]'
+                oracionPagina: oracionPagina || '[The equivalent sentence was not found]'
             };
         };
 
         const pageTextNorm = normalizarParaComparacion(cleanedContent);
 
-        // Analizar cada texto esperado (enfoque v4.py)
+        // Analyze each expected text (v4.py approach)
         const resultados = expectedTexts.map(textoEsperado => {
             const esperadoNorm = normalizarParaComparacion(textoEsperado);
             
             if (!esperadoNorm) {
                 return {
                     texto: textoEsperado,
-                    estado: "⚪ TEXTO VACÍO",
-                    mensaje: "El texto esperado está vacío."
+                    estado: "⚪ EMPTY TEXT",
+                    mensaje: "The expected text is empty."
                 };
             }
 
-            // CASO 1: Coincidencia exacta (como v4.py)
+            // CASE 1: Exact match (like v4.py)
             if (pageTextNorm.includes(esperadoNorm)) {
                 const contexto = extractMatchContext(cleanedContent, pageTextNorm, esperadoNorm, 150);
                 return {
                     texto: textoEsperado,
-                    estado: "🟢 INTEGRADO COMPLETO",
-                    mensaje: "El texto se encuentra exactamente en el contenido.",
+                    estado: "🟢 FULLY INTEGRATED",
+                    mensaje: "The text is found exactly in the content.",
                     parrafo_texto1_esperado: textoEsperado,
                     parrafo_pagina_encontrado: contexto || textoEsperado,
                     frase_en_texto1: textoEsperado,
@@ -325,7 +325,7 @@ export const scrapePage = async (url, selectorsToRemove = [], expectedTexts = []
                 };
             }
 
-            // CASO 2: Coincidencia parcial (50% inicial como v4.py)
+            // CASE 2: Partial match (50% initial like v4.py)
             const cutoffLen = esperadoNorm.length;
             if (cutoffLen > 15) {
                 const halfLen = Math.floor(cutoffLen * 0.5);
@@ -334,23 +334,23 @@ export const scrapePage = async (url, selectorsToRemove = [], expectedTexts = []
                 if (pageTextNorm.includes(startSnippet)) {
                     const contexto = extractMatchContext(cleanedContent, pageTextNorm, startSnippet, 300);
                     
-                    // Encontrar las oraciones específicas con diferencias
+                    // Find specific sentences with differences
                     const diferencias = encontrarOracionConDiferencias(textoEsperado, cleanedContent, cleanedContent);
                     
                     return {
                         texto: textoEsperado,
-                        estado: "🟡 TEXTO INCOMPLETO",
-                        mensaje: "Se encontró el inicio del párrafo pero no está completo o tiene diferencias.",
+                        estado: "🟡 INCOMPLETE TEXT",
+                        mensaje: "The beginning of the paragraph was found but it is not complete or has differences.",
                         parrafo_texto1_esperado: textoEsperado,
-                        parrafo_pagina_encontrado: contexto || '[No se pudo extraer el contexto de la página]',
+                        parrafo_pagina_encontrado: contexto || '[Could not extract the context from the page]',
                         frase_en_texto1: diferencias?.oracionEsperada || textoEsperado,
                         frase_en_pagina: diferencias?.oracionPagina || contexto
                     };
                 }
             }
 
-            // CASO 3: No encontrado
-            // Intentar encontrar alguna palabra clave para dar contexto
+            // CASE 3: Not found
+            // Try to find some keywords to provide context
             const palabrasClave = esperadoNorm.split(' ').filter(p => p.length > 5).slice(0, 5);
             let mejorContexto = null;
             let palabraEncontrada = null;
@@ -365,24 +365,24 @@ export const scrapePage = async (url, selectorsToRemove = [], expectedTexts = []
             
             return {
                 texto: textoEsperado,
-                estado: "🔴 NO INTEGRADO",
+                estado: "🔴 NOT INTEGRATED",
                 mensaje: mejorContexto ? 
-                    "El párrafo no se encontró completo. Se muestra contexto donde aparece alguna palabra similar." :
-                    "El texto no aparece en el contenido de la página.",
+                    "The paragraph was not found complete. Context is shown where some similar word appears." :
+                    "The text does not appear in the page content.",
                 parrafo_texto1_esperado: textoEsperado,
-                parrafo_pagina_encontrado: mejorContexto || '[El texto no aparece en el bloque editorial de la página]',
+                parrafo_pagina_encontrado: mejorContexto || '[The text does not appear in the editorial block of the page]',
                 frase_en_texto1: palabraEncontrada || '[N/A]',
                 frase_en_pagina: mejorContexto ? mejorContexto.substring(0, 200) : '[N/A]'
             };
         });
 
         return { 
-            title: 'Análisis de Contenido', 
+            title: 'Content Analysis', 
             resultados_comparacion: resultados
         };
         
     } catch(error){
-        console.error('Error en scrapeServiceV2:', error);
+        console.error('Error in scrapeServiceV2:', error);
         throw error;
     } finally{
         if(browser){
@@ -391,7 +391,7 @@ export const scrapePage = async (url, selectorsToRemove = [], expectedTexts = []
     }
 }
 
-// Extrae únicamente el contenido limpio (línea a línea) sin realizar comparaciones
+// Extract only clean content (line by line) without performing comparisons
 export const extractCleanContent = async (url, selectorsToRemove = []) => {
     let browser;
     try{
@@ -560,7 +560,7 @@ export const extractCleanContent = async (url, selectorsToRemove = []) => {
     }
 }
 
-// Comparación por líneas (CO vs CP) con alineación secuencial y diffs por oración
+// Line-by-line comparison (CO vs CP) with sequential alignment and sentence diffs
 export const compareLines = async (url, expectedText, selectorsToRemove = []) => {
     // Helpers locales
     const normalizeLine = (s) => {
@@ -591,7 +591,7 @@ export const compareLines = async (url, expectedText, selectorsToRemove = []) =>
         for (const s of coSents) {
             const sNorm = normalizeLine(s);
             if (!cpAllNorm.includes(sNorm)) {
-                // Elegir la oración de CP con mayor solapamiento de palabras
+                // Choose the sentence from CP with the greatest word overlap
                 let best = '';
                 let bestSc = -1;
                 for (const cs of cpSents) {
@@ -601,11 +601,11 @@ export const compareLines = async (url, expectedText, selectorsToRemove = []) =>
                 return { sentence_co: s.trim(), sentence_cp: (best || '').trim() };
             }
         }
-        // Si todas las oraciones de CO están incluidas, devolver la primera
+        // If all sentences from CO are included, return the first one
         return { sentence_co: (coSents[0] || co).trim(), sentence_cp: (cpSents[0] || cp).trim() };
     };
 
-    // Obtener contenido limpio de página
+    // Get clean page content
     const { cleaned_text } = await extractCleanContent(url, selectorsToRemove);
 
     const coLinesRaw = splitLines(expectedText);
