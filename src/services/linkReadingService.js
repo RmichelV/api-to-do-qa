@@ -1,5 +1,5 @@
 ﻿import { buildBrowserHeaders, getRandomUserAgent, randomDelay } from '../utils/stealth.js';
-import { scrapePageContent, scrapePageContentMobile } from '../utils/scrapeUtils.js';
+import { scrapePageContent } from '../utils/scrapeUtils.js';
 
 // Kept for cancel compatibility
 export const activeBrowsersLink = new Set();
@@ -17,14 +17,6 @@ export const extractH1Data = async (url) => {
   console.log(`[link-reading] Fetch+parse H1: ${url}`);
   const { h1Texts, srOnlyText } = await scrapePageContent(url);
   console.log(`[link-reading] H1s: ${h1Texts.length}, sr-only: ${srOnlyText ? 'yes' : 'no'}`);
-  return { h1Texts, srOnlyText };
-};
-
-// Extrae H1 y sr-only H1 en mobile (sin browser)
-export const extractH1DataMobile = async (url) => {
-  console.log(`[link-reading] Fetch+parse H1 (mobile): ${url}`);
-  const { h1Texts, srOnlyText } = await scrapePageContentMobile(url);
-  console.log(`[link-reading] H1s (mobile): ${h1Texts.length}, sr-only: ${srOnlyText ? 'yes' : 'no'}`);
   return { h1Texts, srOnlyText };
 };
 

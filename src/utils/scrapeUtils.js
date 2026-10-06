@@ -147,15 +147,6 @@ export const scrapePageContentMobile = async (url) => {
   const html = await res.text();
   const $ = load(html);
 
-  // H1 visible (fuera o dentro del wrapper, excluyendo sr-only)
-  const h1Texts = [];
-  $('h1').not('.sr-only').each((_, el) => {
-    const t = $(el).text().trim();
-    if (t) h1Texts.push(t);
-  });
-  const srOnlyEl = $('h1.sr-only').first();
-  const srOnlyText = srOnlyEl.length ? srOnlyEl.text().trim() || null : null;
-
   let wrapper = $('.ddc-wrapper').first();
   // Fallback: algunos servidores entregan HTML diferente para mobile
   if (!wrapper.length) {
@@ -164,7 +155,7 @@ export const scrapePageContentMobile = async (url) => {
   }
 
   const rawText = extractCleanText($, wrapper);
-  return { rawText, h1Texts, srOnlyText };
+  return rawText;
 };
 
 /**
