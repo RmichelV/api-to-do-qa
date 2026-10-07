@@ -88,6 +88,7 @@
             <span class="btn-action__icon">⚓</span>
             <span class="btn-action__label">Anchors</span>
             <span class="btn-action__sub">Internal</span>
+            <span class="btn-action__sub">Runs separately · not included in Run All</span>
           </button>
         </div>
       </section>
@@ -152,7 +153,7 @@
     </main>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script>
-      // --- ABORT CONTROLLERS para cancelar fetch requests ---
+      // --- ABORT CONTROLLERS for cancelling fetch requests ---
       let activeAbortControllers = [];
 
       function createAbortController() {
@@ -247,7 +248,7 @@
       }
 
       async function stopAllProcesses() {
-        // 1. Cancelar todos los fetch activos en el frontend
+        // 1. Cancel all active frontend fetch requests
         activeAbortControllers.forEach((ac) => {
           try {
             ac.abort();
@@ -255,12 +256,12 @@
         });
         activeAbortControllers = [];
 
-        // 2. Pedir al backend que cierre todos los browsers
+        // 2. Ask the backend to close all browsers
         try {
           await fetch("/api/cancel", { method: "POST" });
         } catch {}
 
-        // 3. Actualizar paneles con mensaje de cancelación
+        // 3. Update panels with a cancellation message
         const cancelMsg = "⏹️ Process stopped by user";
         [
           "cp-output",
@@ -311,7 +312,7 @@
           return;
         }
 
-        // Controlar visibilidad de paneles según checkbox
+        // Control panel visibility based on the checkbox
         const showContent = document.getElementById("show-content").checked;
         cpPanel.style.display = showContent ? "" : "none";
         coPanel.style.display = showContent ? "" : "none";
@@ -336,7 +337,7 @@
           if (!resp.ok)
             throw new Error((data && data.error) || resp.statusText);
 
-          // Mostrar CP y CO normalizados del backend
+          // Show the normalized CP and CO returned by the backend
           cpDiv.textContent = (data.cp && data.cp.text) || "";
           coDiv.textContent = (data.co && data.co.text) || "";
 
@@ -389,7 +390,7 @@
           return;
         }
 
-        // Siempre mostrar paneles mobile al ejecutar
+        // Always show mobile panels when running
         const showContent = document.getElementById("show-content").checked;
         cpPanel.style.display = showContent ? "" : "none";
         coPanel.style.display = showContent ? "" : "none";
@@ -445,7 +446,7 @@
         }
       }
 
-      // --- LINK READING: Leer enlaces + H1 en un solo navegador ---
+      // --- LINK READING: Read links + H1 in a single browser ---
       async function runLinkReading() {
         const url = document.getElementById("url").value;
         const anchorsDiv = document.getElementById("anchors-output");
@@ -458,7 +459,6 @@
         document.getElementById("h1-details").textContent = "";
         const ac = createAbortController();
         try {
-          // Un solo navegador extrae anchors + H1
           const resp = await fetch("/api/link-reading/anchors-and-h1", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -469,8 +469,28 @@
           if (!resp.ok)
             throw new Error((data && data.error) || resp.statusText);
 
-          // Renderizar H1
-          renderH1Panel(data.h1Texts || [], data.srOnlyText || null);
+          const h1Comparison = data.comparison || {
+            same: true,
+            desktop: { h1Texts: data.h1Texts || [], srOnlyText: data.srOnlyText || null },
+            mobile: { h1Texts: data.mobile && data.mobile.h1Texts ? data.mobile.h1Texts : [], srOnlyText: data.mobile && data.mobile.srOnlyText ? data.mobile.srOnlyText : null },
+          };
+
+          if (!h1Comparison.same) {
+            const details = [];
+            const desktopH1 = h1Comparison.desktop && h1Comparison.desktop.h1Texts ? h1Comparison.desktop.h1Texts : [];
+            const mobileH1 = h1Comparison.mobile && h1Comparison.mobile.h1Texts ? h1Comparison.mobile.h1Texts : [];
+            const desktopSrOnly = h1Comparison.desktop && h1Comparison.desktop.srOnlyText ? h1Comparison.desktop.srOnlyText : null;
+            const mobileSrOnly = h1Comparison.mobile && h1Comparison.mobile.srOnlyText ? h1Comparison.mobile.srOnlyText : null;
+            if (desktopH1.length) details.push(`Desktop H1: ${desktopH1.map((t) => escapeHtml(t)).join(' | ')}`);
+            if (mobileH1.length) details.push(`Mobile H1: ${mobileH1.map((t) => escapeHtml(t)).join(' | ')}`);
+            if (desktopSrOnly) details.push(`Desktop sr-only: ${escapeHtml(desktopSrOnly)}`);
+            if (mobileSrOnly) details.push(`Mobile sr-only: ${escapeHtml(mobileSrOnly)}`);
+            document.getElementById("h1-summary").textContent = "🔴 Mobile H1 differs from desktop H1";
+            document.getElementById("h1-summary").className = "h1-summary status-fail";
+            document.getElementById("h1-details").innerHTML = details.join("<br>");
+          } else {
+            renderH1Panel(h1Comparison.desktop && h1Comparison.desktop.h1Texts ? h1Comparison.desktop.h1Texts : (data.h1Texts || []), h1Comparison.desktop && h1Comparison.desktop.srOnlyText ? h1Comparison.desktop.srOnlyText : (data.srOnlyText || null));
+          }
 
           const anchors = data.anchors || [];
           if (!anchors.length) {
@@ -480,7 +500,7 @@
             return;
           }
           anchorsDiv.innerHTML = buildAnchorsTable(anchors);
-          // Pedir estados HTTP (sin navegador)
+          // Request HTTP statuses (without a browser)
           try {
             const statuses = await updateLinkStatuses(anchors.map((a) => a.url));
             const withStatus = anchors.map((a, idx) => ({
@@ -760,7 +780,7 @@
         renderH1Panel(data.h1Texts || [], data.srOnlyText || null);
       }
 
-      // Renderiza el panel H1 a partir de datos ya disponibles (sin llamada a la API)
+      // Render the H1 panel from data that is already available (without an API call)
       function renderH1Panel(h1Texts, srOnlyText) {
         const h1Summary = document.getElementById("h1-summary");
         const h1Details = document.getElementById("h1-details");
@@ -803,7 +823,7 @@
         h1Details.textContent = `H1: ${escapeHtml(h1Texts[0])}`;
       }
 
-      // --- ANCHOR READING: Validar anchor links internos (#seccion) ---
+      // --- ANCHOR READING: Validate internal anchor links (#section) ---
       async function runAnchorReading() {
         const url = document.getElementById("url").value;
         const anchorPanel = document.getElementById("anchor-panel");
@@ -832,7 +852,7 @@
           const anchors = data.anchors || [];
           const misconfiguredAnchors = data.misconfiguredAnchors || [];
 
-          // Si no hay ningún tipo de anchor
+          // If no anchors of either type were found
           if (!anchors.length && !misconfiguredAnchors.length) {
             anchorDiv.textContent = "No anchors were found in .ddc-wrapper";
             return;
@@ -840,7 +860,7 @@
 
           let htmlContent = "";
 
-          // Mostrar anchors bien configurados
+          // Show properly configured anchors
           if (anchors.length > 0) {
             const totalExists = anchors.filter((a) => a.targetExists).length;
             const summaryBadge = totalExists === anchors.length ? "🟢" : "🔴";
@@ -853,7 +873,7 @@
             `;
           }
 
-          // Mostrar anchors mal configurados
+          // Show misconfigured anchors
           if (misconfiguredAnchors.length > 0) {
             htmlContent += `
               <div style="margin-top:0.8rem;padding-top:0.6rem;border-top:1px solid #fdba74">
@@ -1006,7 +1026,7 @@
           .join("");
       }
 
-      // Tabla de links con status ya incluido (para Run All)
+      // Links table with status already included (for Run All)
       function buildAnchorsTableWithStatus(anchors) {
         const rows = anchors
           .map((a, idx) => {
@@ -1023,7 +1043,7 @@
         return `<table class="anchors-table"><thead><tr><th>#</th><th>Text</th><th>URL</th><th>Type</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
       }
 
-      // Helper compartido para renderizar resumen de comparación
+      // Shared helper to render the comparison summary
       function renderCompareResult(data, summaryId, detailsId) {
         const complete = data.result && data.result.complete;
         const badge = complete ? "🟢 COMPLETE" : "🔴 INCOMPLETE";
@@ -1042,7 +1062,7 @@
         document.getElementById(detailsId).innerHTML = complete ? "" : lines;
       }
 
-      // --- RUN ALL: análisis completo en 2 navegadores en paralelo ---
+      // --- RUN ALL: Complete analysis in two browsers in parallel ---
       async function runFullAnalysis() {
         const url = document.getElementById("url").value;
         const coInput = document.getElementById("co").value;
@@ -1083,11 +1103,11 @@
           const desktop = data.desktop || {};
           const mobile = data.mobile || {};
 
-          // CP y CO desktop
+          // Desktop CP and CO
           document.getElementById("cp-output").textContent = (desktop.cp && desktop.cp.text) || "";
           document.getElementById("co-output").textContent = (desktop.co && desktop.co.text) || (coInput ? "" : "—");
 
-          // Comparación desktop
+          // Desktop comparison
           if (coInput && desktop.result) {
             renderCompareResult(desktop, "compare-summary", "compare-details");
           } else {
@@ -1095,11 +1115,11 @@
               ? "Comparison data not available" : "No CO provided — comparison skipped";
           }
 
-          // CP y CO mobile
+          // Mobile CP and CO
           document.getElementById("cp-mobile-output").textContent = (mobile.cp && mobile.cp.text) || "";
           document.getElementById("co-mobile-output").textContent = (mobile.co && mobile.co.text) || (coInput ? "" : "—");
 
-          // Comparación mobile
+          // Mobile comparison
           if (coInput && mobile.result) {
             renderCompareResult(mobile, "compare-mobile-summary", "compare-mobile-details");
           } else {
@@ -1107,10 +1127,31 @@
               ? "Comparison data not available" : "No CO provided — comparison skipped";
           }
 
-          // H1
-          renderH1Panel(desktop.h1Texts || [], desktop.srOnlyText || null);
+          // H1 desktop + mobile comparison from backend service
+          const h1Comparison = data.h1Comparison || {
+            same: true,
+            desktop: { h1Texts: desktop.h1Texts || [], srOnlyText: desktop.srOnlyText || null },
+            mobile: { h1Texts: mobile.h1Texts || [], srOnlyText: mobile.srOnlyText || null },
+          };
 
-          // Links (status ya embebido)
+          if (!h1Comparison.same) {
+            const details = [];
+            const desktopH1 = h1Comparison.desktop && h1Comparison.desktop.h1Texts ? h1Comparison.desktop.h1Texts : [];
+            const mobileH1 = h1Comparison.mobile && h1Comparison.mobile.h1Texts ? h1Comparison.mobile.h1Texts : [];
+            const desktopSrOnly = h1Comparison.desktop && h1Comparison.desktop.srOnlyText ? h1Comparison.desktop.srOnlyText : null;
+            const mobileSrOnly = h1Comparison.mobile && h1Comparison.mobile.srOnlyText ? h1Comparison.mobile.srOnlyText : null;
+            if (desktopH1.length) details.push(`Desktop H1: ${desktopH1.map((t) => escapeHtml(t)).join(' | ')}`);
+            if (mobileH1.length) details.push(`Mobile H1: ${mobileH1.map((t) => escapeHtml(t)).join(' | ')}`);
+            if (desktopSrOnly) details.push(`Desktop sr-only: ${escapeHtml(desktopSrOnly)}`);
+            if (mobileSrOnly) details.push(`Mobile sr-only: ${escapeHtml(mobileSrOnly)}`);
+            document.getElementById("h1-summary").textContent = "🔴 Mobile H1 differs from desktop H1";
+            document.getElementById("h1-summary").className = "h1-summary status-fail";
+            document.getElementById("h1-details").innerHTML = details.join("<br>");
+          } else {
+            renderH1Panel(h1Comparison.desktop && h1Comparison.desktop.h1Texts ? h1Comparison.desktop.h1Texts : (desktop.h1Texts || []), h1Comparison.desktop && h1Comparison.desktop.srOnlyText ? h1Comparison.desktop.srOnlyText : (desktop.srOnlyText || null));
+          }
+
+          // Links (status is already included)
           const anchors = desktop.anchors || [];
           if (!anchors.length) {
             document.getElementById("anchors-output").textContent = "No visible links were found in .ddc-wrapper";
@@ -1132,7 +1173,7 @@
       }
 
       function resetAll() {
-        // Detener procesos activos primero
+        // Stop active processes first
         activeAbortControllers.forEach((ac) => {
           try {
             ac.abort();
@@ -1143,15 +1184,15 @@
           fetch("/api/cancel", { method: "POST" });
         } catch {}
 
-        // Limpiar inputs
+        // Clear inputs
         document.getElementById("url").value = "";
         document.getElementById("co").value = "";
         document.getElementById("check-links").value = "";
 
-        // Restaurar checkboxes a su estado original
+        // Restore checkboxes to their initial state
         document.getElementById("show-content").checked = false;
 
-        // Restaurar paneles desktop
+        // Restore desktop panels
         document.getElementById("cp-panel").style.display = "";
         document.getElementById("co-panel").style.display = "";
         document.getElementById("cp-output").textContent =
@@ -1161,7 +1202,7 @@
         document.getElementById("compare-summary").textContent = "Pending…";
         document.getElementById("compare-details").textContent = "";
 
-        // Ocultar paneles mobile y restaurar texto
+        // Hide mobile panels and restore their text
         document.getElementById("cp-mobile-panel").style.display = "none";
         document.getElementById("co-mobile-panel").style.display = "none";
         document.getElementById("compare-mobile-panel").style.display = "none";
@@ -1174,7 +1215,7 @@
           "Pending…";
         document.getElementById("compare-mobile-details").textContent = "";
 
-        // Restaurar paneles de links y H1
+        // Restore links and H1 panels
         document.getElementById("anchors-output").textContent =
           "Not extracted yet…";
         document.getElementById("link-check-output").innerHTML = "";
@@ -1182,16 +1223,16 @@
         document.getElementById("h1-summary").className = "h1-summary";
         document.getElementById("h1-details").innerHTML = "";
 
-        // Restaurar panel anchor
+        // Restore the anchor panel
         document.getElementById("anchor-panel").style.display = "none";
         document.getElementById("anchor-section-header").style.display = "none";
         document.getElementById("anchor-output").textContent =
           "Not evaluated yet…";
 
-        // Limpiar checklist QA
+        // Clear the QA checklist
         resetTodoList();
 
-        // Cerrar panel QA Todo
+        // Close the QA Todo panel
         const todoPanel = document.getElementById("todo-panel");
         if (todoPanel) todoPanel.style.display = "none";
         const appMain = document.getElementById("app-main");

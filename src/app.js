@@ -18,7 +18,7 @@ app.use(express.json({ limit: '5mb' }));
 // Serve the 'public' folder as static files (HTML, CSS, JS)
 app.use(express.static('public'));
 
-// Ruta antigua desactivada mientras arrancamos text-reading desde cero
+// Legacy route disabled while rebuilding text reading from scratch
 // app.use('/api/qa-v2', qaRoutesV2);
 app.use('/api/text-reading', textReadingRoutes);
 app.use('/api/text-reading-mobile', textReadingMobileRoutes);

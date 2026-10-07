@@ -19,9 +19,8 @@ export const previewTextReadingMobile = async (url) => {
   return normalized;
 };
 
-export const compareTextReadingMobile = async (url, coText) => {
-  const rawText = await extractEditorialRawMobile(url);
-  const normalizedCP = normalizeText(rawText);
+export const compareMobileTextContent = (rawText, coText = '') => {
+  const normalizedCP = normalizeText(rawText || '');
   const normalizedCO = normalizeText(coText || '');
 
   const cpLines = normalizedCP.split('\n').filter(l => l.trim());
@@ -36,4 +35,9 @@ export const compareTextReadingMobile = async (url, coText) => {
     result,
     details,
   };
+};
+
+export const compareTextReadingMobile = async (url, coText) => {
+  const rawText = await extractEditorialRawMobile(url);
+  return compareMobileTextContent(rawText, coText);
 };

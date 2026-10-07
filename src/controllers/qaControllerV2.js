@@ -4,7 +4,7 @@ export const analyzeContent = async(req, res)=>{
     try{
         const { url, remove, expectedTexts } = req.body;
 
-        // Validamos que expectedTexts sea un array si viene
+        // Ensure expectedTexts is an array when provided
         const textosEsperados = Array.isArray(expectedTexts) ? expectedTexts : [];
         const selectors = Array.isArray(remove)? remove : [];
 
@@ -14,7 +14,7 @@ export const analyzeContent = async(req, res)=>{
             });
         }
 
-        // Enviamos todo al servicio
+        // Pass all inputs to the service
         const result = await scrapePage(url, selectors, textosEsperados);
         
         res.status(200).json({

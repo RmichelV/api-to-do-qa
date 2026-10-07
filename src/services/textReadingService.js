@@ -16,13 +16,8 @@ export const previewTextReading = async (url) => {
   return normalized;
 };
 
-/**
- * Extracts CP, normalizes CO and compares line by line.
- */
-export const compareTextReading = async (url, coText) => {
-  console.log(`[text-reading] Compare fetch+parse: ${url}`);
-  const { rawText } = await scrapePageContent(url);
-  const normalizedCP = normalizeText(rawText);
+export const compareTextContent = (rawText, coText = '') => {
+  const normalizedCP = normalizeText(rawText || '');
   const normalizedCO = normalizeText(coText || '');
 
   const cpLines = normalizedCP.split('\n').filter(l => l.trim());
@@ -37,4 +32,13 @@ export const compareTextReading = async (url, coText) => {
     result,
     details,
   };
+};
+
+/**
+ * Extracts CP, normalizes CO and compares line by line.
+ */
+export const compareTextReading = async (url, coText) => {
+  console.log(`[text-reading] Compare fetch+parse: ${url}`);
+  const { rawText } = await scrapePageContent(url);
+  return compareTextContent(rawText, coText);
 };
