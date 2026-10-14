@@ -10,36 +10,35 @@ import { activeBrowsersLink } from './services/linkReadingService.js'
 import { activeBrowsersAnchor } from './services/anchorReadingService.js'
 import { activeBrowsersFull } from './services/fullAnalysisService.js'
 
-const app = express();
-const PORT = process.env.PORT || 4000;
+export function createApp() {
+  const app = express();
 
-app.use(express.json({ limit: '5mb' }));
+  app.use(express.json({ limit: '5mb' }));
 
-// Serve the 'public' folder as static files (HTML, CSS, JS)
-app.use(express.static('public'));
+  // Serve the 'public' folder as static files (HTML, CSS, JS)
+  app.use(express.static('public'));
 
-// Ruta antigua desactivada mientras arrancamos text-reading desde cero
-// app.use('/api/qa-v2', qaRoutesV2);
-app.use('/api/text-reading', textReadingRoutes);
-app.use('/api/text-reading-mobile', textReadingMobileRoutes);
-app.use('/api/link-reading', linkReadingRoutes);
-app.use('/api/anchor-reading', anchorReadingRoutes);
-app.use('/api/full-analysis', fullAnalysisRoutes);
+  // Ruta antigua desactivada mientras arrancamos text-reading desde cero
+  // app.use('/api/qa-v2', qaRoutesV2);
+  app.use('/api/text-reading', textReadingRoutes);
+  app.use('/api/text-reading-mobile', textReadingMobileRoutes);
+  app.use('/api/link-reading', linkReadingRoutes);
+  app.use('/api/anchor-reading', anchorReadingRoutes);
+  app.use('/api/full-analysis', fullAnalysisRoutes);
 
-// Endpoint to cancel/stop all active processes
-app.post('/api/cancel', async (req, res) => {
-  let closed = 0;
-  const allSets = [activeBrowsers, activeBrowsersMobile, activeBrowsersLink, activeBrowsersAnchor, activeBrowsersFull];
-  for (const set of allSets) {
-    for (const browser of set) {
-      try { await browser.close(); closed++; } catch {}
+  // Endpoint to cancel/stop all active processes
+  app.post('/api/cancel', async (req, res) => {
+    let closed = 0;
+    const allSets = [activeBrowsers, activeBrowsersMobile, activeBrowsersLink, activeBrowsersAnchor, activeBrowsersFull];
+    for (const set of allSets) {
+      for (const browser of set) {
+        try { await browser.close(); closed++; } catch {}
+      }
+      set.clear();
     }
-    set.clear();
-  }
-  console.log(`[cancel] Closed ${closed} active browsers`);
-  res.json({ cancelled: true, browsersClosed: closed });
-});
+    console.log(`[cancel] Closed ${closed} active browsers`);
+    res.json({ cancelled: true, browsersClosed: closed });
+  });
 
-app.listen(PORT, () =>{
-    console.log(`Server is running on http://localhost:${PORT}`)
-})
+  return app;
+}
