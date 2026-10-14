@@ -139,3 +139,16 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+# Local AI runtime state
+.atl/
+
+# Temporary and OS files
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.swp
+Thumbs.db
+Desktop.ini
+.DS_Store
