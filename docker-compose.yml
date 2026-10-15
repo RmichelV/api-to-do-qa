@@ -1,0 +1,27 @@
+services:
+  app:
+    build: .
+    image: api-to-do-qa:latest
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+    expose:
+      - "4000"
+    restart: always
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    restart: always
+
+volumes:
+  caddy_data:
+  caddy_config:

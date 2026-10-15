@@ -139,3 +139,93 @@ public/
   index.html                     # Frontend UI
   styles.css                     # Styles
 ```
+
+## Deployment with Docker
+
+These steps describe how to deploy the app on an Ubuntu VPS using Docker and Caddy (Caddy will automatically obtain TLS certificates for your domain).
+
+1) Prepare the VPS (Ubuntu)
+
+- Update the system and install Docker & Docker Compose:
+
+  ```bash
+  sudo apt update && sudo apt upgrade -y
+  sudo apt install -y ca-certificates curl gnupg lsb-release
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+  sudo apt update
+  sudo apt install -y docker-ce docker-ce-cli containerd.io
+  sudo usermod -aG docker $USER   # log out / log in or `newgrp docker`
+
+  # Install docker compose plugin if needed
+  sudo apt install -y docker-compose-plugin
+  ```
+
+2) DNS
+
+- Point your domain (A record) to the VPS public IP. Example: example.com -> 203.0.113.12
+
+3) Files already added to this repo
+
+- A `Dockerfile`, `docker-compose.yml` and `Caddyfile` were added to the project to simplify deployment.
+  - Edit `Caddyfile` and replace `example.com` with your real domain.
+  - If you want a different port for the app, update both `Dockerfile` and `docker-compose.yml` accordingly.
+
+4) Build and launch
+
+On the VPS, clone the repo (or copy the project) and run:
+
+```bash
+git clone <your-repo-url> /opt/api-to-do-qa
+cd /opt/api-to-do-qa
+# Edit ./Caddyfile: replace example.com with your domain
+sudo docker compose up -d --build
+```
+
+- Caddy will listen on ports 80 and 443 and automatically obtain a TLS certificate for the domain.
+- The Node app exposes port 4000 internally and Caddy reverse-proxies the domain to the app.
+
+5) Confirm
+
+- Check logs:
+
+```bash
+sudo docker compose logs -f caddy
+sudo docker compose logs -f app
+```
+
+- Open `https://your.domain` in a browser. Caddy will redirect with HTTPS.
+
+6) Playwright note
+
+- The image installs Playwright browsers (so features requiring Chromium will work). This increases image size. If you want a lighter image, remove Playwright steps from the Dockerfile, but ensure no code imports Playwright at module-load time (see discussion in repo README about the Anchor Reading feature).
+
+7) Firewall
+
+- Allow ports 80 & 443 through UFW (if enabled):
+
+```bash
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw reload
+```
+
+8) Updating the app
+
+To deploy a new version:
+
+```bash
+cd /opt/api-to-do-qa
+git pull
+sudo docker compose up -d --build
+```
+
+9) Optional: run as non-root docker user
+
+- If you prefer not to use `sudo` for docker, ensure your user is in the `docker` group (`sudo usermod -aG docker $USER`) and re-login.
+
+If you'd like, next steps I can do for you:
+- Create a small systemd service or script on the VPS to manage docker compose (optional)
+- Replace Caddy with a different reverse proxy (nginx or Traefik) if you prefer
+- Remove Playwright from the Docker image and convert Playwright imports to dynamic imports to make it optional (reduces image size)
+
