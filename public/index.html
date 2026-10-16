@@ -1098,9 +1098,9 @@
       function renderImageTable(images, pageUrl, errorMessage = null) {
         let rows;
         if (errorMessage) {
-          rows = `<tr><td colspan="6">Image scan failed: ${escapeHtml(errorMessage)}</td></tr>`;
+          rows = `<tr><td colspan="5">Image scan failed: ${escapeHtml(errorMessage)}</td></tr>`;
         } else if (!images.length) {
-          rows = '<tr><td colspan="6">No images found in .ddc-wrapper</td></tr>';
+          rows = '<tr><td colspan="5">No images found in .ddc-wrapper</td></tr>';
         } else {
           rows = images.map((image, index) => {
             const imageUrl = image.imageUrl || resolveImageUrl(image.src, pageUrl);
@@ -1118,13 +1118,11 @@
             const titleText = hasTitle ? escapeHtml(titleValue) : "Missing title";
             const altClass = hasAlt ? "image-field-pass" : "image-field-fail";
             const titleClass = hasTitle ? "image-field-pass" : "image-field-fail";
-            const statusClass = image.status === "Passed" ? "image-status-pass" : "image-status-fail";
-            const statusText = image.status || "Failed";
-            return `<tr><td>${index + 1}</td><td class="image-url">${urlCell}</td><td>${ddcCell}</td><td><span class="${altClass}">${altText}</span></td><td><span class="${titleClass}">${titleText}</span></td><td><span class="${statusClass}">${statusText}</span></td></tr>`;
+            return `<tr><td>${index + 1}</td><td class="image-url">${urlCell}</td><td>${ddcCell}</td><td><span class="${altClass}">${altText}</span></td><td><span class="${titleClass}">${titleText}</span></td></tr>`;
           }).join("");
         }
 
-        return `<table class="anchors-table image-results-table"><caption>Image Reading Service</caption><thead><tr><th>#</th><th>Image URL</th><th>DDC Hosted</th><th>Alt</th><th>Title</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
+        return `<table class="anchors-table image-results-table"><caption>Image Reading Service</caption><thead><tr><th>#</th><th>Image URL</th><th>DDC Hosted</th><th>Alt</th><th>Title</th></tr></thead><tbody>${rows}</tbody></table>`;
       }
 
       // Shared helper to render the comparison summary

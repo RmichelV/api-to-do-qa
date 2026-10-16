@@ -12,7 +12,8 @@ export const classifyImage = (image, pageUrl) => {
   let ddcHosted = false;
   if (imageUrl) {
     const parsed = new URL(imageUrl);
-    ddcHosted = parsed.protocol === 'https:' && parsed.hostname.toLowerCase() === 'pictures.dealer.com';
+    const allowedDdcHosts = ['pictures.dealer.com', 'images.dealer.com'];
+    ddcHosted = parsed.protocol === 'https:' && allowedDdcHosts.includes(parsed.hostname.toLowerCase());
   }
   const hasAlt = typeof image.alt === 'string' && image.alt.trim().length > 0;
   const hasTitle = typeof image.title === 'string' && image.title.trim().length > 0;
