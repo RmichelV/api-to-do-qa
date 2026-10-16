@@ -3,6 +3,7 @@ import textReadingRoutes from './routes/textReadingRoutes.js'
 import textReadingMobileRoutes from './routes/textReadingMobileRoutes.js'
 import linkReadingRoutes from './routes/linkReadingRoutes.js'
 import anchorReadingRoutes from './routes/anchorReadingRoutes.js'
+import imageReadingRoutes from './routes/imageReadingRoutes.js'
 import fullAnalysisRoutes from './routes/fullAnalysisRoutes.js'
 import { activeBrowsers } from './services/textReadingService.js'
 import { activeBrowsersMobile } from './services/textReadingMobileService.js'
@@ -24,6 +25,7 @@ app.use('/api/text-reading', textReadingRoutes);
 app.use('/api/text-reading-mobile', textReadingMobileRoutes);
 app.use('/api/link-reading', linkReadingRoutes);
 app.use('/api/anchor-reading', anchorReadingRoutes);
+app.use('/api/image-reading', imageReadingRoutes);
 app.use('/api/full-analysis', fullAnalysisRoutes);
 
 // Endpoint to cancel/stop all active processes

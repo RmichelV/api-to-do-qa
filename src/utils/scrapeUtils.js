@@ -130,6 +130,51 @@ export const scrapePageContent = async (url) => {
   return { rawText, h1Texts, srOnlyText, anchors };
 };
 
+export const scrapePageImages = async (url) => {
+  const { $ } = await fetchPage(url);
+  const wrapper = $('.ddc-wrapper').first();
+  if (!wrapper.length) throw new Error('.ddc-wrapper not found in page HTML');
+
+  extractCleanText($, wrapper);
+
+  const images = [];
+  wrapper.find('img').each((_, el) => {
+    const image = $(el);
+    const isBackgroundImageProxy = image.is('[hidden], [role="presentation"], .d-none, .responsive-image, .dynamic-resize')
+      && [el, ...image.parents().toArray()].some(node => {
+        const element = $(node);
+        const style = element.attr('style') || '';
+        const hasBackgroundUrl = /(?:^|;)\s*background(?:-image)?\s*:[^;]*url\s*\(/i.test(style);
+        return hasBackgroundUrl || element.attr('data-responsive-image-bg') === 'true' && /url\s*\(/i.test(style);
+      });
+    if (isBackgroundImageProxy) return;
+
+    const pictureSources = image.parents('picture').first().find('source[srcset]').map((_, source) => $(source).attr('srcset')).get();
+    const srcsetCandidates = [image.attr('data-srcset'), image.attr('srcset'), ...pictureSources]
+      .filter(Boolean)
+      .flatMap(srcset => srcset.split(/\s*,\s*/).map(candidate => candidate.trim().split(/\s+/)[0]));
+    const srcCandidates = [
+      image.attr('data-src'),
+      image.attr('data-lazy-src'),
+      image.attr('data-original-src'),
+      image.attr('data-original'),
+      ...srcsetCandidates,
+      image.attr('src'),
+    ];
+    const src = srcCandidates
+      .map(candidate => String(candidate || '').trim())
+      .find(candidate => candidate && !/^data:/i.test(candidate) && !/^javascript:/i.test(candidate)) || null;
+
+    images.push({
+      src,
+      alt: image.attr('alt') ?? null,
+      title: image.attr('title') ?? null,
+    });
+  });
+
+  return images;
+};
+
 export const scrapeH1DataMobile = async (url) => {
   const mobileUA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
   const headers = {

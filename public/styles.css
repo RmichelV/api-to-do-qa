@@ -327,6 +327,7 @@ textarea {
 .btn-action--mobile  { background: #ea580c; }
 .btn-action--links   { background: #7c3aed; }
 .btn-action--anchors { background: #0891b2; }
+.btn-action--images  { background: #15803d; }
 
 /* ── Outputs grid ── */
 #outputs {
@@ -575,6 +576,32 @@ mark.diff-ins {
 .anchors-url a { color: #2563eb; text-decoration: none; }
 .anchors-url a:hover { text-decoration: underline; }
 .anchors-url, .anchors-url a { word-break: break-word; overflow-wrap: anywhere; }
+
+.images-panel { overflow-x: auto; }
+.image-results-table { min-width: 900px; }
+.image-results-table caption {
+  caption-side: top;
+  padding: 0.6rem;
+  color: #374151;
+  font-weight: 700;
+  text-align: left;
+}
+.image-results-table th:nth-child(2),
+.image-results-table td:nth-child(2) { width: 38%; }
+.image-results-table th:nth-child(3),
+.image-results-table td:nth-child(3) { width: 7rem; text-align: center; }
+.image-results-table th:nth-child(4),
+.image-results-table td:nth-child(4),
+.image-results-table th:nth-child(5),
+.image-results-table td:nth-child(5) { width: 22%; text-align: left; }
+.image-url a { color: #2563eb; text-decoration: none; overflow-wrap: anywhere; }
+.image-url a:hover { text-decoration: underline; }
+.image-ddc-yes { color: #15803d; font-weight: 700; }
+.image-ddc-no { color: #b91c1c; font-weight: 700; }
+.image-field-pass,
+.image-status-pass { color: #15803d; font-weight: 700; }
+.image-field-fail,
+.image-status-fail { color: #b91c1c; font-weight: 700; }
 
 .link-check-btn {
   border: 1px solid #cbd5e1;

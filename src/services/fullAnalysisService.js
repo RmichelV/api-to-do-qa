@@ -2,6 +2,7 @@
 import { compareTextContent } from './textReadingService.js';
 import { compareMobileTextContent } from './textReadingMobileService.js';
 import { addHttpStatusesToAnchors, compareH1Snapshots } from './linkReadingService.js';
+import { readImages } from './imageReadingService.js';
 
 // Kept for cancel compatibility
 export const activeBrowsersFull = new Set();
@@ -9,11 +10,15 @@ export const activeBrowsersFull = new Set();
 export const runFullAnalysis = async (url, coText = '') => {
   console.log(`[full-analysis] Start for ${url}`);
 
-  const [desktop, mobileRawText] = await Promise.all([
+  const [desktop, mobileRawText, imageScan] = await Promise.all([
     scrapePageContent(url),
     scrapePageContentMobile(url).catch(err => {
       console.warn('[full-analysis] Mobile scrape failed:', err?.message);
       return '';
+    }),
+    readImages(url).catch(err => {
+      console.warn('[full-analysis] Image scan failed:', err?.message);
+      return { images: [], error: err?.message || 'Image scan failed' };
     }),
   ]);
 
@@ -50,5 +55,7 @@ export const runFullAnalysis = async (url, coText = '') => {
       srOnlyText: mobileH1Data.srOnlyText || null,
     },
     h1Comparison,
+    images: imageScan.images || [],
+    imageError: imageScan.error || null,
   };
 };

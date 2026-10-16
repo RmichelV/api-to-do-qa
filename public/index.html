@@ -90,6 +90,11 @@
             <span class="btn-action__sub">Internal</span>
             <span class="btn-action__sub">Runs separately · not included in Run All</span>
           </button>
+          <button class="btn-action btn-action--images" onclick="runImageReading()">
+            <span class="btn-action__icon">🖼️</span>
+            <span class="btn-action__label">Images</span>
+            <span class="btn-action__sub">Alt + Title</span>
+          </button>
         </div>
       </section>
 
@@ -140,6 +145,12 @@
           <h3>Links</h3>
           <div id="anchors-output">Not extracted yet…</div>
           <div id="link-check-output"></div>
+        </div>
+
+        <div class="section-header section-header--images">🖼️ Images</div>
+
+        <div class="panel panel--full images-panel panel--images">
+          <div id="images-output">Not scanned yet…</div>
         </div>
 
         <div class="section-header section-header--anchors" id="anchor-section-header" style="display:none">⚓ Anchors</div>
@@ -293,6 +304,9 @@
         const anchorEl = document.getElementById("anchor-output");
         if (anchorEl && anchorEl.textContent.startsWith("⏳"))
           anchorEl.textContent = cancelMsg;
+        const imagesEl = document.getElementById("images-output");
+        if (imagesEl && imagesEl.textContent.startsWith("⏳"))
+          imagesEl.textContent = cancelMsg;
       }
 
       // --- TEXT READING ---
@@ -516,6 +530,34 @@
         } catch (error) {
           if (error.name === "AbortError") return;
           anchorsDiv.textContent = `Error extracting links: ${error.message}`;
+        } finally {
+          removeAbortController(ac);
+        }
+      }
+
+      async function runImageReading() {
+        const url = document.getElementById("url").value;
+        const output = document.getElementById("images-output");
+        if (!url) {
+          alert("Please enter a URL");
+          return;
+        }
+
+        output.textContent = "⏳ Scanning images…";
+        const ac = createAbortController();
+        try {
+          const resp = await fetch("/api/image-reading/scan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url }),
+            signal: ac.signal,
+          });
+          const data = await resp.json();
+          if (!resp.ok) throw new Error((data && data.error) || resp.statusText);
+          output.innerHTML = renderImageTable(data.images || [], url);
+        } catch (error) {
+          if (error.name === "AbortError") return;
+          output.innerHTML = renderImageTable([], url, error.message);
         } finally {
           removeAbortController(ac);
         }
@@ -1043,6 +1085,48 @@
         return `<table class="anchors-table"><thead><tr><th>#</th><th>Text</th><th>URL</th><th>Type</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
       }
 
+      function resolveImageUrl(src, pageUrl) {
+        if (!src) return null;
+        try {
+          const parsed = new URL(src, pageUrl);
+          return ["http:", "https:"].includes(parsed.protocol) ? parsed.href : null;
+        } catch {
+          return null;
+        }
+      }
+
+      function renderImageTable(images, pageUrl, errorMessage = null) {
+        let rows;
+        if (errorMessage) {
+          rows = `<tr><td colspan="6">Image scan failed: ${escapeHtml(errorMessage)}</td></tr>`;
+        } else if (!images.length) {
+          rows = '<tr><td colspan="6">No images found in .ddc-wrapper</td></tr>';
+        } else {
+          rows = images.map((image, index) => {
+            const imageUrl = image.imageUrl || resolveImageUrl(image.src, pageUrl);
+            const urlCell = imageUrl
+              ? `<a href="${escapeHtml(imageUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(imageUrl)}</a>`
+              : "No image URL";
+            const ddcCell = image.ddcHosted
+              ? '<span class="image-ddc-yes">Yes</span>'
+              : '<span class="image-ddc-no">No</span>';
+            const altValue = typeof image.alt === "string" ? image.alt.trim() : "";
+            const titleValue = typeof image.title === "string" ? image.title.trim() : "";
+            const hasAlt = image.hasAlt;
+            const hasTitle = image.hasTitle;
+            const altText = hasAlt ? escapeHtml(altValue) : "Missing alt";
+            const titleText = hasTitle ? escapeHtml(titleValue) : "Missing title";
+            const altClass = hasAlt ? "image-field-pass" : "image-field-fail";
+            const titleClass = hasTitle ? "image-field-pass" : "image-field-fail";
+            const statusClass = image.status === "Passed" ? "image-status-pass" : "image-status-fail";
+            const statusText = image.status || "Failed";
+            return `<tr><td>${index + 1}</td><td class="image-url">${urlCell}</td><td>${ddcCell}</td><td><span class="${altClass}">${altText}</span></td><td><span class="${titleClass}">${titleText}</span></td><td><span class="${statusClass}">${statusText}</span></td></tr>`;
+          }).join("");
+        }
+
+        return `<table class="anchors-table image-results-table"><caption>Image Reading Service</caption><thead><tr><th>#</th><th>Image URL</th><th>DDC Hosted</th><th>Alt</th><th>Title</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
+      }
+
       // Shared helper to render the comparison summary
       function renderCompareResult(data, summaryId, detailsId) {
         const complete = data.result && data.result.complete;
@@ -1088,6 +1172,7 @@
         document.getElementById("anchors-output").textContent = pending;
         document.getElementById("h1-summary").textContent = pending;
         document.getElementById("h1-details").textContent = "";
+        document.getElementById("images-output").textContent = pending;
 
         const ac = createAbortController();
         try {
@@ -1102,6 +1187,11 @@
 
           const desktop = data.desktop || {};
           const mobile = data.mobile || {};
+          document.getElementById("images-output").innerHTML = renderImageTable(
+            data.images || [],
+            url,
+            data.imageError || null,
+          );
 
           // Desktop CP and CO
           document.getElementById("cp-output").textContent = (desktop.cp && desktop.cp.text) || "";
@@ -1219,6 +1309,7 @@
         document.getElementById("anchors-output").textContent =
           "Not extracted yet…";
         document.getElementById("link-check-output").innerHTML = "";
+        document.getElementById("images-output").textContent = "Not scanned yet…";
         document.getElementById("h1-summary").textContent = "Not evaluated yet…";
         document.getElementById("h1-summary").className = "h1-summary";
         document.getElementById("h1-details").innerHTML = "";
