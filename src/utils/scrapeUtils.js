@@ -140,6 +140,9 @@ export const scrapePageImages = async (url) => {
   const images = [];
   wrapper.find('img').each((_, el) => {
     const image = $(el);
+    if (image.parents('.content-tabbed').length) return;
+    const isDefaultImageWidget = image.parents('[data-widget-name="image-default"]').length > 0;
+
     const isBackgroundImageProxy = image.is('[hidden], [role="presentation"], .d-none, .responsive-image, .dynamic-resize')
       && [el, ...image.parents().toArray()].some(node => {
         const element = $(node);
@@ -168,7 +171,8 @@ export const scrapePageImages = async (url) => {
     images.push({
       src,
       alt: image.attr('alt') ?? null,
-      title: image.attr('title') ?? null,
+      title: isDefaultImageWidget ? 'Title not required' : image.attr('title') ?? null,
+      titleRequired: !isDefaultImageWidget,
     });
   });
 

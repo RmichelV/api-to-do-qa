@@ -16,6 +16,8 @@ export const classifyImage = (image, pageUrl) => {
   }
   const hasAlt = typeof image.alt === 'string' && image.alt.trim().length > 0;
   const hasTitle = typeof image.title === 'string' && image.title.trim().length > 0;
+  const titleRequired = image.titleRequired !== false;
+  const titleValid = !titleRequired || hasTitle;
 
   return {
     ...image,
@@ -23,7 +25,8 @@ export const classifyImage = (image, pageUrl) => {
     ddcHosted,
     hasAlt,
     hasTitle,
-    status: ddcHosted && hasAlt && hasTitle ? 'Passed' : 'Failed',
+    titleRequired,
+    status: ddcHosted && hasAlt && titleValid ? 'Passed' : 'Failed',
   };
 };
 
