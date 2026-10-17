@@ -37,13 +37,21 @@ CREATE USER 'qa_app'@'localhost' IDENTIFIED BY 'your-local-password';
 GRANT SELECT, INSERT, UPDATE, DELETE ON api_to_do_qa.* TO 'qa_app'@'localhost';
 GRANT SELECT, INSERT, UPDATE, DELETE ON api_to_do_qa_test.* TO 'qa_app'@'localhost';
 
--- migration user: also DDL (used by `npm run migrate` from T3 on)
+-- migration user: also DDL (used by `npm run migrate`, see §6)
 CREATE USER 'qa_migrator'@'localhost' IDENTIFIED BY 'another-local-password';
-GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, INDEX, ALTER, REFERENCES
   ON api_to_do_qa.* TO 'qa_migrator'@'localhost';
-GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, INDEX, ALTER, REFERENCES
   ON api_to_do_qa_test.* TO 'qa_migrator'@'localhost';
 ```
+
+`DROP` is only on the **test** database: the integration tests drop and
+re-create the auth tables there. The migrator never drops anything on the
+development database, and on Hostinger it does not receive `DROP` at all —
+migrations only create.
+
+Local note (2026-10-17): `qa_migrator@localhost` was created in the local
+XAMPP with DDL on both databases (same password as `qa_app`, no new secret).
 
 On Hostinger create the same two users from hPanel → Databases. The app user
 gets only `SELECT, INSERT, UPDATE, DELETE`.
@@ -80,19 +88,21 @@ database is reached over a network.
 npm test                 # includes test/db.test.js
 ```
 
-`test/db.test.js` is an integration test and reads **only `TEST_DB_*`**, never
-`DB_*`: from T3 on these tests truncate data, so they must never touch the
-development database. Without `TEST_DB_*` the test skips itself (7 pass, 1
-skip), and `npm test` stays green.
+`test/db.test.js` and `test/migrate.test.js` are integration tests and read
+**only `TEST_DB_*`**, never `DB_*`: they drop/truncate data, so they must never
+touch the development database. Without `TEST_DB_*` they skip themselves
+(7 pass, 4 skipped), and `npm test` stays green.
 
-To enable it, point it at the **test** database:
+To enable them, point them at the **test** database. From T3 on,
+`test/migrate.test.js` runs the migrations, so `TEST_DB_USER` needs DDL rights
+on the test database — use `qa_migrator` (§3):
 
 ```bash
 # PowerShell
 $env:TEST_DB_HOST='127.0.0.1'; $env:TEST_DB_PORT='3306'
-$env:TEST_DB_NAME='api_to_do_qa_test'; $env:TEST_DB_USER='qa_app'
-$env:TEST_DB_PASSWORD='your-local-password'
-npm test                 # 8 pass, 0 skip
+$env:TEST_DB_NAME='api_to_do_qa_test'; $env:TEST_DB_USER='qa_migrator'
+$env:TEST_DB_PASSWORD='another-local-password'
+npm test                 # 11 pass, 0 skip
 ```
 
 Or one-off from Node (uses the `DB_*` from `.env` via `loadConfig()`):
@@ -103,7 +113,35 @@ node -e "import('./src/db/pool.js').then(async m => { const pool = m.createPool(
 
 (with the env vars set, e.g. via a local `.env`).
 
-## 6. Hostinger integration (full steps in design §8.2)
+## 6. Migrations (`npm run migrate`)
+
+From T3 on, the schema lives in numbered files under `db/migrations/`:
+
+| File | Content |
+|---|---|
+| `001_create_users.sql` | `users` (design §4.1) |
+| `002_create_user_sessions.sql` | `user_sessions` (§4.2) |
+| `003_create_login_attempts.sql` | `login_attempts` (§4.3) |
+
+`scripts/migrate.js` applies the pending files in order on its own connection
+(`multipleStatements: true`; the application pool keeps it `false`), records
+each version in `schema_migrations` only after the file succeeds, and stops at
+the first error (§4.4). Running it twice is a no-op.
+
+```bash
+npm run migrate
+```
+
+Credentials: uses `DB_*` by default. Set `MIGRATE_DB_USER` and
+`MIGRATE_DB_PASSWORD` to run as the migration user — required on Hostinger,
+where the app user has no DDL (§5.6):
+
+```ini
+MIGRATE_DB_USER=qa_migrator
+MIGRATE_DB_PASSWORD=another-local-password
+```
+
+## 7. Hostinger integration (full steps in design §8.2)
 
 1. Create the database and users in hPanel.
 2. Set the environment variables.
