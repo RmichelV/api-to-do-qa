@@ -88,21 +88,23 @@ database is reached over a network.
 npm test                 # includes test/db.test.js
 ```
 
-`test/db.test.js` and `test/migrate.test.js` are integration tests and read
-**only `TEST_DB_*`**, never `DB_*`: they drop/truncate data, so they must never
-touch the development database. Without `TEST_DB_*` they skip themselves
-(7 pass, 4 skipped), and `npm test` stays green.
+`test/db.test.js`, `test/migrate.test.js`, `test/userRepository.test.js` and
+`test/create-admin.test.js` are integration tests and read **only `TEST_DB_*`**,
+never `DB_*`: they drop/truncate data, so they must never touch the
+development database. Without `TEST_DB_*` they skip themselves (14 pass,
+11 skipped), and `npm test` stays green. Files run sequentially
+(`--test-concurrency=1`) because they share one test database.
 
-To enable them, point them at the **test** database. From T3 on,
-`test/migrate.test.js` runs the migrations, so `TEST_DB_USER` needs DDL rights
-on the test database — use `qa_migrator` (§3):
+To enable them, point them at the **test** database. From T3 on, the
+integration tests run the migrations, so `TEST_DB_USER` needs DDL rights on
+the test database — use `qa_migrator` (§3):
 
 ```bash
 # PowerShell
 $env:TEST_DB_HOST='127.0.0.1'; $env:TEST_DB_PORT='3306'
 $env:TEST_DB_NAME='api_to_do_qa_test'; $env:TEST_DB_USER='qa_migrator'
 $env:TEST_DB_PASSWORD='another-local-password'
-npm test                 # 11 pass, 0 skip
+npm test                 # 25 pass, 0 skip
 ```
 
 Or one-off from Node (uses the `DB_*` from `.env` via `loadConfig()`):
