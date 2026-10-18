@@ -4,16 +4,32 @@ import textReadingMobileRoutes from './routes/textReadingMobileRoutes.js'
 import linkReadingRoutes from './routes/linkReadingRoutes.js'
 import anchorReadingRoutes from './routes/anchorReadingRoutes.js'
 import fullAnalysisRoutes from './routes/fullAnalysisRoutes.js'
+import authRoutes from './routes/authRoutes.js'
 import { activeBrowsers } from './services/textReadingService.js'
 import { activeBrowsersMobile } from './services/textReadingMobileService.js'
 import { activeBrowsersLink } from './services/linkReadingService.js'
 import { activeBrowsersAnchor } from './services/anchorReadingService.js'
 import { activeBrowsersFull } from './services/fullAnalysisService.js'
+import { securityHeaders } from './middleware/securityHeaders.js'
+import { sessionMiddleware } from './middleware/sessionMiddleware.js'
+import { originCheck } from './middleware/originCheck.js'
+import { errorHandler } from './middleware/errorHandler.js'
 
-export function createApp() {
+export function createApp({ config, pool } = {}) {
   const app = express();
 
+  app.use(securityHeaders);
   app.use(express.json({ limit: '5mb' }));
+
+  // Auth wiring (T5) only when config+pool are provided, so the QA smoke
+  // tests keep calling createApp() bare (spec S12: QA endpoints unchanged).
+  if (config && pool) {
+    app.set('trust proxy', config.trustProxy ?? 0);
+    app.use(sessionMiddleware({ pool, secure: config.nodeEnv === 'production' }));
+    // Origin check scoped to the auth routes for now; global application
+    // lands with the full protection model in T8.
+    app.use('/api/auth', originCheck(config.appOrigin), authRoutes({ pool, config }));
+  }
 
   // Serve the 'public' folder as static files (HTML, CSS, JS)
   app.use(express.static('public'));
@@ -39,6 +55,8 @@ export function createApp() {
     console.log(`[cancel] Closed ${closed} active browsers`);
     res.json({ cancelled: true, browsersClosed: closed });
   });
+
+  app.use(errorHandler);
 
   return app;
 }
