@@ -67,7 +67,10 @@
       </section>
 
       <section class="actions-section">
-        <button class="btn-run-all" onclick="runFullAnalysis()">⚡ Run All</button>
+        <div class="run-all-row">
+          <button class="btn-run-all" onclick="runFullAnalysis()">⚡ Run All</button>
+          <button class="help-trigger" type="button" aria-label="Run All help" aria-haspopup="dialog" aria-controls="review-help-dialog" title="Run All help" onclick="openHelpDialog('runAll')"><span aria-hidden="true">i</span></button>
+        </div>
         <div class="btn-grid">
           <button class="btn-action btn-action--desktop" onclick="runTextReading()">
             <span class="btn-action__icon">🖥️</span>
@@ -98,9 +101,20 @@
         </div>
       </section>
 
+      <dialog class="help-dialog" id="review-help-dialog" aria-labelledby="review-help-title">
+        <div class="help-dialog__header">
+          <h2 id="review-help-title"></h2>
+          <button class="help-dialog__close" type="button" aria-label="Close help" onclick="closeHelpDialog()">×</button>
+        </div>
+        <div id="review-help-content"></div>
+      </dialog>
+
       <div id="outputs">
 
-        <div class="section-header section-header--h1">🏷️ H1</div>
+        <div class="section-header section-header--h1">
+          <span>🏷️ H1</span>
+          <button class="help-trigger section-help-trigger" type="button" aria-label="H1 guidance" aria-haspopup="dialog" aria-controls="review-help-dialog" title="H1 guidance" onclick="openHelpDialog('h1')"><span aria-hidden="true">i</span></button>
+        </div>
 
         <div class="panel panel--full h1-panel panel--h1">
           <h3>H1 Review</h3>
@@ -108,7 +122,10 @@
           <div id="h1-details" class="h1-details"></div>
         </div>
 
-        <div class="section-header section-header--desktop">🖥️ Desktop Analysis</div>
+        <div class="section-header section-header--desktop">
+          <span>🖥️ Desktop Analysis</span>
+          <button class="help-trigger section-help-trigger" type="button" aria-label="Desktop analysis guidance" aria-haspopup="dialog" aria-controls="review-help-dialog" title="Desktop analysis guidance" onclick="openHelpDialog('desktop')"><span aria-hidden="true">i</span></button>
+        </div>
 
         <div class="panel panel--desktop" id="cp-panel">
           <h3>CP · Page Content <small>normalized</small></h3>
@@ -139,7 +156,10 @@
           <div id="compare-mobile-details" class="text-output"></div>
         </div>
 
-        <div class="section-header section-header--links">🔗 Links</div>
+        <div class="section-header section-header--links">
+          <span>🔗 Links</span>
+          <button class="help-trigger section-help-trigger" type="button" aria-label="Links guidance" aria-haspopup="dialog" aria-controls="review-help-dialog" title="Links guidance" onclick="openHelpDialog('links')"><span aria-hidden="true">i</span></button>
+        </div>
 
         <div class="panel panel--full anchors-panel panel--links">
           <h3>Links</h3>
@@ -147,13 +167,19 @@
           <div id="link-check-output"></div>
         </div>
 
-        <div class="section-header section-header--images">🖼️ Images</div>
+        <div class="section-header section-header--images">
+          <span>🖼️ Images</span>
+          <button class="help-trigger section-help-trigger" type="button" aria-label="Images guidance" aria-haspopup="dialog" aria-controls="review-help-dialog" title="Images guidance" onclick="openHelpDialog('images')"><span aria-hidden="true">i</span></button>
+        </div>
 
         <div class="panel panel--full images-panel panel--images">
           <div id="images-output">Not scanned yet…</div>
         </div>
 
-        <div class="section-header section-header--anchors" id="anchor-section-header" style="display:none">⚓ Anchors</div>
+        <div class="section-header section-header--anchors" id="anchor-section-header" style="display:none">
+          <span>⚓ Anchors</span>
+          <button class="help-trigger section-help-trigger" type="button" aria-label="Anchors guidance" aria-haspopup="dialog" aria-controls="review-help-dialog" title="Anchors guidance" onclick="openHelpDialog('anchors')"><span aria-hidden="true">i</span></button>
+        </div>
 
         <div class="panel panel--full anchors-panel panel--anchors" id="anchor-panel" style="display:none">
           <div id="anchor-output">Not evaluated yet…</div>
@@ -164,6 +190,78 @@
     </main>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script>
+      const reviewHelpNotes = {
+        runAll: {
+          title: "Before running Run All",
+          notes: [
+            { text: "Make sure the page you are examining has already been updated with the content you want to scan." },
+            { text: "Important: If the changes are not visible on the page, the tool may report content as missing or links as not added.", important: true },
+          ],
+        },
+        h1: {
+          title: "H1 review guidance",
+          notes: [
+            { text: "The visible H1 and the sr-only H1 should have matching text." },
+            { text: "There should be no more than one visible H1." },
+            { text: "At least one H1 must be present, either visible or sr-only." },
+          ],
+        },
+        desktop: {
+          title: "Desktop analysis guidance",
+          notes: [
+            { text: "If Desktop Analysis reports a mismatch, check these possible causes before marking it as an error." },
+            { text: "A paragraph may have been split into two paragraphs on the page, and punctuation such as a comma may be missing. Compare the full text before deciding that content is missing." },
+            { text: "Example: CO: <p>Once upon a time there was a dev, his name was Devsito.</p> Page: <p>Once upon a time there was a dev</p><p>his name was Devsito.</p> The page is missing the comma and splits the text into two paragraphs." },
+            { text: "Small additions or incomplete phrases in the middle of the text may be intentional specialist edits. Check the page's change history before reporting them as errors." },
+            { text: "Do not report special characters, such as an em dash (—) or the registered trademark symbol (®), as errors by themselves." },
+            { text: "If the word 'skipped' appears in a mobile title, do not count it as an error." },
+          ],
+        },
+        links: {
+          title: "Links review guidance",
+          notes: [
+            { text: "Links expected to redirect to pages with HTTP 200 should not be counted as errors when they return HTTP 429 or 0." },
+          ],
+        },
+        anchors: {
+          title: "Anchors review guidance",
+          notes: [
+            { text: "Some pages need an additional click on the Anchors button before the table appears. If the table is empty, click the button again and check once more." },
+          ],
+        },
+        images: {
+          title: "Images review guidance",
+          notes: [
+            { text: "If the image table does not populate, click the Images button again and check once more." },
+            { text: "Alt and title text should start with a capital letter." },
+            { text: "For vehicle images, use this order: Make Model Year Color." },
+            { text: "For non-vehicle images, use a clear, descriptive alt and title." },
+          ],
+        },
+      };
+
+      function openHelpDialog(section) {
+        const note = reviewHelpNotes[section];
+        const dialog = document.getElementById("review-help-dialog");
+        document.getElementById("review-help-title").textContent = note.title;
+        const content = document.getElementById("review-help-content");
+        content.replaceChildren(...note.notes.map(({ text, important }) => {
+          const paragraph = document.createElement("p");
+          paragraph.textContent = text;
+          if (important) paragraph.className = "help-dialog__important";
+          return paragraph;
+        }));
+        dialog.showModal();
+      }
+
+      function closeHelpDialog() {
+        document.getElementById("review-help-dialog").close();
+      }
+
+      document.getElementById("review-help-dialog").addEventListener("click", (event) => {
+        if (event.target === event.currentTarget) event.currentTarget.close();
+      });
+
       // --- ABORT CONTROLLERS for cancelling fetch requests ---
       let activeAbortControllers = [];
 
