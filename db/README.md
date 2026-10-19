@@ -5,12 +5,50 @@ features so it runs on both. Driver: `mysql2` (the only new dependency).
 
 ## 1. Local engine
 
-Two options (design §8.1):
+Local development uses **Docker** (`docker-compose.yml`, MariaDB 10.11 on
+`127.0.0.1:3307`). It is only for development: production points `DB_*` at the
+Hostinger database, and nothing in the app depends on Docker.
 
-- **Option A — XAMPP MariaDB 10.4** (already installed here). Valid for
-  development; note MariaDB 10.4 is end-of-life.
-- **Option B — Docker** (recommended): same engine and major version as
-  Hostinger, e.g. `mariadb:10.6` or `mysql:8.0`. Isolated and disposable.
+### 1.1 Required `.env` values
+
+Docker reads the project `.env` (git-ignored) for its secrets:
+
+```ini
+MARIADB_ROOT_PASSWORD=<long random value>   # root of the local container
+DB_PASSWORD=<qa_app password>               # also used by the app
+MIGRATE_DB_USER=qa_migrator
+MIGRATE_DB_PASSWORD=<qa_migrator password>
+DB_PORT=3307
+TEST_DB_HOST=127.0.0.1
+TEST_DB_PORT=3307
+TEST_DB_NAME=api_to_do_qa_test
+TEST_DB_USER=qa_migrator
+TEST_DB_PASSWORD=<same as MIGRATE_DB_PASSWORD>
+```
+
+### 1.2 Daily commands
+
+```bash
+docker compose up -d          # start (first start creates databases and users)
+docker compose ps             # status: "healthy" means ready
+docker compose logs -f db     # follow the database logs
+docker compose stop           # stop, keeping the data
+```
+
+### 1.3 Reset from scratch
+
+```bash
+docker compose down -v        # deletes the container AND all its data
+docker compose up -d          # recreates databases and users
+npm run migrate               # recreates the tables
+```
+
+The init script (`db/docker/init/01-databases-and-users.sh`) runs only when
+the data volume is empty, so changing a password in `.env` later requires a
+reset. To remove Docker entirely: `docker compose down -v`, then delete
+`docker-compose.yml` and `db/docker/`.
+
+XAMPP MariaDB 10.4 (port 3306) is no longer used by this project.
 
 ## 2. Databases
 
@@ -50,8 +88,9 @@ re-create the auth tables there. The migrator never drops anything on the
 development database, and on Hostinger it does not receive `DROP` at all —
 migrations only create.
 
-Local note (2026-10-17): `qa_migrator@localhost` was created in the local
-XAMPP with DDL on both databases (same password as `qa_app`, no new secret).
+With Docker (§1) these users are created automatically on the first start,
+with host `'%'` (connections arrive from the Docker network) and the passwords
+from `.env`. The SQL above is the reference for any other MySQL/MariaDB.
 
 On Hostinger create the same two users from hPanel → Databases. The app user
 gets only `SELECT, INSERT, UPDATE, DELETE`.
