@@ -140,6 +140,7 @@ export const scrapePageImages = async (url) => {
   const images = [];
   wrapper.find('img').each((_, el) => {
     const image = $(el);
+    if (image.is('.skeleton-shimmer, .default-asset-placeholder, [class*="asset-placeholder"]')) return;
     if (image.parents('.content-tabbed').length) return;
     const isDefaultImageWidget = image.parents('[data-widget-name="image-default"]').length > 0;
 
