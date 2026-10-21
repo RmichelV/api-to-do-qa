@@ -70,6 +70,78 @@ body {
 .ctrl-btn--pdf   { background: #16a34a; }
 .ctrl-btn--todo  { background: #0ea5e9; }
 
+/* ── Auth top bar (T7) ── */
+.topbar__auth {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: 0.75rem;
+  padding-left: 0.75rem;
+  border-left: 1px solid #e5e7eb;
+}
+
+.topbar__user {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #374151;
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ctrl-btn--link {
+  background: #2563eb;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.ctrl-btn--logout { background: #dc2626; }
+
+/* ── Auth screens (T7): login and change-password ── */
+body.auth-body {
+  padding-top: 2.5rem;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.auth-card {
+  width: min(420px, calc(100% - 2rem));
+  margin-top: 3rem;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(17, 24, 39, 0.06);
+  padding: 2rem;
+}
+
+.auth-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.25rem; }
+.auth-subtitle { font-size: 0.85rem; color: #6b7280; margin-bottom: 1.25rem; }
+
+.auth-error {
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.82rem;
+  margin-bottom: 1rem;
+}
+
+.auth-success {
+  color: #166534;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.82rem;
+  margin-bottom: 1rem;
+}
+
+.auth-card .btn-run-all { margin-top: 0.25rem; }
+
 /* ── Main layout ── */
 .app-main {
   max-width: 1100px;
@@ -620,4 +692,6 @@ mark.diff-ins {
 @media (max-width: 480px) {
   .topbar__title { font-size: 0.9rem; }
   .ctrl-btn { padding: 0.25rem 0.5rem; font-size: 0.7rem; }
+  .topbar__user { display: none; }
+  .topbar__auth { margin-left: 0.4rem; padding-left: 0.4rem; }
 }

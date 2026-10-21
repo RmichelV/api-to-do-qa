@@ -35,7 +35,10 @@ export function createApp({ config, pool } = {}) {
     app.use('/api/auth', originCheck(config.appOrigin), authRoutes({ pool, config }));
   }
 
-  // Serve the 'public' folder as static files (HTML, CSS, JS)
+  // Serve the 'public' folder as static files (HTML, CSS, JS).
+  // public-auth/ is mounted first and stays public (design §7.4: /login.html
+  // and /login.js); protecting public/ behind requireAuth is T8's job.
+  app.use(express.static('public-auth'));
   app.use(express.static('public'));
 
   // Ruta antigua desactivada mientras arrancamos text-reading desde cero

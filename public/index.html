@@ -19,6 +19,11 @@
           <button class="ctrl-btn ctrl-btn--stop"  onclick="stopAllProcesses()">⏹ Stop</button>
           <button class="ctrl-btn ctrl-btn--reset" onclick="resetAll()">↺ Reset</button>
           <button class="ctrl-btn ctrl-btn--pdf"   onclick="downloadPDF()">↓ PDF</button>
+          <div class="topbar__auth">
+            <span id="auth-user-name" class="topbar__user"></span>
+            <a id="auth-change-password" class="ctrl-btn ctrl-btn--link" href="/change-password.html">Change password</a>
+            <button id="auth-logout" class="ctrl-btn ctrl-btn--logout">Logout</button>
+          </div>
         </nav>
       </div>
     </header>
@@ -151,6 +156,7 @@
 
     </main>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="/auth-bar.js" defer></script>
     <script>
       // --- ABORT CONTROLLERS para cancelar fetch requests ---
       let activeAbortControllers = [];
