@@ -333,7 +333,9 @@ All JSON. Errors: `{ "error": "<code>", "message": "<human text>" }`.
 | POST | `/api/admin/users/:id/reset-password` | `{ temporaryPassword }` | `204` |
 
 Guards: an admin cannot deactivate or demote **themselves**, and at least one active admin must remain (`409 last_admin`).
-Account creation runs through this API (or `scripts/create-admin.js` for the first admin). An admin screen is **not** part of this plan (see D6 in the feature document).
+Account creation runs through this API (or `scripts/create-admin.js` for the first admin). The admin screen `public/admin-users.html` (T9b) is a thin client of this API; access is enforced on the server with `requireRole('admin')` for both the API and the page.
+
+Emergency recovery: `npm run reset-password` (`scripts/reset-password.js`, T9c) resets any user's password from the server console when no admin can log in. It requires server access, asks for the temporary password with hidden input, sets `must_change_password = 1` and revokes all of the user's sessions.
 
 ### 7.3 Existing QA endpoints
 Unchanged handlers and response contracts, now behind `requireAuth` and `requirePasswordChanged`.
