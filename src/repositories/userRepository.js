@@ -49,6 +49,18 @@ export async function findByEmail(pool, email) {
   return rows[0] ?? null;
 }
 
+// Self-service password change (§5.1, §5.5): new hash, flag cleared and
+// password_changed_at stamped in one statement.
+export async function updatePassword(pool, { id, passwordHash, now = new Date() }) {
+  await pool.execute(
+    `UPDATE users
+        SET password_hash = ?, must_change_password = 0, password_changed_at = ?, updated_at = ?
+      WHERE id = ?`,
+    [passwordHash, now, now, id]
+  );
+  return findById(pool, id);
+}
+
 export async function countActiveAdmins(pool) {
   const [[row]] = await pool.execute(
     "SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND is_active = 1"

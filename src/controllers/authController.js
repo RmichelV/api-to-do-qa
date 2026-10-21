@@ -31,5 +31,21 @@ export function createAuthController({ service, secure = false }) {
       if (!req.user) throw new AppError(401, 'unauthenticated', 'Authentication required.');
       res.status(200).json({ user: req.user });
     },
+
+    async changePassword(req, res) {
+      if (!req.user || !req.session) {
+        throw new AppError(401, 'unauthenticated', 'Authentication required.');
+      }
+      const { token, maxAgeSeconds } = await service.changePassword({
+        userId: req.user.id,
+        currentPassword: req.body?.currentPassword,
+        newPassword: req.body?.newPassword,
+        sessionId: req.session.id,
+        currentToken: parseCookies(req.headers.cookie)[SESSION_COOKIE] ?? null,
+        ip: req.ip ?? '',
+      });
+      if (token) res.set('Set-Cookie', buildSessionCookie(token, maxAgeSeconds, { secure }));
+      res.status(204).end();
+    },
   };
 }

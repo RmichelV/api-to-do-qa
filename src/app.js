@@ -12,6 +12,7 @@ import { activeBrowsersAnchor } from './services/anchorReadingService.js'
 import { activeBrowsersFull } from './services/fullAnalysisService.js'
 import { securityHeaders } from './middleware/securityHeaders.js'
 import { sessionMiddleware } from './middleware/sessionMiddleware.js'
+import { requirePasswordChanged } from './middleware/requirePasswordChanged.js'
 import { originCheck } from './middleware/originCheck.js'
 import { errorHandler } from './middleware/errorHandler.js'
 
@@ -26,6 +27,9 @@ export function createApp({ config, pool } = {}) {
   if (config && pool) {
     app.set('trust proxy', config.trustProxy ?? 0);
     app.use(sessionMiddleware({ pool, secure: config.nodeEnv === 'production' }));
+    // §5.5: while must_change_password is set, only the change-password flow
+    // runs; everything else answers 403 or redirects to the change page.
+    app.use(requirePasswordChanged());
     // Origin check scoped to the auth routes for now; global application
     // lands with the full protection model in T8.
     app.use('/api/auth', originCheck(config.appOrigin), authRoutes({ pool, config }));

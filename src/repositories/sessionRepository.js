@@ -70,6 +70,17 @@ export async function revoke(pool, { id, now = new Date() }) {
   ]);
 }
 
+// Password change / admin reset (§5.2): revoke every live session of a user,
+// optionally keeping one (the session that is being rotated in place).
+export async function revokeAllForUser(pool, { userId, exceptId = null, now = new Date() }) {
+  const [result] = await pool.execute(
+    `UPDATE user_sessions SET revoked_at = COALESCE(revoked_at, ?)
+     WHERE user_id = ? AND revoked_at IS NULL${exceptId ? ' AND id <> ?' : ''}`,
+    exceptId ? [now, userId, exceptId] : [now, userId]
+  );
+  return result.affectedRows;
+}
+
 // Opportunistic purge (§5.2): expired or revoked rows older than the given
 // number of days. Runs on login; failure there must never block the login.
 export async function purgeExpired(pool, { now = new Date(), olderThanDays = 7 }) {
