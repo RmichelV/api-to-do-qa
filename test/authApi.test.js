@@ -314,15 +314,26 @@ test('logout revokes the session, clears the cookie and is idempotent', { skip: 
   const afterLogout = await get(base, '/api/auth/me', cookieHeader(token));
   assert.equal(afterLogout.status, 401);
 
+  // §7.1 idempotency (L25): logout sits before requireAuth, so calling it
+  // again with the now-revoked cookie still answers 204 clearing the cookie.
   const again = await post(base, '/api/auth/logout', undefined, cookieHeader(token));
-  assert.equal(again.status, 204); // idempotent (§7.1)
+  assert.equal(again.status, 204);
+  assert.match(again.headers.get('set-cookie'), /Max-Age=0/);
 });
 
-test('logout without a session still answers 204', { skip: skipReason }, async (t) => {
+test('logout without a session still answers 204 (idempotent, L25)', { skip: skipReason }, async (t) => {
   const { base } = await startApp(t);
   const response = await post(base, '/api/auth/logout', undefined);
   assert.equal(response.status, 204);
   assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
+});
+
+test('logout is public but origin-checked (§6 step 4/5, L25)', { skip: skipReason }, async (t) => {
+  const { base } = await startApp(t);
+  // No Origin and no Referer: originCheck rejects before the handler runs.
+  const response = await fetch(`${base}/api/auth/logout`, { method: 'POST' });
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error, 'invalid_origin');
 });
 
 test('the token rotates after 24 h of use, keeping the old one for 60 s (§5.2)', { skip: skipReason }, async (t) => {

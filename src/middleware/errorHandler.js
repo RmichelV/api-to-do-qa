@@ -1,5 +1,10 @@
 // Uniform JSON errors, no stack traces or SQL details to the client
 // (design §7, §5.6).
+// 404 for anything no route or static file answered (§6, step 12).
+export function notFoundHandler(req, res) {
+  res.status(404).json({ error: 'not_found', message: 'Not found.' });
+}
+
 export function errorHandler(err, req, res, _next) {
   if (res.headersSent) return;
 

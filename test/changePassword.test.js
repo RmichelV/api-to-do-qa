@@ -308,34 +308,30 @@ test('while must_change_password is set, only the change flow is allowed (§5.5)
     password: OLD_PASSWORD,
     mustChangePassword: true,
   });
-  const token = await loginAs(base, 'cp-forced@example.com', OLD_PASSWORD);
-
   // Login already reports the flag so the frontend can redirect (T7).
+  // §6 order note: POST login is public (step 4), above the gate (step 7),
+  // so this re-login while flagged succeeds with 200 and the flag set —
+  // §5.5 still holds because the gate below blocks everything else. Use
+  // this fresh session for the rest of the flow (it replaces the old one).
   const login = await post(base, '/api/auth/login', {
     email: 'cp-forced@example.com',
     password: OLD_PASSWORD,
   });
   assert.equal((await login.json()).user.mustChangePassword, true);
+  const token = sessionCookie(login);
 
   // Allowed: me, logout, change-password.
   const me = await get(base, '/api/auth/me', cookieHeader(token));
   assert.equal(me.status, 200);
   assert.equal((await me.json()).user.mustChangePassword, true);
 
-  // Blocked: any other API, including the QA routes and even re-login.
+  // Blocked: any other API, including the QA routes.
   const qa = await post(base, '/api/cancel', undefined, cookieHeader(token));
   assert.equal(qa.status, 403);
   assert.deepEqual(await qa.json(), {
     error: 'password_change_required',
     message: 'You must change your password before continuing.',
   });
-  const relogin = await post(
-    base,
-    '/api/auth/login',
-    { email: 'cp-forced@example.com', password: OLD_PASSWORD },
-    cookieHeader(token)
-  );
-  assert.equal(relogin.status, 403);
 
   // Blocked: protected pages redirect to the change-password screen.
   // redirect: 'manual' to assert the 302 itself — the page lands in T7.

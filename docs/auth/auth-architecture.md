@@ -286,13 +286,16 @@ Middleware order in `createApp()`:
      GET  /login.html, /login.js           (from public-auth/)
      GET  /styles.css                       (shared stylesheet)
      POST /api/auth/login                   (+ originCheck)
+     POST /api/auth/logout                  (+ originCheck; idempotent per §7.1:
+                                              revokes when the cookie is valid and
+                                              always clears it with 204)
      GET  /healthz                          (returns only {"status":"ok"}, no data)
 5. originCheck                  → every state-changing request
 6. requireAuth                  → DEFAULT DENY for everything below:
      API request  → 401 { error: "unauthenticated" }
      page request → 302 /login.html
 7. requirePasswordChanged
-8. /api/auth/{logout,me,change-password}
+8. /api/auth/{me,change-password}
 9. /api/admin/users/*  (requireRole('admin'))
 10. existing QA routers: /api/text-reading, /api/text-reading-mobile, /api/link-reading,
     /api/anchor-reading, /api/full-analysis, /api/cancel
@@ -319,7 +322,7 @@ All JSON. Errors: `{ "error": "<code>", "message": "<human text>" }`.
 | Method | Path | Access | Body | Success | Errors |
 |---|---|---|---|---|---|
 | POST | `/api/auth/login` | public | `{ email, password }` | `200 { user }` + `Set-Cookie` | `400 validation_error`, `401 invalid_credentials`, `429 too_many_attempts` |
-| POST | `/api/auth/logout` | session | — | `204` + cleared cookie | — (idempotent) |
+| POST | `/api/auth/logout` | public (+ originCheck) | — | `204` + cleared cookie | — (idempotent) |
 | GET | `/api/auth/me` | session | — | `200 { user }` | `401 unauthenticated` |
 | POST | `/api/auth/change-password` | session | `{ currentPassword, newPassword }` | `204` | `400 validation_error`, `401 invalid_credentials` |
 
