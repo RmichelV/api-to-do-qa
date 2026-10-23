@@ -100,7 +100,7 @@ export const extractCleanText = ($, wrapper) => {
 export const scrapePageContent = async (url) => {
   const { $ } = await fetchPage(url);
 
-  // H1 visible (fuera o dentro del wrapper, excluyendo sr-only)
+  // Visible H1 elements (inside or outside the wrapper, excluding sr-only)
   const h1Texts = [];
   $('h1').not('.sr-only').each((_, el) => {
     const t = $(el).text().trim();
@@ -114,15 +114,15 @@ export const scrapePageContent = async (url) => {
 
   const rawText = extractCleanText($, wrapper);
 
-  // Links dentro del wrapper (tras limpieza)
+  // Links inside the wrapper (after cleanup)
   const anchors = [];
   wrapper.find('a').each((_, el) => {
     const href = $(el).attr('href') || '';
     const text = $(el).text().trim();
     if (!text || !href || href === '#') return;
-    // Un link es relativo si NO tiene esquema (http/https/mailto/tel/etc.)
+    // A link is relative if it has no scheme (http/https/mailto/tel/etc.)
     const isRelative = !/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(href) && !href.startsWith('mailto:') && !href.startsWith('tel:');
-    // Construir URL absoluta
+    // Build the absolute URL
     const absUrl = href.startsWith('http') ? href : new URL(href, url).href;
     anchors.push({ text, url: absUrl, originalHref: href, isRelative });
   });
@@ -130,11 +130,85 @@ export const scrapePageContent = async (url) => {
   return { rawText, h1Texts, srOnlyText, anchors };
 };
 
+export const scrapePageImages = async (url) => {
+  const { $ } = await fetchPage(url);
+  const wrapper = $('.ddc-wrapper').first();
+  if (!wrapper.length) throw new Error('.ddc-wrapper not found in page HTML');
+
+  extractCleanText($, wrapper);
+
+  const images = [];
+  wrapper.find('img').each((_, el) => {
+    const image = $(el);
+    if (image.is('.skeleton-shimmer, .default-asset-placeholder, [class*="asset-placeholder"]')) return;
+    if (image.parents('.content-tabbed').length) return;
+    const isDefaultImageWidget = image.parents('[data-widget-name="image-default"]').length > 0;
+
+    const isBackgroundImageProxy = image.is('[hidden], [role="presentation"], .d-none, .responsive-image, .dynamic-resize')
+      && [el, ...image.parents().toArray()].some(node => {
+        const element = $(node);
+        const style = element.attr('style') || '';
+        const hasBackgroundUrl = /(?:^|;)\s*background(?:-image)?\s*:[^;]*url\s*\(/i.test(style);
+        return hasBackgroundUrl || element.attr('data-responsive-image-bg') === 'true' && /url\s*\(/i.test(style);
+      });
+    if (isBackgroundImageProxy) return;
+
+    const pictureSources = image.parents('picture').first().find('source[srcset]').map((_, source) => $(source).attr('srcset')).get();
+    const srcsetCandidates = [image.attr('data-srcset'), image.attr('srcset'), ...pictureSources]
+      .filter(Boolean)
+      .flatMap(srcset => srcset.split(/\s*,\s*/).map(candidate => candidate.trim().split(/\s+/)[0]));
+    const srcCandidates = [
+      image.attr('data-src'),
+      image.attr('data-lazy-src'),
+      image.attr('data-original-src'),
+      image.attr('data-original'),
+      ...srcsetCandidates,
+      image.attr('src'),
+    ];
+    const src = srcCandidates
+      .map(candidate => String(candidate || '').trim())
+      .find(candidate => candidate && !/^data:/i.test(candidate) && !/^javascript:/i.test(candidate)) || null;
+
+    images.push({
+      src,
+      alt: image.attr('alt') ?? null,
+      title: isDefaultImageWidget ? 'Title not required' : image.attr('title') ?? null,
+      titleRequired: !isDefaultImageWidget,
+    });
+  });
+
+  return images;
+};
+
+export const scrapeH1DataMobile = async (url) => {
+  const mobileUA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+  const headers = {
+    ...buildBrowserHeaders(url),
+    'User-Agent': mobileUA,
+  };
+
+  const res = await fetch(url, { headers, redirect: 'follow' });
+  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+
+  const html = await res.text();
+  const $ = load(html);
+
+  const h1Texts = [];
+  $('h1').not('.sr-only').each((_, el) => {
+    const t = $(el).text().trim();
+    if (t) h1Texts.push(t);
+  });
+  const srOnlyEl = $('h1.sr-only').first();
+  const srOnlyText = srOnlyEl.length ? srOnlyEl.text().trim() || null : null;
+
+  return { h1Texts, srOnlyText };
+};
+
 /**
  * Mobile version: same extraction but with iPhone UA.
  * SSR content is identical (server returns the same HTML).
  * For real mobile differences would need to use viewport/CSS,
- * pero a nivel de texto el contenido es el mismo.
+ * At the text level, however, the content is the same.
  */
 export const scrapePageContentMobile = async (url) => {
   const mobileUA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
@@ -148,7 +222,7 @@ export const scrapePageContentMobile = async (url) => {
   const $ = load(html);
 
   let wrapper = $('.ddc-wrapper').first();
-  // Fallback: algunos servidores entregan HTML diferente para mobile
+  // Fallback: some servers return different HTML for mobile
   if (!wrapper.length) {
     console.warn('[scrapeUtils] mobile: .ddc-wrapper not found, using body fallback');
     wrapper = $('body');

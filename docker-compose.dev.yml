@@ -1,0 +1,36 @@
+# Local development database (MariaDB in Docker). Not used in production:
+# usage: docker compose -f docker-compose.dev.yml up -d
+# production points DB_* at the Hostinger database instead.
+#
+# Secrets come from the project .env (git-ignored), never from this file:
+#   MARIADB_ROOT_PASSWORD  root of this local container
+#   DB_PASSWORD            password of qa_app (same value the app uses)
+#   MIGRATE_DB_PASSWORD    password of qa_migrator
+services:
+  db:
+    image: mariadb:10.11
+    container_name: api-to-do-qa-db
+    restart: unless-stopped
+    # Bound to 127.0.0.1 only: not reachable from the local network.
+    # 3307 avoids the XAMPP MariaDB on 3306.
+    ports:
+      - "127.0.0.1:3307:3306"
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?set MARIADB_ROOT_PASSWORD in .env}
+      QA_APP_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      QA_MIGRATOR_PASSWORD: ${MIGRATE_DB_PASSWORD:?set MIGRATE_DB_PASSWORD in .env}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - qa_db_data:/var/lib/mysql
+      # Runs only on the first start (empty volume).
+      - ./db/docker/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  qa_db_data:

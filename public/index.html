@@ -72,7 +72,10 @@
       </section>
 
       <section class="actions-section">
-        <button class="btn-run-all" onclick="runFullAnalysis()">⚡ Run All</button>
+        <div class="run-all-row">
+          <button class="btn-run-all" onclick="runFullAnalysis()">⚡ Run All</button>
+          <button class="help-trigger" type="button" aria-label="Run All help" aria-haspopup="dialog" aria-controls="review-help-dialog" title="Run All help" onclick="openHelpDialog('runAll')"><span aria-hidden="true">i</span></button>
+        </div>
         <div class="btn-grid">
           <button class="btn-action btn-action--desktop" onclick="runTextReading()">
             <span class="btn-action__icon">🖥️</span>
@@ -93,13 +96,30 @@
             <span class="btn-action__icon">⚓</span>
             <span class="btn-action__label">Anchors</span>
             <span class="btn-action__sub">Internal</span>
+            <span class="btn-action__sub">Runs separately · not included in Run All</span>
+          </button>
+          <button class="btn-action btn-action--images" onclick="runImageReading()">
+            <span class="btn-action__icon">🖼️</span>
+            <span class="btn-action__label">Images</span>
+            <span class="btn-action__sub">Alt + Title</span>
           </button>
         </div>
       </section>
 
+      <dialog class="help-dialog" id="review-help-dialog" aria-labelledby="review-help-title">
+        <div class="help-dialog__header">
+          <h2 id="review-help-title"></h2>
+          <button class="help-dialog__close" type="button" aria-label="Close help" onclick="closeHelpDialog()">×</button>
+        </div>
+        <div id="review-help-content"></div>
+      </dialog>
+
       <div id="outputs">
 
-        <div class="section-header section-header--h1">🏷️ H1</div>
+        <div class="section-header section-header--h1">
+          <span>🏷️ H1</span>
+          <button class="help-trigger section-help-trigger" type="button" aria-label="H1 guidance" aria-haspopup="dialog" aria-controls="review-help-dialog" title="H1 guidance" onclick="openHelpDialog('h1')"><span aria-hidden="true">i</span></button>
+        </div>
 
         <div class="panel panel--full h1-panel panel--h1">
           <h3>H1 Review</h3>
@@ -107,7 +127,10 @@
           <div id="h1-details" class="h1-details"></div>
         </div>
 
-        <div class="section-header section-header--desktop">🖥️ Desktop Analysis</div>
+        <div class="section-header section-header--desktop">
+          <span>🖥️ Desktop Analysis</span>
+          <button class="help-trigger section-help-trigger" type="button" aria-label="Desktop analysis guidance" aria-haspopup="dialog" aria-controls="review-help-dialog" title="Desktop analysis guidance" onclick="openHelpDialog('desktop')"><span aria-hidden="true">i</span></button>
+        </div>
 
         <div class="panel panel--desktop" id="cp-panel">
           <h3>CP · Page Content <small>normalized</small></h3>
@@ -138,7 +161,10 @@
           <div id="compare-mobile-details" class="text-output"></div>
         </div>
 
-        <div class="section-header section-header--links">🔗 Links</div>
+        <div class="section-header section-header--links">
+          <span>🔗 Links</span>
+          <button class="help-trigger section-help-trigger" type="button" aria-label="Links guidance" aria-haspopup="dialog" aria-controls="review-help-dialog" title="Links guidance" onclick="openHelpDialog('links')"><span aria-hidden="true">i</span></button>
+        </div>
 
         <div class="panel panel--full anchors-panel panel--links">
           <h3>Links</h3>
@@ -146,7 +172,19 @@
           <div id="link-check-output"></div>
         </div>
 
-        <div class="section-header section-header--anchors" id="anchor-section-header" style="display:none">⚓ Anchors</div>
+        <div class="section-header section-header--images">
+          <span>🖼️ Images</span>
+          <button class="help-trigger section-help-trigger" type="button" aria-label="Images guidance" aria-haspopup="dialog" aria-controls="review-help-dialog" title="Images guidance" onclick="openHelpDialog('images')"><span aria-hidden="true">i</span></button>
+        </div>
+
+        <div class="panel panel--full images-panel panel--images">
+          <div id="images-output">Not scanned yet…</div>
+        </div>
+
+        <div class="section-header section-header--anchors" id="anchor-section-header" style="display:none">
+          <span>⚓ Anchors</span>
+          <button class="help-trigger section-help-trigger" type="button" aria-label="Anchors guidance" aria-haspopup="dialog" aria-controls="review-help-dialog" title="Anchors guidance" onclick="openHelpDialog('anchors')"><span aria-hidden="true">i</span></button>
+        </div>
 
         <div class="panel panel--full anchors-panel panel--anchors" id="anchor-panel" style="display:none">
           <div id="anchor-output">Not evaluated yet…</div>
@@ -158,7 +196,79 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="/auth-bar.js" defer></script>
     <script>
-      // --- ABORT CONTROLLERS para cancelar fetch requests ---
+      const reviewHelpNotes = {
+        runAll: {
+          title: "Before running Run All",
+          notes: [
+            { text: "Make sure the page you are examining has already been updated with the content you want to scan." },
+            { text: "Important: If the changes are not visible on the page, the tool may report content as missing or links as not added.", important: true },
+          ],
+        },
+        h1: {
+          title: "H1 review guidance",
+          notes: [
+            { text: "The visible H1 and the sr-only H1 should have matching text." },
+            { text: "There should be no more than one visible H1." },
+            { text: "At least one H1 must be present, either visible or sr-only." },
+          ],
+        },
+        desktop: {
+          title: "Desktop analysis guidance",
+          notes: [
+            { text: "If Desktop Analysis reports a mismatch, check these possible causes before marking it as an error." },
+            { text: "A paragraph may have been split into two paragraphs on the page, and punctuation such as a comma may be missing. Compare the full text before deciding that content is missing." },
+            { text: "Example: CO: <p>Once upon a time there was a dev, his name was Devsito.</p> Page: <p>Once upon a time there was a dev</p><p>his name was Devsito.</p> The page is missing the comma and splits the text into two paragraphs." },
+            { text: "Small additions or incomplete phrases in the middle of the text may be intentional specialist edits. Check the page's change history before reporting them as errors." },
+            { text: "Do not report special characters, such as an em dash (—) or the registered trademark symbol (®), as errors by themselves." },
+            { text: "If the word 'skipped' appears in a mobile title, do not count it as an error." },
+          ],
+        },
+        links: {
+          title: "Links review guidance",
+          notes: [
+            { text: "Links expected to redirect to pages with HTTP 200 should not be counted as errors when they return HTTP 429 or 0." },
+          ],
+        },
+        anchors: {
+          title: "Anchors review guidance",
+          notes: [
+            { text: "Some pages need an additional click on the Anchors button before the table appears. If the table is empty, click the button again and check once more." },
+          ],
+        },
+        images: {
+          title: "Images review guidance",
+          notes: [
+            { text: "If the image table does not populate, click the Images button again and check once more." },
+            { text: "Alt and title text should start with a capital letter." },
+            { text: "For vehicle images, use this order: Make Model Year Color." },
+            { text: "For non-vehicle images, use a clear, descriptive alt and title." },
+          ],
+        },
+      };
+
+      function openHelpDialog(section) {
+        const note = reviewHelpNotes[section];
+        const dialog = document.getElementById("review-help-dialog");
+        document.getElementById("review-help-title").textContent = note.title;
+        const content = document.getElementById("review-help-content");
+        content.replaceChildren(...note.notes.map(({ text, important }) => {
+          const paragraph = document.createElement("p");
+          paragraph.textContent = text;
+          if (important) paragraph.className = "help-dialog__important";
+          return paragraph;
+        }));
+        dialog.showModal();
+      }
+
+      function closeHelpDialog() {
+        document.getElementById("review-help-dialog").close();
+      }
+
+      document.getElementById("review-help-dialog").addEventListener("click", (event) => {
+        if (event.target === event.currentTarget) event.currentTarget.close();
+      });
+
+      // --- ABORT CONTROLLERS for cancelling fetch requests ---
       let activeAbortControllers = [];
 
       function createAbortController() {
@@ -253,7 +363,7 @@
       }
 
       async function stopAllProcesses() {
-        // 1. Cancelar todos los fetch activos en el frontend
+        // 1. Cancel all active frontend fetch requests
         activeAbortControllers.forEach((ac) => {
           try {
             ac.abort();
@@ -261,12 +371,12 @@
         });
         activeAbortControllers = [];
 
-        // 2. Pedir al backend que cierre todos los browsers
+        // 2. Ask the backend to close all browsers
         try {
           await fetch("/api/cancel", { method: "POST" });
         } catch {}
 
-        // 3. Actualizar paneles con mensaje de cancelación
+        // 3. Update panels with a cancellation message
         const cancelMsg = "⏹️ Process stopped by user";
         [
           "cp-output",
@@ -298,6 +408,9 @@
         const anchorEl = document.getElementById("anchor-output");
         if (anchorEl && anchorEl.textContent.startsWith("⏳"))
           anchorEl.textContent = cancelMsg;
+        const imagesEl = document.getElementById("images-output");
+        if (imagesEl && imagesEl.textContent.startsWith("⏳"))
+          imagesEl.textContent = cancelMsg;
       }
 
       // --- TEXT READING ---
@@ -317,7 +430,7 @@
           return;
         }
 
-        // Controlar visibilidad de paneles según checkbox
+        // Control panel visibility based on the checkbox
         const showContent = document.getElementById("show-content").checked;
         cpPanel.style.display = showContent ? "" : "none";
         coPanel.style.display = showContent ? "" : "none";
@@ -342,7 +455,7 @@
           if (!resp.ok)
             throw new Error((data && data.error) || resp.statusText);
 
-          // Mostrar CP y CO normalizados del backend
+          // Show the normalized CP and CO returned by the backend
           cpDiv.textContent = (data.cp && data.cp.text) || "";
           coDiv.textContent = (data.co && data.co.text) || "";
 
@@ -395,7 +508,7 @@
           return;
         }
 
-        // Siempre mostrar paneles mobile al ejecutar
+        // Always show mobile panels when running
         const showContent = document.getElementById("show-content").checked;
         cpPanel.style.display = showContent ? "" : "none";
         coPanel.style.display = showContent ? "" : "none";
@@ -451,7 +564,7 @@
         }
       }
 
-      // --- LINK READING: Leer enlaces + H1 en un solo navegador ---
+      // --- LINK READING: Read links + H1 in a single browser ---
       async function runLinkReading() {
         const url = document.getElementById("url").value;
         const anchorsDiv = document.getElementById("anchors-output");
@@ -464,7 +577,6 @@
         document.getElementById("h1-details").textContent = "";
         const ac = createAbortController();
         try {
-          // Un solo navegador extrae anchors + H1
           const resp = await fetch("/api/link-reading/anchors-and-h1", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -475,8 +587,28 @@
           if (!resp.ok)
             throw new Error((data && data.error) || resp.statusText);
 
-          // Renderizar H1
-          renderH1Panel(data.h1Texts || [], data.srOnlyText || null);
+          const h1Comparison = data.comparison || {
+            same: true,
+            desktop: { h1Texts: data.h1Texts || [], srOnlyText: data.srOnlyText || null },
+            mobile: { h1Texts: data.mobile && data.mobile.h1Texts ? data.mobile.h1Texts : [], srOnlyText: data.mobile && data.mobile.srOnlyText ? data.mobile.srOnlyText : null },
+          };
+
+          if (!h1Comparison.same) {
+            const details = [];
+            const desktopH1 = h1Comparison.desktop && h1Comparison.desktop.h1Texts ? h1Comparison.desktop.h1Texts : [];
+            const mobileH1 = h1Comparison.mobile && h1Comparison.mobile.h1Texts ? h1Comparison.mobile.h1Texts : [];
+            const desktopSrOnly = h1Comparison.desktop && h1Comparison.desktop.srOnlyText ? h1Comparison.desktop.srOnlyText : null;
+            const mobileSrOnly = h1Comparison.mobile && h1Comparison.mobile.srOnlyText ? h1Comparison.mobile.srOnlyText : null;
+            if (desktopH1.length) details.push(`Desktop H1: ${desktopH1.map((t) => escapeHtml(t)).join(' | ')}`);
+            if (mobileH1.length) details.push(`Mobile H1: ${mobileH1.map((t) => escapeHtml(t)).join(' | ')}`);
+            if (desktopSrOnly) details.push(`Desktop sr-only: ${escapeHtml(desktopSrOnly)}`);
+            if (mobileSrOnly) details.push(`Mobile sr-only: ${escapeHtml(mobileSrOnly)}`);
+            document.getElementById("h1-summary").textContent = "🔴 Mobile H1 differs from desktop H1";
+            document.getElementById("h1-summary").className = "h1-summary status-fail";
+            document.getElementById("h1-details").innerHTML = details.join("<br>");
+          } else {
+            renderH1Panel(h1Comparison.desktop && h1Comparison.desktop.h1Texts ? h1Comparison.desktop.h1Texts : (data.h1Texts || []), h1Comparison.desktop && h1Comparison.desktop.srOnlyText ? h1Comparison.desktop.srOnlyText : (data.srOnlyText || null));
+          }
 
           const anchors = data.anchors || [];
           if (!anchors.length) {
@@ -486,7 +618,7 @@
             return;
           }
           anchorsDiv.innerHTML = buildAnchorsTable(anchors);
-          // Pedir estados HTTP (sin navegador)
+          // Request HTTP statuses (without a browser)
           try {
             const statuses = await updateLinkStatuses(anchors.map((a) => a.url));
             const withStatus = anchors.map((a, idx) => ({
@@ -502,6 +634,34 @@
         } catch (error) {
           if (error.name === "AbortError") return;
           anchorsDiv.textContent = `Error extracting links: ${error.message}`;
+        } finally {
+          removeAbortController(ac);
+        }
+      }
+
+      async function runImageReading() {
+        const url = document.getElementById("url").value;
+        const output = document.getElementById("images-output");
+        if (!url) {
+          alert("Please enter a URL");
+          return;
+        }
+
+        output.textContent = "⏳ Scanning images…";
+        const ac = createAbortController();
+        try {
+          const resp = await fetch("/api/image-reading/scan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url }),
+            signal: ac.signal,
+          });
+          const data = await resp.json();
+          if (!resp.ok) throw new Error((data && data.error) || resp.statusText);
+          output.innerHTML = renderImageTable(data.images || [], url);
+        } catch (error) {
+          if (error.name === "AbortError") return;
+          output.innerHTML = renderImageTable([], url, error.message);
         } finally {
           removeAbortController(ac);
         }
@@ -766,7 +926,7 @@
         renderH1Panel(data.h1Texts || [], data.srOnlyText || null);
       }
 
-      // Renderiza el panel H1 a partir de datos ya disponibles (sin llamada a la API)
+      // Render the H1 panel from data that is already available (without an API call)
       function renderH1Panel(h1Texts, srOnlyText) {
         const h1Summary = document.getElementById("h1-summary");
         const h1Details = document.getElementById("h1-details");
@@ -809,7 +969,7 @@
         h1Details.textContent = `H1: ${escapeHtml(h1Texts[0])}`;
       }
 
-      // --- ANCHOR READING: Validar anchor links internos (#seccion) ---
+      // --- ANCHOR READING: Validate internal anchor links (#section) ---
       async function runAnchorReading() {
         const url = document.getElementById("url").value;
         const anchorPanel = document.getElementById("anchor-panel");
@@ -838,7 +998,7 @@
           const anchors = data.anchors || [];
           const misconfiguredAnchors = data.misconfiguredAnchors || [];
 
-          // Si no hay ningún tipo de anchor
+          // If no anchors of either type were found
           if (!anchors.length && !misconfiguredAnchors.length) {
             anchorDiv.textContent = "No anchors were found in .ddc-wrapper";
             return;
@@ -846,7 +1006,7 @@
 
           let htmlContent = "";
 
-          // Mostrar anchors bien configurados
+          // Show properly configured anchors
           if (anchors.length > 0) {
             const totalExists = anchors.filter((a) => a.targetExists).length;
             const summaryBadge = totalExists === anchors.length ? "🟢" : "🔴";
@@ -859,7 +1019,7 @@
             `;
           }
 
-          // Mostrar anchors mal configurados
+          // Show misconfigured anchors
           if (misconfiguredAnchors.length > 0) {
             htmlContent += `
               <div style="margin-top:0.8rem;padding-top:0.6rem;border-top:1px solid #fdba74">
@@ -1012,7 +1172,7 @@
           .join("");
       }
 
-      // Tabla de links con status ya incluido (para Run All)
+      // Links table with status already included (for Run All)
       function buildAnchorsTableWithStatus(anchors) {
         const rows = anchors
           .map((a, idx) => {
@@ -1029,7 +1189,47 @@
         return `<table class="anchors-table"><thead><tr><th>#</th><th>Text</th><th>URL</th><th>Type</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
       }
 
-      // Helper compartido para renderizar resumen de comparación
+      function resolveImageUrl(src, pageUrl) {
+        if (!src) return null;
+        try {
+          const parsed = new URL(src, pageUrl);
+          return ["http:", "https:"].includes(parsed.protocol) ? parsed.href : null;
+        } catch {
+          return null;
+        }
+      }
+
+      function renderImageTable(images, pageUrl, errorMessage = null) {
+        let rows;
+        if (errorMessage) {
+          rows = `<tr><td colspan="5">Image scan failed: ${escapeHtml(errorMessage)}</td></tr>`;
+        } else if (!images.length) {
+          rows = '<tr><td colspan="5">No images found in .ddc-wrapper</td></tr>';
+        } else {
+          rows = images.map((image, index) => {
+            const imageUrl = image.imageUrl || resolveImageUrl(image.src, pageUrl);
+            const urlCell = imageUrl
+              ? `<a href="${escapeHtml(imageUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(imageUrl)}</a>`
+              : "No image URL";
+            const ddcCell = image.ddcHosted
+              ? '<span class="image-ddc-yes">Yes</span>'
+              : '<span class="image-ddc-no">No</span>';
+            const altValue = typeof image.alt === "string" ? image.alt.trim() : "";
+            const titleValue = typeof image.title === "string" ? image.title.trim() : "";
+            const hasAlt = image.hasAlt;
+            const hasTitle = image.hasTitle;
+            const altText = hasAlt ? escapeHtml(altValue) : "Missing alt";
+            const titleText = hasTitle ? escapeHtml(titleValue) : "Missing title";
+            const altClass = hasAlt ? "image-field-pass" : "image-field-fail";
+            const titleClass = hasTitle ? "image-field-pass" : "image-field-fail";
+            return `<tr><td>${index + 1}</td><td class="image-url">${urlCell}</td><td>${ddcCell}</td><td><span class="${altClass}">${altText}</span></td><td><span class="${titleClass}">${titleText}</span></td></tr>`;
+          }).join("");
+        }
+
+        return `<table class="anchors-table image-results-table"><caption>Image Reading Service</caption><thead><tr><th>#</th><th>Image URL</th><th>DDC Hosted</th><th>Alt</th><th>Title</th></tr></thead><tbody>${rows}</tbody></table>`;
+      }
+
+      // Shared helper to render the comparison summary
       function renderCompareResult(data, summaryId, detailsId) {
         const complete = data.result && data.result.complete;
         const badge = complete ? "🟢 COMPLETE" : "🔴 INCOMPLETE";
@@ -1048,7 +1248,7 @@
         document.getElementById(detailsId).innerHTML = complete ? "" : lines;
       }
 
-      // --- RUN ALL: análisis completo en 2 navegadores en paralelo ---
+      // --- RUN ALL: Complete analysis in two browsers in parallel ---
       async function runFullAnalysis() {
         const url = document.getElementById("url").value;
         const coInput = document.getElementById("co").value;
@@ -1074,6 +1274,7 @@
         document.getElementById("anchors-output").textContent = pending;
         document.getElementById("h1-summary").textContent = pending;
         document.getElementById("h1-details").textContent = "";
+        document.getElementById("images-output").textContent = pending;
 
         const ac = createAbortController();
         try {
@@ -1088,12 +1289,17 @@
 
           const desktop = data.desktop || {};
           const mobile = data.mobile || {};
+          document.getElementById("images-output").innerHTML = renderImageTable(
+            data.images || [],
+            url,
+            data.imageError || null,
+          );
 
-          // CP y CO desktop
+          // Desktop CP and CO
           document.getElementById("cp-output").textContent = (desktop.cp && desktop.cp.text) || "";
           document.getElementById("co-output").textContent = (desktop.co && desktop.co.text) || (coInput ? "" : "—");
 
-          // Comparación desktop
+          // Desktop comparison
           if (coInput && desktop.result) {
             renderCompareResult(desktop, "compare-summary", "compare-details");
           } else {
@@ -1101,11 +1307,11 @@
               ? "Comparison data not available" : "No CO provided — comparison skipped";
           }
 
-          // CP y CO mobile
+          // Mobile CP and CO
           document.getElementById("cp-mobile-output").textContent = (mobile.cp && mobile.cp.text) || "";
           document.getElementById("co-mobile-output").textContent = (mobile.co && mobile.co.text) || (coInput ? "" : "—");
 
-          // Comparación mobile
+          // Mobile comparison
           if (coInput && mobile.result) {
             renderCompareResult(mobile, "compare-mobile-summary", "compare-mobile-details");
           } else {
@@ -1113,10 +1319,31 @@
               ? "Comparison data not available" : "No CO provided — comparison skipped";
           }
 
-          // H1
-          renderH1Panel(desktop.h1Texts || [], desktop.srOnlyText || null);
+          // H1 desktop + mobile comparison from backend service
+          const h1Comparison = data.h1Comparison || {
+            same: true,
+            desktop: { h1Texts: desktop.h1Texts || [], srOnlyText: desktop.srOnlyText || null },
+            mobile: { h1Texts: mobile.h1Texts || [], srOnlyText: mobile.srOnlyText || null },
+          };
 
-          // Links (status ya embebido)
+          if (!h1Comparison.same) {
+            const details = [];
+            const desktopH1 = h1Comparison.desktop && h1Comparison.desktop.h1Texts ? h1Comparison.desktop.h1Texts : [];
+            const mobileH1 = h1Comparison.mobile && h1Comparison.mobile.h1Texts ? h1Comparison.mobile.h1Texts : [];
+            const desktopSrOnly = h1Comparison.desktop && h1Comparison.desktop.srOnlyText ? h1Comparison.desktop.srOnlyText : null;
+            const mobileSrOnly = h1Comparison.mobile && h1Comparison.mobile.srOnlyText ? h1Comparison.mobile.srOnlyText : null;
+            if (desktopH1.length) details.push(`Desktop H1: ${desktopH1.map((t) => escapeHtml(t)).join(' | ')}`);
+            if (mobileH1.length) details.push(`Mobile H1: ${mobileH1.map((t) => escapeHtml(t)).join(' | ')}`);
+            if (desktopSrOnly) details.push(`Desktop sr-only: ${escapeHtml(desktopSrOnly)}`);
+            if (mobileSrOnly) details.push(`Mobile sr-only: ${escapeHtml(mobileSrOnly)}`);
+            document.getElementById("h1-summary").textContent = "🔴 Mobile H1 differs from desktop H1";
+            document.getElementById("h1-summary").className = "h1-summary status-fail";
+            document.getElementById("h1-details").innerHTML = details.join("<br>");
+          } else {
+            renderH1Panel(h1Comparison.desktop && h1Comparison.desktop.h1Texts ? h1Comparison.desktop.h1Texts : (desktop.h1Texts || []), h1Comparison.desktop && h1Comparison.desktop.srOnlyText ? h1Comparison.desktop.srOnlyText : (desktop.srOnlyText || null));
+          }
+
+          // Links (status is already included)
           const anchors = desktop.anchors || [];
           if (!anchors.length) {
             document.getElementById("anchors-output").textContent = "No visible links were found in .ddc-wrapper";
@@ -1138,7 +1365,7 @@
       }
 
       function resetAll() {
-        // Detener procesos activos primero
+        // Stop active processes first
         activeAbortControllers.forEach((ac) => {
           try {
             ac.abort();
@@ -1149,15 +1376,15 @@
           fetch("/api/cancel", { method: "POST" });
         } catch {}
 
-        // Limpiar inputs
+        // Clear inputs
         document.getElementById("url").value = "";
         document.getElementById("co").value = "";
         document.getElementById("check-links").value = "";
 
-        // Restaurar checkboxes a su estado original
+        // Restore checkboxes to their initial state
         document.getElementById("show-content").checked = false;
 
-        // Restaurar paneles desktop
+        // Restore desktop panels
         document.getElementById("cp-panel").style.display = "";
         document.getElementById("co-panel").style.display = "";
         document.getElementById("cp-output").textContent =
@@ -1167,7 +1394,7 @@
         document.getElementById("compare-summary").textContent = "Pending…";
         document.getElementById("compare-details").textContent = "";
 
-        // Ocultar paneles mobile y restaurar texto
+        // Hide mobile panels and restore their text
         document.getElementById("cp-mobile-panel").style.display = "none";
         document.getElementById("co-mobile-panel").style.display = "none";
         document.getElementById("compare-mobile-panel").style.display = "none";
@@ -1180,24 +1407,25 @@
           "Pending…";
         document.getElementById("compare-mobile-details").textContent = "";
 
-        // Restaurar paneles de links y H1
+        // Restore links and H1 panels
         document.getElementById("anchors-output").textContent =
           "Not extracted yet…";
         document.getElementById("link-check-output").innerHTML = "";
+        document.getElementById("images-output").textContent = "Not scanned yet…";
         document.getElementById("h1-summary").textContent = "Not evaluated yet…";
         document.getElementById("h1-summary").className = "h1-summary";
         document.getElementById("h1-details").innerHTML = "";
 
-        // Restaurar panel anchor
+        // Restore the anchor panel
         document.getElementById("anchor-panel").style.display = "none";
         document.getElementById("anchor-section-header").style.display = "none";
         document.getElementById("anchor-output").textContent =
           "Not evaluated yet…";
 
-        // Limpiar checklist QA
+        // Clear the QA checklist
         resetTodoList();
 
-        // Cerrar panel QA Todo
+        // Close the QA Todo panel
         const todoPanel = document.getElementById("todo-panel");
         if (todoPanel) todoPanel.style.display = "none";
         const appMain = document.getElementById("app-main");

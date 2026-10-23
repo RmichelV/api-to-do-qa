@@ -5,7 +5,7 @@ features so it runs on both. Driver: `mysql2` (the only new dependency).
 
 ## 1. Local engine
 
-Local development uses **Docker** (`docker-compose.yml`, MariaDB 10.11 on
+Local development uses **Docker** (`docker-compose.dev.yml`, MariaDB 10.11 on
 `127.0.0.1:3307`). It is only for development: production points `DB_*` at the
 Hostinger database, and nothing in the app depends on Docker.
 
@@ -29,24 +29,27 @@ TEST_DB_PASSWORD=<same as MIGRATE_DB_PASSWORD>
 ### 1.2 Daily commands
 
 ```bash
-docker compose up -d          # start (first start creates databases and users)
-docker compose ps             # status: "healthy" means ready
-docker compose logs -f db     # follow the database logs
-docker compose stop           # stop, keeping the data
+docker compose -f docker-compose.dev.yml up -d     # start (first start creates databases and users)
+docker compose -f docker-compose.dev.yml ps        # status: "healthy" means ready
+docker compose -f docker-compose.dev.yml logs -f db # follow the database logs
+docker compose -f docker-compose.dev.yml stop      # stop, keeping the data
 ```
 
 ### 1.3 Reset from scratch
 
 ```bash
-docker compose down -v        # deletes the container AND all its data
-docker compose up -d          # recreates databases and users
+docker compose -f docker-compose.dev.yml down -v   # deletes the container AND all its data
+docker compose -f docker-compose.dev.yml up -d     # recreates databases and users
 npm run migrate               # recreates the tables
 ```
 
 The init script (`db/docker/init/01-databases-and-users.sh`) runs only when
 the data volume is empty, so changing a password in `.env` later requires a
-reset. To remove Docker entirely: `docker compose down -v`, then delete
-`docker-compose.yml` and `db/docker/`.
+reset. To remove Docker entirely: `docker compose -f docker-compose.dev.yml down -v`,
+then delete `docker-compose.dev.yml` and `db/docker/`.
+
+`docker-compose.yml` (without `.dev`) is the **production** stack (app + Caddy,
+from `master`); do not use it for local development.
 
 XAMPP MariaDB 10.4 (port 3306) is no longer used by this project.
 

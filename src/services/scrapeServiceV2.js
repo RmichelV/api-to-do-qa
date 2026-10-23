@@ -51,17 +51,17 @@ export const scrapePage = async (url, selectorsToRemove = [], expectedTexts = []
 
         // Additional selectors for E2 inventory-type pages (applied conditionally)
         const extraInventorySelectors = [
-            // UI de inventario (buscador, filtros, facetas, listado)
+            // Inventory UI (search, filters, facets, listings)
             '.ws-inv-text-search',
             '.ws-inv-filters',
             '.srp-wrapper-facets',
-            // Banners/placers asociados al bloque de inventario
+            // Banners and placeholders associated with the inventory block
             "[data-name^='inventory-search-results-page-primary-banner-']",
             "[data-name^='inventory-search-results-page-filters-sort-']",
             '.content-alert-banner',
             '.ws-tps-placeholder',
             '#placeholder1-app-root',
-            // Data bus/inventory servicios
+            // Data bus and inventory services
             '.inventory-listing-ws-inv-data-service',
             '#inventory-data-bus2-app-root'
         ];
@@ -100,7 +100,7 @@ export const scrapePage = async (url, selectorsToRemove = [], expectedTexts = []
             ));
 
             inventoryWrappers.forEach(w => {
-                // Mantener inventario solo si detectamos contenido editorial con encabezados
+                // Keep inventory only if editorial content with headings is detected
                 const headings = Array.from(w.querySelectorAll('h1,h2,h3'))
                     .filter(el => !isInventoryUI(el))
                     .map(el => (el.innerText || '').trim())
@@ -614,7 +614,7 @@ export const compareLines = async (url, expectedText, selectorsToRemove = []) =>
     const cpNorm = cpLinesRaw.map(normalizeLine);
 
     const resultados = [];
-    let j = 0; // puntero en CP
+    let j = 0; // CP pointer
     for (let i = 0; i < coNorm.length; i++) {
         const coLine = coLinesRaw[i];
         const coN = coNorm[i];
@@ -635,7 +635,7 @@ export const compareLines = async (url, expectedText, selectorsToRemove = []) =>
             continue;
         }
 
-        // Buscar mejor candidato posterior
+        // Find the best subsequent candidate
         let bestIdx = -1; let bestScore = 0;
         for (let k = j; k < cpNorm.length; k++) {
             const score = overlapScore(coN, cpNorm[k]);
@@ -655,8 +655,8 @@ export const compareLines = async (url, expectedText, selectorsToRemove = []) =>
             sentence_co,
             sentence_cp
         });
-        // No avanzar el puntero en CP para casos diferentes: permitir que siguientes CO encuentren su match exacto
-        // Solo avanzar si fuera un match exacto (ya manejado arriba)
+        // Do not advance the CP pointer for differences so later CO lines can find exact matches
+        // Advance only for an exact match (already handled above)
     }
 
     return {

@@ -1,5 +1,5 @@
 import { runLinkReading } from '../services/linkReadingService.js';
-import { extractVisibleAnchors, fetchHttpStatuses, extractH1Data, extractAnchorsAndH1 } from '../services/linkReadingService.js';
+import { extractVisibleAnchors, fetchHttpStatuses, extractH1Data, extractH1DataMobile, extractAnchorsAndH1 } from '../services/linkReadingService.js';
 
 export const linkReadingRun = async (req, res) => {
 	try {
@@ -54,7 +54,20 @@ export const linkReadingH1Check = async (req, res) => {
 	}
 };
 
-// Endpoint combinado: extrae anchors + H1 en un solo navegador
+export const linkReadingH1CheckMobile = async (req, res) => {
+	const { url, headless, pauseMs } = req.body || {};
+	if (!url) {
+		return res.status(400).json({ error: 'Missing url' });
+	}
+	try {
+		const data = await extractH1DataMobile(url, { headless, pauseMs });
+		return res.status(200).json(data);
+	} catch (err) {
+		return res.status(500).json({ error: err?.message || 'Unknown error' });
+	}
+};
+
+// Combined endpoint: extracts anchors + H1 in a single browser
 export const linkReadingAnchorsAndH1 = async (req, res) => {
 	const { url, headless } = req.body || {};
 	if (!url) {

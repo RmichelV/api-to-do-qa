@@ -2,7 +2,7 @@ import { chromium } from 'playwright';
 import * as cheerio from 'cheerio';
 import { getRandomUserAgent } from '../utils/stealth.js';
 
-// Registro global de browsers activos para poder cancelarlos
+// Global registry of active browsers so they can be cancelled
 export const activeBrowsersAnchor = new Set();
 
 const HEAVY_RESOURCE_TYPES = new Set(['image', 'media', 'font']);
@@ -39,7 +39,7 @@ function classifyAnchorsFromHtml(html, pageUrl) {
 }
 
 function checkTargetsInHtml(html, anchors) {
-	// Usa atributo selector en lugar de CSS.escape (no disponible en Node.js)
+	// Use an attribute selector instead of CSS.escape (unavailable in Node.js)
 	const $ = cheerio.load(html);
 	return anchors.map(a => ({
 		text: a.text,
@@ -114,7 +114,7 @@ async function tryPlaywrightStrategy(url, options = {}) {
 			return { anchors: [], misconfiguredAnchors: [], error: '.ddc-wrapper not found' };
 		}
 
-		// Extraer links desde .ddc-wrapper (sin aislar el DOM)
+		// Extract links from .ddc-wrapper without isolating the DOM
 		const { wellConfigured, misconfigured } = await page.evaluate((pageUrl) => {
 			const wrapper = document.querySelector('.ddc-wrapper');
 			if (!wrapper) return { wellConfigured: [], misconfigured: [] };
@@ -142,7 +142,7 @@ async function tryPlaywrightStrategy(url, options = {}) {
 			return { wellConfigured: well, misconfigured: misc };
 		}, url);
 
-		// Verificar todos los destinos en un solo evaluate (sin loop de awaits)
+		// Check all targets in a single evaluate call (without an await loop)
 		const anchors = await page.evaluate((items) => {
 			return items.map(a => ({
 				text: a.text,
@@ -162,7 +162,7 @@ async function tryPlaywrightStrategy(url, options = {}) {
 }
 
 // ─────────────────────────────────────────────
-// Punto de entrada
+// Entry point
 // ─────────────────────────────────────────────
 
 export const extractAndValidateAnchors = async (url, options = {}) => {

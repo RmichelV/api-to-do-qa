@@ -1,10 +1,35 @@
 ﻿import { buildBrowserHeaders, getRandomUserAgent, randomDelay } from '../utils/stealth.js';
-import { scrapePageContent } from '../utils/scrapeUtils.js';
+import { scrapePageContent, scrapeH1DataMobile } from '../utils/scrapeUtils.js';
+
+const normalizeTextForCompare = (value = '') => String(value).toLowerCase().replace(/\s+/g, ' ').trim();
+
+export const compareH1Snapshots = (desktopData, mobileData) => {
+  const desktopH1 = Array.isArray(desktopData?.h1Texts) ? desktopData.h1Texts : [];
+  const mobileH1 = Array.isArray(mobileData?.h1Texts) ? mobileData.h1Texts : [];
+  const desktopSrOnly = desktopData?.srOnlyText || null;
+  const mobileSrOnly = mobileData?.srOnlyText || null;
+
+  const sameH1 = JSON.stringify([...desktopH1].sort()) === JSON.stringify([...mobileH1].sort())
+    && normalizeTextForCompare(desktopSrOnly || '') === normalizeTextForCompare(mobileSrOnly || '');
+
+  return {
+    same: sameH1,
+    differs: !sameH1,
+    desktop: {
+      h1Texts: desktopH1,
+      srOnlyText: desktopSrOnly,
+    },
+    mobile: {
+      h1Texts: mobileH1,
+      srOnlyText: mobileSrOnly,
+    },
+  };
+};
 
 // Kept for cancel compatibility
 export const activeBrowsersLink = new Set();
 
-// Extrae anchors visibles de .ddc-wrapper (sin browser)
+// Extract visible anchors from .ddc-wrapper (without a browser)
 export const extractVisibleAnchors = async (url) => {
   console.log(`[link-reading] Fetch+parse anchors: ${url}`);
   const { anchors } = await scrapePageContent(url);
@@ -12,7 +37,7 @@ export const extractVisibleAnchors = async (url) => {
   return anchors;
 };
 
-// Extrae H1 y sr-only H1 (sin browser)
+// Extract H1 and sr-only H1 content (without a browser)
 export const extractH1Data = async (url) => {
   console.log(`[link-reading] Fetch+parse H1: ${url}`);
   const { h1Texts, srOnlyText } = await scrapePageContent(url);
@@ -20,15 +45,40 @@ export const extractH1Data = async (url) => {
   return { h1Texts, srOnlyText };
 };
 
-// Extrae anchors + H1 en una sola llamada (sin browser)
-export const extractAnchorsAndH1 = async (url) => {
-  console.log(`[link-reading] Fetch+parse anchors+H1: ${url}`);
-  const { anchors, h1Texts, srOnlyText } = await scrapePageContent(url);
-  console.log(`[link-reading] Links: ${anchors.length}, H1s: ${h1Texts.length}`);
-  return { anchors, h1Texts, srOnlyText };
+// Extract H1 and sr-only H1 with a mobile User-Agent without changing the existing mobile text scan
+export const extractH1DataMobile = async (url) => {
+  console.log(`[link-reading] Fetch+parse H1 (mobile): ${url}`);
+  const { h1Texts, srOnlyText } = await scrapeH1DataMobile(url);
+  console.log(`[link-reading] H1s (mobile): ${h1Texts.length}, sr-only: ${srOnlyText ? 'yes' : 'no'}`);
+  return { h1Texts, srOnlyText };
 };
 
-// Verifica estado HTTP de una lista de URLs con headers stealth
+export const compareH1Data = async (url) => {
+  const desktopData = await scrapePageContent(url);
+  const mobileData = await scrapeH1DataMobile(url);
+  return compareH1Snapshots(desktopData, mobileData);
+};
+
+// Extract anchors + H1 in a single call (without a browser)
+export const extractAnchorsAndH1 = async (url) => {
+  console.log(`[link-reading] Fetch+parse anchors+H1: ${url}`);
+  const desktopData = await scrapePageContent(url);
+  const mobileData = await scrapeH1DataMobile(url);
+  const comparison = compareH1Snapshots(desktopData, mobileData);
+  console.log(`[link-reading] Links: ${desktopData.anchors.length}, H1s: ${desktopData.h1Texts.length}, mobileH1s: ${mobileData.h1Texts.length}`);
+  return {
+    anchors: desktopData.anchors,
+    h1Texts: desktopData.h1Texts,
+    srOnlyText: desktopData.srOnlyText,
+    mobile: {
+      h1Texts: mobileData.h1Texts,
+      srOnlyText: mobileData.srOnlyText,
+    },
+    comparison,
+  };
+};
+
+// Check the HTTP status of a list of URLs using stealth headers
 export const fetchHttpStatuses = async (urls = [], options = {}) => {
   const timeoutMs = options.timeoutMs ?? 12000;
   const concurrency = options.concurrency ?? 5;
@@ -60,6 +110,17 @@ export const fetchHttpStatuses = async (urls = [], options = {}) => {
   await Promise.all(workers);
   const map = new Map(results.map(r => [r.url, r]));
   return urls.map(u => map.get(u) || { url: u, status: 0, ok: false });
+};
+
+export const addHttpStatusesToAnchors = async (anchors = [], options = {}) => {
+  const statuses = await fetchHttpStatuses(anchors.map(anchor => anchor.url), options);
+  const statusMap = new Map(statuses.map(status => [status.url, status]));
+
+  return anchors.map(anchor => ({
+    ...anchor,
+    status: statusMap.get(anchor.url)?.status ?? 0,
+    statusOk: statusMap.get(anchor.url)?.ok ?? false,
+  }));
 };
 
 // runLinkReading kept for route compatibility (does nothing meaningful now)

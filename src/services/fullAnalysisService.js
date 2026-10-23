@@ -1,91 +1,61 @@
-﻿import { normalizeText } from '../utils/normalization.js';
-import { scrapePageContent, scrapePageContentMobile, compareLines } from '../utils/scrapeUtils.js';
-import { buildBrowserHeaders, randomDelay } from '../utils/stealth.js';
+﻿import { scrapePageContent, scrapePageContentMobile, scrapeH1DataMobile } from '../utils/scrapeUtils.js';
+import { compareTextContent } from './textReadingService.js';
+import { compareMobileTextContent } from './textReadingMobileService.js';
+import { addHttpStatusesToAnchors, compareH1Snapshots } from './linkReadingService.js';
+import { readImages } from './imageReadingService.js';
 
 // Kept for cancel compatibility
 export const activeBrowsersFull = new Set();
 
-// HTTP statuses sin browser
-const fetchStatuses = async (urls = []) => {
-  if (!urls.length) return [];
-  const timeoutMs = 12000;
-  const concurrency = 5;
-  const results = [];
-  let index = 0;
-
-  const runOne = async (u) => {
-    await randomDelay(200, 600);
-    const headers = buildBrowserHeaders(u);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const res = await fetch(u, { method: 'GET', redirect: 'follow', signal: controller.signal, headers });
-      clearTimeout(timer);
-      return { url: u, status: res.status, ok: res.ok };
-    } catch (e) {
-      clearTimeout(timer);
-      return { url: u, status: 0, ok: false, error: e?.cause?.code || e?.message || 'timeout' };
-    }
-  };
-
-  const workers = Array.from({ length: Math.min(concurrency, urls.length) }, async () => {
-    while (index < urls.length) {
-      const current = urls[index++];
-      try { results.push(await runOne(current)); }
-      catch (err) { results.push({ url: current, status: 0, ok: false }); }
-    }
-  });
-  await Promise.all(workers);
-  const map = new Map(results.map(r => [r.url, r]));
-  return urls.map(u => map.get(u) || { url: u, status: 0, ok: false });
-};
-
 export const runFullAnalysis = async (url, coText = '') => {
   console.log(`[full-analysis] Start for ${url}`);
 
-  // Desktop y Mobile en paralelo (ambos son solo fetch, no browsers)
-  const [desktop, mobileRawText] = await Promise.all([
+  const [desktop, mobileRawText, imageScan] = await Promise.all([
     scrapePageContent(url),
     scrapePageContentMobile(url).catch(err => {
       console.warn('[full-analysis] Mobile scrape failed:', err?.message);
       return '';
     }),
+    readImages(url).catch(err => {
+      console.warn('[full-analysis] Image scan failed:', err?.message);
+      return { images: [], error: err?.message || 'Image scan failed' };
+    }),
   ]);
 
-  // HTTP statuses para los links encontrados
-  const anchors = desktop.anchors || [];
-  const anchorUrls = anchors.map(a => a.url);
-  const statuses = await fetchStatuses(anchorUrls);
+  let mobileH1Data = { h1Texts: [], srOnlyText: null };
+  try {
+    mobileH1Data = await scrapeH1DataMobile(url);
+  } catch (err) {
+    console.warn('[full-analysis] Mobile H1 scrape failed:', err?.message);
+  }
 
-  const statusMap = new Map(statuses.map(s => [s.url, s]));
-  const anchorsWithStatus = anchors.map(a => ({
-    ...a,
-    status: statusMap.get(a.url)?.status ?? 0,
-    statusOk: statusMap.get(a.url)?.ok ?? false,
-  }));
+  const h1Comparison = compareH1Snapshots(desktop, mobileH1Data);
 
-  const normalizedCP = normalizeText(desktop.rawText || '');
-  const normalizedCPMobile = normalizeText(typeof mobileRawText === 'string' ? mobileRawText : '');
-  const normalizedCO = normalizeText(coText || '');
-
-  const desktopCompare = coText ? compareLines(normalizedCP, normalizedCO) : null;
-  const mobileCompare = coText ? compareLines(normalizedCPMobile, normalizedCO) : null;
+  // Check HTTP statuses for the extracted links
+  const desktopText = compareTextContent(desktop.rawText || '', coText);
+  const mobileText = compareMobileTextContent(typeof mobileRawText === 'string' ? mobileRawText : '', coText);
+  const anchorsWithStatus = await addHttpStatusesToAnchors(desktop.anchors || []);
 
   console.log(`[full-analysis] Complete for ${url}`);
 
   return {
     desktop: {
-      cp: { text: normalizedCP, lines: normalizedCP.split('\n').filter(l => l.trim()) },
-      co: coText ? { text: normalizedCO, lines: normalizedCO.split('\n').filter(l => l.trim()) } : null,
-      ...(desktopCompare || {}),
+      cp: desktopText.cp,
+      co: coText ? desktopText.co : null,
+      ...(coText ? { result: desktopText.result, details: desktopText.details } : {}),
       anchors: anchorsWithStatus,
       h1Texts: desktop.h1Texts,
       srOnlyText: desktop.srOnlyText,
     },
     mobile: {
-      cp: { text: normalizedCPMobile, lines: normalizedCPMobile.split('\n').filter(l => l.trim()) },
-      co: coText ? { text: normalizedCO, lines: normalizedCO.split('\n').filter(l => l.trim()) } : null,
-      ...(mobileCompare || {}),
+      cp: mobileText.cp,
+      co: coText ? mobileText.co : null,
+      ...(coText ? { result: mobileText.result, details: mobileText.details } : {}),
+      h1Texts: mobileH1Data.h1Texts || [],
+      srOnlyText: mobileH1Data.srOnlyText || null,
     },
+    h1Comparison,
+    images: imageScan.images || [],
+    imageError: imageScan.error || null,
   };
 };
