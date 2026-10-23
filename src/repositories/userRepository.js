@@ -67,3 +67,54 @@ export async function countActiveAdmins(pool) {
   );
   return Number(row.n);
 }
+
+// Admin users API (design §7.2): every account, oldest first.
+export async function listAll(pool) {
+  const [rows] = await pool.execute(
+    `SELECT ${USER_COLUMNS} FROM users ORDER BY created_at ASC, id ASC`
+  );
+  return rows;
+}
+
+// PATCH /api/admin/users/:id: only the fields present in the patch.
+export async function updateUser(pool, { id, fullName, role, isActive, now = new Date() }) {
+  const sets = [];
+  const params = [];
+  if (fullName !== undefined) {
+    sets.push('full_name = ?');
+    params.push(fullName);
+  }
+  if (role !== undefined) {
+    sets.push('role = ?');
+    params.push(role);
+  }
+  if (isActive !== undefined) {
+    sets.push('is_active = ?');
+    params.push(isActive ? 1 : 0);
+  }
+  sets.push('updated_at = ?');
+  params.push(now, id);
+  await pool.execute(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`, params);
+  return findById(pool, id);
+}
+
+// Admin reset (design §7.2): a temporary password always forces the change
+// (§5.5). password_changed_at is left untouched on purpose — the user has not
+// chosen a password yet, and their own change stamps it (§5.1).
+export async function setTemporaryPassword(pool, { id, passwordHash, now = new Date() }) {
+  await pool.execute(
+    'UPDATE users SET password_hash = ?, must_change_password = 1, updated_at = ? WHERE id = ?',
+    [passwordHash, now, id]
+  );
+  return findById(pool, id);
+}
+
+// Last-admin guard (design §7.2): a locking read of every active admin, so
+// two concurrent demotions can never both believe someone else remains.
+// Must run on a connection that already opened a transaction.
+export async function listActiveAdminIdsForUpdate(pool) {
+  const [rows] = await pool.execute(
+    "SELECT id FROM users WHERE role = 'admin' AND is_active = 1 FOR UPDATE"
+  );
+  return rows.map((row) => row.id);
+}

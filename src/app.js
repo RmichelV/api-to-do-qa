@@ -7,6 +7,7 @@ import anchorReadingRoutes from './routes/anchorReadingRoutes.js'
 import imageReadingRoutes from './routes/imageReadingRoutes.js'
 import fullAnalysisRoutes from './routes/fullAnalysisRoutes.js'
 import authRoutes from './routes/authRoutes.js'
+import adminUserRoutes from './routes/adminUserRoutes.js'
 import { activeBrowsers } from './services/textReadingService.js'
 import { activeBrowsersMobile } from './services/textReadingMobileService.js'
 import { activeBrowsersLink } from './services/linkReadingService.js'
@@ -16,6 +17,7 @@ import { securityHeaders } from './middleware/securityHeaders.js'
 import { sessionMiddleware } from './middleware/sessionMiddleware.js'
 import { publicAllowList } from './middleware/publicAllowList.js'
 import { requireAuth } from './middleware/requireAuth.js'
+import { requireRole } from './middleware/requireRole.js'
 import { requirePasswordChanged } from './middleware/requirePasswordChanged.js'
 import { originCheck } from './middleware/originCheck.js'
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js'
@@ -53,8 +55,12 @@ export function createApp({ config, pool }) {
   // §6 step 7: while must_change_password is set, only the change-password
   // flow may run (allow-list inside the middleware).
   app.use(requirePasswordChanged());
-  // §6 step 8 minus logout (step 9, /api/admin/users, arrives with T9).
+  // §6 step 8 minus logout.
   app.use('/api/auth', authRoutes({ pool, config, only: ['me', 'change-password'] }));
+  // §6 step 9: user administration (§7.2). requireRole('admin') answers
+  // 403 forbidden before any handler; the guards of §7.2 (last_admin,
+  // self_change) live in the service.
+  app.use('/api/admin/users', requireRole('admin'), adminUserRoutes({ pool }));
 
   // §6 step 10: existing QA routers, contract unchanged (S12).
   app.use('/api/text-reading', textReadingRoutes);
