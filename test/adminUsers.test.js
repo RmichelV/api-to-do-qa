@@ -408,6 +408,53 @@ test('guards: an admin cannot demote or deactivate themselves', { skip: skipReas
   assert.equal(renameSelf.status, 200);
 });
 
+test('guard: an admin cannot reset their own password through this API (409 self_change)', { skip: skipReason }, async (t) => {
+  const { base, pool } = await startApp(t);
+  const adminId = await seedAdmin(pool);
+  await seedUser(pool, {
+    email: 'second@example.com',
+    password: 'second password 12',
+    fullName: 'Second Admin',
+    role: 'admin',
+  });
+  const cookie = await loginAs(base, ADMIN_EMAIL, ADMIN_PASSWORD);
+  const [[before]] = await pool.execute('SELECT password_hash FROM users WHERE id = ?', [adminId]);
+
+  // Resetting your own account would revoke your own session, so the screen
+  // sends the admin to "Change password" (plan T9b adjustment).
+  const resetSelf = await request(
+    base,
+    'POST',
+    `/api/admin/users/${adminId}/reset-password`,
+    { temporaryPassword: TEMP_PASSWORD },
+    cookieHeader(cookie)
+  );
+  assert.equal(resetSelf.status, 409);
+  assert.equal((await resetSelf.json()).error, 'self_change');
+
+  // Nothing changed: the hash is untouched and the session survives.
+  const [[after]] = await pool.execute('SELECT password_hash FROM users WHERE id = ?', [adminId]);
+  assert.equal(after.password_hash, before.password_hash);
+  const stillMe = await request(base, 'GET', '/api/auth/me', undefined, cookieHeader(cookie));
+  assert.equal(stillMe.status, 200);
+
+  // Resetting ANOTHER account still works, including one's own admin peer.
+  const otherId = await seedUser(pool, {
+    email: 'peer@example.com',
+    password: 'peer password 123',
+    fullName: 'Peer Admin',
+    role: 'admin',
+  });
+  const resetOther = await request(
+    base,
+    'POST',
+    `/api/admin/users/${otherId}/reset-password`,
+    { temporaryPassword: TEMP_PASSWORD },
+    cookieHeader(cookie)
+  );
+  assert.equal(resetOther.status, 204);
+});
+
 test('guard: at least one active admin must remain (409 last_admin)', { skip: skipReason }, async (t) => {
   const { base, pool } = await startApp(t);
   const adminId = await seedAdmin(pool);

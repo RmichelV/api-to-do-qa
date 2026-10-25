@@ -18,6 +18,7 @@ import { sessionMiddleware } from './middleware/sessionMiddleware.js'
 import { publicAllowList } from './middleware/publicAllowList.js'
 import { requireAuth } from './middleware/requireAuth.js'
 import { requireRole } from './middleware/requireRole.js'
+import { requireAdminPage } from './middleware/requireAdminPage.js'
 import { requirePasswordChanged } from './middleware/requirePasswordChanged.js'
 import { originCheck } from './middleware/originCheck.js'
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js'
@@ -84,7 +85,11 @@ export function createApp({ config, pool }) {
     res.json({ cancelled: true, browsersClosed: closed });
   });
 
-  // §6 step 11: protected static files and the index page.
+  // §6 step 11: protected static files and the index page. The admin screen
+  // is gated by the ROLE, not only by the session (§7.2, plan T9b): a
+  // signed-in non-admin gets 403 even typing the URL, while every other file
+  // in public/ stays behind requireAuth alone.
+  app.use(requireAdminPage(['/admin-users.html', '/admin-users.js']));
   app.use(express.static(PUBLIC_DIR, { index: false }));
   app.get('/', (req, res) => {
     res.sendFile(path.join(PUBLIC_DIR, 'index.html'));

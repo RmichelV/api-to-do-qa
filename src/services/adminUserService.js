@@ -7,6 +7,9 @@
 //   2. "an admin cannot deactivate or demote themselves" → 409 self_change.
 // The invariant is checked first, so the only admin demoting themselves gets
 // the accurate `last_admin` answer.
+// A third rule reuses `self_change` for a self password reset (§7.2 reset):
+// it would revoke the acting admin's own session, so the admin screen points
+// them to "Change password" instead (plan T9b).
 import { randomUUID } from 'node:crypto';
 import * as userRepository from '../repositories/userRepository.js';
 import * as sessionRepository from '../repositories/sessionRepository.js';
@@ -203,10 +206,19 @@ export function createAdminUserService({ pool }) {
 
     // POST /api/admin/users/:id/reset-password (§7.2): a temporary password,
     // forced change (§5.5) and every session of the user revoked (§5.2).
-    async resetPassword({ id, body }) {
+    // Resetting your OWN account would revoke the acting admin's session, so
+    // the screen sends them to "Change password" instead (plan T9b).
+    async resetPassword({ id, body, actorId }) {
       assertNoUnknownFields(body, ['temporaryPassword']);
       const temporaryPassword = assertTemporaryPassword(body?.temporaryPassword);
       await requireUser(id);
+      if (id === actorId) {
+        throw new AppError(
+          409,
+          'self_change',
+          'Admins cannot reset their own account here. Use "Change password".'
+        );
+      }
       await userRepository.setTemporaryPassword(pool, {
         id,
         passwordHash: await hash(temporaryPassword),

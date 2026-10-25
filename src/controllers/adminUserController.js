@@ -25,7 +25,11 @@ export function createAdminUserController({ service }) {
     },
 
     async resetPassword(req, res) {
-      await service.resetPassword({ id: req.params.id, body: req.body });
+      await service.resetPassword({
+        id: req.params.id,
+        body: req.body,
+        actorId: req.user?.id ?? null,
+      });
       res.status(204).end();
     },
   };

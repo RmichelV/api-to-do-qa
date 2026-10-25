@@ -140,6 +140,118 @@ body.auth-body {
   margin-bottom: 1rem;
 }
 
+/* ── Admin users screen (T9b): same topbar as index.html, wider card ── */
+.admin-main {
+  display: flex;
+  justify-content: center;
+  padding: 1.5rem 1rem 3rem;
+}
+
+.admin-card {
+  width: min(1100px, 100%);
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(17, 24, 39, 0.06);
+  padding: 1.5rem 1.75rem 2rem;
+}
+
+.admin-section + .admin-section { margin-top: 2rem; }
+
+.admin-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.admin-subtitle { font-size: 0.95rem; font-weight: 700; }
+
+.admin-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.admin-form .input-group { margin-bottom: 0; }
+.admin-form .btn-run-all { grid-column: 1 / -1; justify-self: start; margin-top: 0.5rem; }
+
+/* Same treatment as input[type="text"], scoped so the login and
+   change-password screens keep their current look. */
+.admin-card input[type="email"],
+.admin-card input[type="password"],
+.admin-card select {
+  width: 100%;
+  padding: 0.6rem 0.8rem;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  background: #fafbfc;
+  color: #111827;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+
+.admin-card input[type="email"]:focus,
+.admin-card input[type="password"]:focus,
+.admin-card select:focus {
+  border-color: #2563eb;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.admin-table-wrap { overflow-x: auto; }
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.admin-table th,
+.admin-table td {
+  border: 1px solid #e5e7eb;
+  padding: 0.45rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.admin-table thead th {
+  background: #f8f9fb;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #4b5563;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.admin-table tbody tr:nth-child(even) { background: #fafafa; }
+.admin-table tbody tr:hover { background: #eff6ff; }
+
+.admin-user__email { font-weight: 600; }
+.admin-user__name { font-size: 0.78rem; color: #6b7280; }
+
+.admin-badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.admin-badge--on  { background: #dcfce7; color: #166534; }
+.admin-badge--off { background: #fee2e2; color: #991b1b; }
+
+.admin-row { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
+.admin-row select { max-width: 9.5rem; }
+
+.admin-note { font-size: 0.78rem; color: #6b7280; margin-top: 0.35rem; }
+.admin-empty { font-size: 0.85rem; color: #6b7280; margin-top: 0.75rem; }
+
 .auth-card .btn-run-all { margin-top: 0.25rem; }
 
 /* ── Main layout ── */

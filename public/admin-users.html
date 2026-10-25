@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Users · QA API Tester</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar__inner">
+        <div class="topbar__brand">
+          <span aria-hidden="true">🤖</span>
+          <span class="topbar__title">QA API Tester</span>
+        </div>
+        <nav class="topbar__nav">
+          <div class="topbar__auth">
+            <span id="auth-user-name" class="topbar__user"></span>
+            <a class="ctrl-btn ctrl-btn--link" href="/">Tool</a>
+            <a class="ctrl-btn ctrl-btn--link" href="/change-password.html">Change password</a>
+            <button id="auth-logout" class="ctrl-btn ctrl-btn--logout">Logout</button>
+          </div>
+        </nav>
+      </div>
+    </header>
+
+    <main class="admin-main">
+      <div class="admin-card">
+        <h1 class="auth-title">Users</h1>
+        <p class="auth-subtitle">
+          Create accounts, change roles, activate or deactivate users and reset passwords. A
+          temporary password must be changed at first sign-in, and resetting a password signs that
+          user out everywhere.
+        </p>
+
+        <p id="au-error" class="auth-error" role="alert" hidden></p>
+        <p id="au-success" class="auth-success" role="status" hidden></p>
+
+        <section class="admin-section" aria-labelledby="au-create-title">
+          <div class="admin-section__header">
+            <h2 id="au-create-title" class="admin-subtitle">Create user</h2>
+          </div>
+          <form id="au-form" class="admin-form" novalidate>
+            <div class="input-group">
+              <label for="au-email">Email</label>
+              <input type="email" id="au-email" autocomplete="off" required />
+            </div>
+            <div class="input-group">
+              <label for="au-full-name">Full name</label>
+              <input type="text" id="au-full-name" autocomplete="off" required />
+            </div>
+            <div class="input-group">
+              <label for="au-role">Role</label>
+              <select id="au-role">
+                <option value="qa_engineer">qa_engineer</option>
+                <option value="admin">admin</option>
+              </select>
+            </div>
+            <div class="input-group">
+              <label for="au-temp-password">Temporary password (12 to 128 characters)</label>
+              <input type="password" id="au-temp-password" autocomplete="new-password" required />
+            </div>
+            <button type="submit" id="au-submit" class="btn-run-all">Create user</button>
+          </form>
+        </section>
+
+        <section class="admin-section" aria-labelledby="au-list-title">
+          <div class="admin-section__header">
+            <h2 id="au-list-title" class="admin-subtitle">All users</h2>
+            <button type="button" id="au-refresh" class="ctrl-btn ctrl-btn--link">Refresh</button>
+          </div>
+          <div class="admin-table-wrap">
+            <table class="admin-table" id="au-table">
+              <thead>
+                <tr>
+                  <th scope="col">User</th>
+                  <th scope="col">Role</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Last sign-in</th>
+                  <th scope="col">Password</th>
+                </tr>
+              </thead>
+              <tbody id="au-users"></tbody>
+            </table>
+          </div>
+          <p id="au-empty" class="admin-empty" hidden>No users yet.</p>
+        </section>
+      </div>
+    </main>
+
+    <dialog class="help-dialog" id="au-reset-dialog" aria-labelledby="au-reset-title">
+      <div class="help-dialog__header">
+        <h2 id="au-reset-title">Reset password</h2>
+        <button class="help-dialog__close" type="button" id="au-reset-close" aria-label="Close">x</button>
+      </div>
+      <p id="au-reset-target"></p>
+      <p>
+        The new password is temporary: this user must change it at first sign-in and every session
+        of that user is signed out.
+      </p>
+      <form id="au-reset-form" novalidate>
+        <div class="input-group">
+          <label for="au-reset-password">Temporary password (12 to 128 characters)</label>
+          <input type="password" id="au-reset-password" autocomplete="new-password" required />
+        </div>
+        <p id="au-reset-error" class="auth-error" role="alert" hidden></p>
+        <button type="submit" id="au-reset-submit" class="btn-run-all">Reset password</button>
+      </form>
+    </dialog>
+
+    <script src="auth-bar.js" defer></script>
+    <script src="admin-users.js" defer></script>
+  </body>
+</html>
