@@ -130,8 +130,9 @@ database is reached over a network.
 npm test                 # includes test/db.test.js
 ```
 
-`test/db.test.js`, `test/migrate.test.js`, `test/userRepository.test.js` and
-`test/create-admin.test.js` are integration tests and read **only `TEST_DB_*`**,
+`test/db.test.js`, `test/migrate.test.js`, `test/userRepository.test.js`,
+`test/create-admin.test.js` and `test/reset-password.test.js` are integration
+tests and read **only `TEST_DB_*`**,
 never `DB_*`: they drop/truncate data, so they must never touch the
 development database. Without `TEST_DB_*` they skip themselves (14 pass,
 11 skipped), and `npm test` stays green. Files run sequentially
@@ -194,3 +195,31 @@ MIGRATE_DB_PASSWORD=another-local-password
 5. Run `npm run create-admin` (T4).
 6. Verify login, logout, change password and that `curl` without a cookie gets
    `401` from the QA endpoints (T8+).
+
+## 8. Emergency password reset (`npm run reset-password`)
+
+For shell access on the server when the only admin forgot their password
+(design §5.5, S14). Like `create-admin`, the script reads `DB_*` from the
+environment (or `.env` locally) and asks everything on the console:
+
+```bash
+npm run reset-password
+# Email of the user to reset: qa@example.com
+# Temporary password (hidden):
+# Repeat password (hidden):
+```
+
+The password is never accepted as a command-line argument, so it never
+lands in shell history or the process list; hidden input is stored exactly
+as typed (no `trim()`), and the temporary password must pass the §5.1
+policy. The command:
+
+- replaces the password of the **existing** user (clear error and exit `1`
+  if the email does not exist);
+- leaves `must_change_password = 1`, so the user must pick their own
+  password at next login (§5.5);
+- revokes **every** live session of that user (§5.2).
+
+It never creates users and never changes roles: `role` and `is_active` are
+left untouched. Covered by `test/reset-password.test.js` (integration,
+`TEST_DB_*` only, same rule as §5).
