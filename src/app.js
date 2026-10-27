@@ -14,6 +14,7 @@ import { activeBrowsersLink } from './services/linkReadingService.js'
 import { activeBrowsersAnchor } from './services/anchorReadingService.js'
 import { activeBrowsersFull } from './services/fullAnalysisService.js'
 import { securityHeaders } from './middleware/securityHeaders.js'
+import { httpsRedirect } from './middleware/httpsRedirect.js'
 import { sessionMiddleware } from './middleware/sessionMiddleware.js'
 import { publicAllowList } from './middleware/publicAllowList.js'
 import { requireAuth } from './middleware/requireAuth.js'
@@ -33,8 +34,10 @@ export function createApp({ config, pool }) {
   }
   const app = express();
 
-  // §6 step 1: trust proxy + security headers (HTTPS redirect arrives with T10).
+  // §6 step 1: trust proxy + HTTPS redirect/HSTS in production (T10) +
+  // security headers.
   app.set('trust proxy', config.trustProxy ?? 0);
+  app.use(httpsRedirect(config.nodeEnv, config.appOrigin));
   app.use(securityHeaders);
   // §6 step 2
   app.use(express.json({ limit: '5mb' }));

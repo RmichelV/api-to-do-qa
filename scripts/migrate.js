@@ -5,7 +5,8 @@
 // version is recorded in schema_migrations only after the file succeeds, and
 // the run stops at the first error. MySQL DDL commits implicitly, so there is
 // no whole-file rollback: one logical change per file, using CREATE TABLE
-// IF NOT EXISTS where possible.
+// IF NOT EXISTS where possible. A server-side GET_LOCK (plan T10) makes two
+// simultaneous runs impossible: the second one fails fast.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,6 +29,19 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
   version    VARCHAR(100) NOT NULL PRIMARY KEY,
   applied_at DATETIME(3) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`;
+
+/**
+ * Name of the advisory lock that serializes migrations (plan T10).
+ * GET_LOCK names belong to the whole server, so the database is part of the
+ * name: migrating one database never blocks another. Capped at 64 chars,
+ * the limit MySQL enforces on lock names.
+ *
+ * @param {string} dbName
+ * @returns {string}
+ */
+export function migrationLockName(dbName) {
+  return `api-to-do-qa:migrate:${dbName}`.slice(0, 64);
+}
 
 /**
  * Applies every pending .sql file in `migrationsDir`, in file-name order.
@@ -56,9 +70,27 @@ export async function runMigrations(db, { migrationsDir = DEFAULT_MIGRATIONS_DIR
 
   const applied = [];
   const skipped = [];
+  const lockName = migrationLockName(db.name);
+  let holdsLock = false;
   try {
     await connection.query(`SET SESSION sql_mode = '${STRICT_SQL_MODE}'`);
     await connection.query("SET SESSION time_zone = '+00:00'");
+
+    // Plan T10: one migration at a time per database. Timeout 0 = fail fast
+    // with a clear message instead of queueing behind another runner. The
+    // lock is taken before any DDL, so a concurrent run changes nothing.
+    const [lockRows] = await connection.query('SELECT GET_LOCK(?, 0) AS acquired', [lockName]);
+    const acquired = lockRows[0]?.acquired;
+    if (acquired === null || acquired === undefined) {
+      throw new Error(`could not acquire the migration lock "${lockName}"`);
+    }
+    if (Number(acquired) !== 1) {
+      throw new Error(
+        `another migration is already running (lock "${lockName}" is held); retry when it finishes`
+      );
+    }
+    holdsLock = true;
+
     await connection.query(CREATE_TRACKING_TABLE);
 
     const [rows] = await connection.query('SELECT version FROM schema_migrations');
@@ -85,6 +117,9 @@ export async function runMigrations(db, { migrationsDir = DEFAULT_MIGRATIONS_DIR
       logger.log?.(`[migrate] applied ${version}`);
     }
   } finally {
+    if (holdsLock) {
+      await connection.query('SELECT RELEASE_LOCK(?)', [lockName]).catch(() => {});
+    }
     await connection.end();
   }
 

@@ -48,8 +48,9 @@ the data volume is empty, so changing a password in `.env` later requires a
 reset. To remove Docker entirely: `docker compose -f docker-compose.dev.yml down -v`,
 then delete `docker-compose.dev.yml` and `db/docker/`.
 
-`docker-compose.yml` (without `.dev`) is the **production** stack (app + Caddy,
-from `master`); do not use it for local development.
+`docker-compose.yml` (without `.dev`) is the **production** stack (MariaDB +
+app + Caddy, from `master`); do not use it for local development — only on
+the server (§7).
 
 XAMPP MariaDB 10.4 (port 3306) is no longer used by this project.
 
@@ -186,15 +187,135 @@ MIGRATE_DB_USER=qa_migrator
 MIGRATE_DB_PASSWORD=another-local-password
 ```
 
-## 7. Hostinger integration (full steps in design §8.2)
+## 7. Production deployment (Hostinger VPS, `docker-compose.yml`, design §8.2)
 
-1. Create the database and users in hPanel.
-2. Set the environment variables.
-3. Deploy the code.
-4. Run `npm run migrate` once with the migration user (T3).
-5. Run `npm run create-admin` (T4).
-6. Verify login, logout, change password and that `curl` without a cookie gets
-   `401` from the QA endpoints (T8+).
+The production stack runs **MariaDB 10.11, the app and Caddy on the server**.
+Caddy terminates TLS for the domain and proxies to the app with
+`X-Forwarded-Proto`, so `TRUST_PROXY=1` tells Express to trust it (§5.6, T10).
+Run it only on the server; locally use §1 (`docker-compose.dev.yml`).
+
+### 7.1 Environment files: `.env.production` + `.env.db` (git-ignored, never inside the image)
+
+Each service reads its own file (`env_file` in `docker-compose.yml`), so the
+database root password never reaches the app container (T10, L35):
+`.gitignore` keeps both files out of git and `.dockerignore` keeps them out of
+the image. Copy the templates on the server and fill them in.
+
+**`.env.production` — read by the app (no root password here):**
+
+```ini
+NODE_ENV=production
+PORT=4000
+APP_ORIGIN=https://your.domain
+
+# `db` is the compose service name: the database publishes no ports and is
+# reached only over the internal network.
+DB_HOST=db
+DB_PORT=3306
+DB_NAME=api_to_do_qa
+DB_USER=qa_app
+DB_PASSWORD=<long random value>
+DB_SSL=false
+DB_CONNECTION_LIMIT=5
+
+SESSION_DAYS=7
+TRUST_PROXY=1
+
+MIGRATE_DB_USER=qa_migrator
+MIGRATE_DB_PASSWORD=<long random value>
+```
+
+**`.env.db` — read by the `db` service only:**
+
+```ini
+# root of the db container: used to create the users (§7.2) and to dump (§7.4)
+MARIADB_ROOT_PASSWORD=<long random value>
+```
+
+At startup `loadConfig` refuses to boot in production unless `TRUST_PROXY=1`,
+`DB_PASSWORD` is not empty and `APP_ORIGIN` is `https://…` (T10), so a missing
+or wrong variable fails immediately with a clear message instead of running
+with a cookie or a proxy configuration that cannot work.
+
+### 7.2 First start: database and users (once)
+
+```bash
+docker compose up -d db     # first start with an empty volume creates api_to_do_qa (utf8mb4_unicode_ci)
+docker compose ps           # "db ... (healthy)" means ready
+```
+
+Then create the two users **once**, from inside the container (interactive
+prompt, so the root password never lands in shell history or `ps`):
+
+```bash
+docker compose exec db mariadb -uroot -p
+```
+
+```sql
+-- runtime user: DML only (§5.6)
+CREATE USER 'qa_app'@'%' IDENTIFIED BY '<same value as DB_PASSWORD>';
+GRANT SELECT, INSERT, UPDATE, DELETE ON api_to_do_qa.* TO 'qa_app'@'%';
+
+-- migration user: DDL for `npm run migrate`, and NO DROP on production (§5.6)
+CREATE USER 'qa_migrator'@'%' IDENTIFIED BY '<same value as MIGRATE_DB_PASSWORD>';
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, INDEX, ALTER, REFERENCES
+  ON api_to_do_qa.* TO 'qa_migrator'@'%';
+```
+
+The two users' passwords come from `DB_PASSWORD` and `MIGRATE_DB_PASSWORD` in
+`.env.production`. There is no test database on the
+server: the integration tests (§5) never run in production.
+
+### 7.3 App, migrations and first admin (inside the app container)
+
+```bash
+docker compose up -d --build        # the app waits for db to be healthy
+docker compose exec app npm run migrate        # once, as qa_migrator
+docker compose exec app npm run create-admin   # first admin, interactive
+```
+
+- `npm run migrate` takes a server-side `GET_LOCK` per database (T10): two
+  simultaneous runs are impossible — the second one stops immediately with
+  `another migration is already running`. Running it again is a no-op (§6).
+- `docker compose exec` allocates a TTY, so `create-admin` (and
+  `npm run reset-password`, §8) can read the password with hidden input.
+
+### 7.4 Daily backup (run from the host, outside the container)
+
+The dump is produced on the **host** and written to the **host** filesystem,
+so it lives outside the container and outside the `db_data` volume:
+
+```cron
+# crontab -e: inside a crontab, every literal % of the command must be written as \%
+0 3 * * * cd /opt/api-to-do-qa && docker compose exec -T db sh -c 'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mysqldump -uroot --single-transaction api_to_do_qa' | gzip > /var/backups/api-to-do-qa_$(date +\%F).sql.gz
+```
+
+The db container already has `MARIADB_ROOT_PASSWORD` in its environment (from
+`.env.db`); `MYSQL_PWD` keeps it out of the process list. Keep a retention policy (for
+example `find /var/backups -name 'api-to-do-qa_*.sql.gz' -mtime +30 -delete`)
+and test a restore into a scratch database from time to time.
+
+### 7.5 Verify without a session (design §8.2 step 6)
+
+```bash
+# API without a cookie → 401 unauthenticated
+curl -i https://your.domain/api/auth/me
+
+# Protected HTML without a session → 302 to /login.html
+curl -i https://your.domain/
+
+# A QA endpoint → 401 (Origin is checked before the session, so send it)
+curl -i -X POST -H "Origin: https://your.domain" \
+  -H "Content-Type: application/json" -d '{}' \
+  https://your.domain/api/text-reading/preview
+```
+
+Plain HTTP answers `308` to the same URL over HTTPS (T10). Then log in,
+change the password and log out from the browser; only after that share the
+URL with the team (§8.2 step 7).
+
+Rollback: the QA tools keep working on the previous release; the tables are
+additive and do not affect it.
 
 ## 8. Emergency password reset (`npm run reset-password`)
 

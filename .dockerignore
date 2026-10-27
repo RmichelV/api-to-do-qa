@@ -1,6 +1,6 @@
 node_modules
 .git
-.env
+.env*
 .DS_Store
 npm-debug.log
 coverage
@@ -10,5 +10,9 @@ coverage
 *.log
 dist
 build
+test
+odd
+docs
+db/docker
 /.dockerignore
 /.gitignore

@@ -1,12 +1,54 @@
+# Production stack (design §8.2): MariaDB + Node app + Caddy.
+# Do NOT use it for local development: docker-compose.dev.yml is the local
+# database (db/README.md §1). Run this stack only on the server.
+#
+# Secrets and host-specific values live in git-ignored env files that
+# .dockerignore keeps out of the image build, one per service:
+#   .env.production — the app: NODE_ENV/APP_ORIGIN/DB_*/TRUST_PROXY
+#   .env.db         — the db service: MARIADB_ROOT_PASSWORD, which the app
+#                     container never receives (plan T10, L35)
+# In .env.production, DB_HOST must be `db` — the compose service name — so the
+# app resolves the database on the internal network. Full variable list:
+# db/README.md §7.
 services:
   app:
     build: .
     image: api-to-do-qa:latest
+    env_file: .env.production
     environment:
       - NODE_ENV=production
       - PORT=4000
     expose:
       - "4000"
+    # The app starts only after the database answers its healthcheck, so
+    # `npm run migrate` / `create-admin` never race a half-initialized DB.
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: always
+
+  db:
+    image: mariadb:10.11
+    env_file: .env.db
+    environment:
+      # Creates api_to_do_qa (utf8mb4_unicode_ci via the flags below) on the
+      # first start with an empty volume. The qa_app / qa_migrator users are
+      # created by hand, with no DROP: db/README.md §7.
+      MARIADB_DATABASE: api_to_do_qa
+    # No `ports`: the database is never reachable from outside the compose
+    # network. Backups run from the host with `docker compose exec db ...`
+    # and land on the host filesystem (db/README.md §7.4).
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
     restart: always
 
   caddy:
@@ -25,3 +67,4 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+  db_data:

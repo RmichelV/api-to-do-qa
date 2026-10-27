@@ -40,6 +40,49 @@ function parseInt10(value, name) {
   return parsed;
 }
 
+// Ports are different from any other integer: "4000abc", "4000.5" or "70000"
+// must never reach listen()/createPool() (design §8, plan T10).
+function parsePort(value, name) {
+  const text = typeof value === 'number' ? String(value) : value;
+  if (typeof text !== 'string' || !/^\d+$/.test(text)) {
+    throw new Error(`[config] ${name} must be an integer between 1 and 65535, got "${value}"`);
+  }
+  const parsed = Number.parseInt(text, 10);
+  if (parsed < 1 || parsed > 65535) {
+    throw new Error(`[config] ${name} must be an integer between 1 and 65535, got "${value}"`);
+  }
+  return parsed;
+}
+
+// Production hardening (design §5.6, plan T10). Behind Caddy the app must
+// trust the proxy, otherwise req.ip is the proxy and X-Forwarded-Proto is
+// ignored: the rate limit would count every client as one and the HTTPS
+// redirect would loop. DB_PASSWORD must not be blank and APP_ORIGIN must
+// already be https, because the session cookie is Secure in production.
+function assertProductionConfig(env, trustProxy) {
+  const problems = [];
+  if (trustProxy !== 1) {
+    problems.push(
+      `TRUST_PROXY must be 1 (Caddy is the reverse proxy), got "${env.TRUST_PROXY ?? OPTIONAL.TRUST_PROXY}"`
+    );
+  }
+  if (!env.DB_PASSWORD) {
+    problems.push('DB_PASSWORD must not be empty');
+  }
+  let originIsHttps = false;
+  try {
+    originIsHttps = new URL(env.APP_ORIGIN).protocol === 'https:';
+  } catch {
+    originIsHttps = false;
+  }
+  if (!originIsHttps) {
+    problems.push(`APP_ORIGIN must be an https:// URL, got "${env.APP_ORIGIN}"`);
+  }
+  if (problems.length > 0) {
+    throw new Error(`[config] Invalid production configuration: ${problems.join('; ')}.`);
+  }
+}
+
 function parseNonNegativeInt10(value, name) {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isInteger(parsed) || parsed < 0) {
@@ -57,13 +100,20 @@ export function loadConfig(env = process.env) {
     );
   }
 
+  const port = parsePort(env.PORT ?? OPTIONAL.PORT, 'PORT');
+  const dbPort = parsePort(env.DB_PORT, 'DB_PORT');
+  const trustProxy = parseNonNegativeInt10(env.TRUST_PROXY ?? OPTIONAL.TRUST_PROXY, 'TRUST_PROXY');
+  if (env.NODE_ENV === 'production') {
+    assertProductionConfig(env, trustProxy);
+  }
+
   return Object.freeze({
     nodeEnv: env.NODE_ENV,
-    port: parseInt10(env.PORT ?? OPTIONAL.PORT, 'PORT'),
+    port,
     appOrigin: env.APP_ORIGIN,
     db: Object.freeze({
       host: env.DB_HOST,
-      port: parseInt10(env.DB_PORT, 'DB_PORT'),
+      port: dbPort,
       name: env.DB_NAME,
       user: env.DB_USER,
       password: env.DB_PASSWORD,
@@ -71,6 +121,6 @@ export function loadConfig(env = process.env) {
       connectionLimit: parseInt10(env.DB_CONNECTION_LIMIT ?? OPTIONAL.DB_CONNECTION_LIMIT, 'DB_CONNECTION_LIMIT'),
     }),
     sessionDays: parseInt10(env.SESSION_DAYS ?? OPTIONAL.SESSION_DAYS, 'SESSION_DAYS'),
-    trustProxy: parseNonNegativeInt10(env.TRUST_PROXY ?? OPTIONAL.TRUST_PROXY, 'TRUST_PROXY'),
+    trustProxy,
   });
 }

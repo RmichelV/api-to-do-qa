@@ -61,3 +61,56 @@ test('loadConfig rejects non-numeric ports and bad booleans', () => {
   assert.throws(() => loadConfig({ ...validEnv, DB_SSL: 'yes' }), /DB_SSL/);
   assert.throws(() => loadConfig({ ...validEnv, DB_CONNECTION_LIMIT: '0' }), /DB_CONNECTION_LIMIT/);
 });
+
+// Production hardening (design §5.6, plan T10).
+const productionEnv = {
+  ...validEnv,
+  NODE_ENV: 'production',
+  APP_ORIGIN: 'https://bughunterssite.com',
+  TRUST_PROXY: '1',
+};
+
+test('loadConfig accepts a valid production config', () => {
+  const config = loadConfig(productionEnv);
+  assert.equal(config.nodeEnv, 'production');
+  assert.equal(config.trustProxy, 1);
+  assert.equal(config.appOrigin, 'https://bughunterssite.com');
+});
+
+test('production requires TRUST_PROXY=1, a non-empty DB_PASSWORD and an https APP_ORIGIN', () => {
+  const withoutTrustProxy = { ...productionEnv };
+  delete withoutTrustProxy.TRUST_PROXY;
+  assert.throws(() => loadConfig(withoutTrustProxy), /TRUST_PROXY/);
+  assert.throws(() => loadConfig({ ...productionEnv, TRUST_PROXY: '0' }), /TRUST_PROXY/);
+  assert.throws(() => loadConfig({ ...productionEnv, TRUST_PROXY: '2' }), /TRUST_PROXY/);
+  assert.throws(() => loadConfig({ ...productionEnv, DB_PASSWORD: '' }), /DB_PASSWORD/);
+  assert.throws(
+    () => loadConfig({ ...productionEnv, APP_ORIGIN: 'http://bughunterssite.com' }),
+    /APP_ORIGIN/
+  );
+  assert.throws(() => loadConfig({ ...productionEnv, APP_ORIGIN: 'not-a-url' }), /APP_ORIGIN/);
+});
+
+test('development keeps the relaxed settings (http origin, empty password, no proxy)', () => {
+  const config = loadConfig({
+    ...validEnv,
+    APP_ORIGIN: 'http://localhost:4000',
+    DB_PASSWORD: '',
+    TRUST_PROXY: '0',
+  });
+  assert.equal(config.nodeEnv, 'development');
+  assert.equal(config.appOrigin, 'http://localhost:4000');
+  assert.equal(config.db.password, '');
+  assert.equal(config.trustProxy, 0);
+});
+
+test('loadConfig rejects malformed or out-of-range ports', () => {
+  const badPorts = ['4000abc', '4000.5', '0', '65536', '-1', ' 4000', '', '0x10', '4e3'];
+  for (const value of badPorts) {
+    assert.throws(() => loadConfig({ ...validEnv, PORT: value }), /PORT/, `PORT=${JSON.stringify(value)}`);
+    assert.throws(() => loadConfig({ ...validEnv, DB_PORT: value }), /DB_PORT/, `DB_PORT=${JSON.stringify(value)}`);
+  }
+  const config = loadConfig({ ...validEnv, PORT: '1', DB_PORT: '65535' });
+  assert.equal(config.port, 1);
+  assert.equal(config.db.port, 65535);
+});

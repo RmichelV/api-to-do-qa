@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import mysql from 'mysql2/promise';
-import { runMigrations } from '../scripts/migrate.js';
+import { migrationLockName, runMigrations } from '../scripts/migrate.js';
 
 // Integration test against a real MySQL/MariaDB (design §10, §4.4).
 //
@@ -135,4 +135,33 @@ test('stops at the first failing file and does not record its version', { skip: 
   assert.deepEqual(versions.map((row) => row.version), ['001_ok']);
   assert.equal(await tableExists(conn, config.name, 't_probe_ok'), true);
   assert.equal(await tableExists(conn, config.name, 't_probe_bad'), false);
+});
+
+test('fails fast while another session holds the migration lock', { skip: skipReason }, async (t) => {
+  const config = testConfig();
+  const conn = await connect(config);
+  t.after(() => conn.end());
+  await dropAuthSchema(conn);
+
+  const lockName = migrationLockName(config.name);
+  const [held] = await conn.query('SELECT GET_LOCK(?, 0) AS acquired', [lockName]);
+  assert.equal(Number(held[0].acquired), 1, 'the test session must hold the lock');
+
+  await assert.rejects(
+    () => runMigrations(config),
+    /another migration is already running/,
+    'a concurrent migrate must not start'
+  );
+
+  // Nothing was applied while the lock was held (the lock is taken before
+  // schema_migrations is created).
+  assert.equal(await tableExists(conn, config.name, 'schema_migrations'), false);
+
+  await conn.query('SELECT RELEASE_LOCK(?)', [lockName]);
+  const result = await runMigrations(config);
+  assert.deepEqual(result.applied, [
+    '001_create_users',
+    '002_create_user_sessions',
+    '003_create_login_attempts',
+  ]);
 });
