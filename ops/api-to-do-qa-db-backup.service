@@ -1,0 +1,8 @@
+[Unit]
+Description=Create a compressed MariaDB backup outside the container
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/api-to-do-qa/ops/backup-db.sh

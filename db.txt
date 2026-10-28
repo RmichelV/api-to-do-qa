@@ -1,0 +1,31 @@
+1. Servicio en el compose
+
+Nombre del servicio: db. Imagen: mariadb:10.11, la misma que usamos en desarrollo.
+Volumen persistente con nombre para /var/lib/mysql.
+Sin ports: el puerto no puede quedar expuesto. Solo la app lo usa, por la red interna del compose.
+restart: always y un healthcheck (healthcheck.sh --connect --innodb_initialized).
+Que la app arranque después de que la base esté sana (depends_on con condition: service_healthy).
+Charset: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci.
+2. Base y usuarios (contraseñas largas, aleatorias y distintas entre sí):
+CREATE DATABASE api_to_do_qa CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE USER 'qa_app'@'%' IDENTIFIED BY '<contraseña 1>';
+GRANT SELECT, INSERT, UPDATE, DELETE ON api_to_do_qa.* TO 'qa_app'@'%';
+
+CREATE USER 'qa_migrator'@'%' IDENTIFIED BY '<contraseña 2>';
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES ON api_to_do_qa.* TO 'qa_migrator'@'%';
+
+3. Backup diario automático (mysqldump), guardado fuera del contenedor.
+4. Configuración de la app: un archivo .env.production en el servidor, que nunca va a git:
+NODE_ENV=production
+PORT=4000
+APP_ORIGIN=https://bughunterssite.com
+TRUST_PROXY=1
+DB_HOST=db
+DB_PORT=3306
+DB_NAME=api_to_do_qa
+DB_USER=qa_app
+DB_PASSWORD=<contraseña 1>
+MIGRATE_DB_USER=qa_migrator
+MIGRATE_DB_PASSWORD=<contraseña 2>
+DB_SSL=false

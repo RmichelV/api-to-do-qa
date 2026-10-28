@@ -3,10 +3,49 @@ services:
     build: .
     image: api-to-do-qa:latest
     environment:
-      - NODE_ENV=production
-      - PORT=4000
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-4000}
+      APP_ORIGIN: ${APP_ORIGIN:?APP_ORIGIN is required}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      DB_HOST: ${DB_HOST:-db}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      DB_USER: ${DB_USER:?DB_USER is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      MIGRATE_DB_USER: ${MIGRATE_DB_USER:?MIGRATE_DB_USER is required}
+      MIGRATE_DB_PASSWORD: ${MIGRATE_DB_PASSWORD:?MIGRATE_DB_PASSWORD is required}
+      DB_SSL: ${DB_SSL:-false}
     expose:
       - "4000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: always
+
+  db:
+    image: mariadb:10.11
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?MARIADB_ROOT_PASSWORD is required}
+      MARIADB_DATABASE: ${DB_NAME:?DB_NAME is required}
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      DB_USER: ${DB_USER:?DB_USER is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      MIGRATE_DB_USER: ${MIGRATE_DB_USER:?MIGRATE_DB_USER is required}
+      MIGRATE_DB_PASSWORD: ${MIGRATE_DB_PASSWORD:?MIGRATE_DB_PASSWORD is required}
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./db/init-users.sh:/docker-entrypoint-initdb.d/10-init-users.sh:ro
+    ports:
+      - "0.0.0.0:3306:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     restart: always
 
   caddy:
@@ -25,3 +64,4 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+  mariadb_data:
