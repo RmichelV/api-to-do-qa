@@ -52,10 +52,21 @@ else
   echo "==> Aviso: no se encontró Caddyfile en el repo clonado"
 fi
 
+# Configuración de producción (git-ignored), creada por ops/provision-db.sh
+ENV_FILE="$APP_DIR/.env.production"
+if [ ! -r "$ENV_FILE" ]; then
+  echo "Falta $ENV_FILE: ejecutá primero sudo bash ops/provision-db.sh"
+  exit 1
+fi
+
 # Levantar (build + up) con docker compose
 echo "==> Construyendo y levantando contenedores (docker compose up -d --build)"
-docker compose up -d --build
+docker compose --env-file "$ENV_FILE" up -d --build
 
-echo "==> Despliegue completado. Revisa logs con: sudo docker compose logs -f caddy" 
+# Aplicar migraciones pendientes (idempotente; usa MIGRATE_DB_*)
+echo "==> Aplicando migraciones de base de datos"
+docker compose --env-file "$ENV_FILE" exec -T app npm run migrate
+
+echo "==> Despliegue completado. Revisa logs con: sudo docker compose --env-file .env.production logs -f caddy" 
 
 echo "Si Caddy aún no obtiene el certificado, asegúrate de que el dominio $DOMAIN apunte a esta IP y que los puertos 80/443 estén accesibles." 

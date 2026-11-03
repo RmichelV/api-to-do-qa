@@ -172,72 +172,37 @@ These steps describe how to deploy the app on an Ubuntu VPS using Docker Compose
   - If you want a different port for the app, update both `Dockerfile` and `docker-compose.yml` accordingly.
   - `.dockerignore` keeps `test/`, `odd/`, `docs/`, `db/docker/` and every `.env*` file out of the image.
 
-4) Configure the environment (`.env.production` + `.env.db`)
-
-On the VPS, clone the repo (or copy the project) and create two env files in
-the project root — both are **git-ignored** and **not copied into the image**.
-The app only reads `.env.production`; the database root password goes in
-`.env.db`, which the app container never receives:
+4) Provision the server (first time only)
 
 ```bash
 git clone <your-repo-url> /opt/api-to-do-qa
 cd /opt/api-to-do-qa
+sudo bash ops/provision-db.sh
 ```
 
-```ini
-NODE_ENV=production
-PORT=4000
-APP_ORIGIN=https://your.domain
-DB_HOST=db            # the compose service name; the database publishes no ports
-DB_PORT=3306
-DB_NAME=api_to_do_qa
-DB_USER=qa_app
-DB_PASSWORD=<long random value>
-DB_SSL=false
-DB_CONNECTION_LIMIT=5
-SESSION_DAYS=7
-TRUST_PROXY=1         # Caddy is the reverse proxy (required in production)
-MIGRATE_DB_USER=qa_migrator
-MIGRATE_DB_PASSWORD=<long random value>
-```
-
-```ini
-# .env.db — read only by the `db` service, never by the app
-MARIADB_ROOT_PASSWORD=<long random value>
-```
+`ops/provision-db.sh` creates `/opt/api-to-do-qa/.env.production` (git-ignored,
+mode 600, **not copied into the image**) with random passwords, installs the
+firewall and daily backup units, and starts the stack. On the first start the
+database container creates `api_to_do_qa` and the users `qa_app` and
+`qa_migrator` (no DROP) from `db/init-users.sh`. Every compose command passes
+the file with `--env-file .env.production`; the app container never receives
+`MARIADB_ROOT_PASSWORD`. Variable list: [`db/README.md` §7.1](db/README.md).
 
 The app refuses to start in production unless `TRUST_PROXY=1`,
 `DB_PASSWORD` is not empty and `APP_ORIGIN` is an `https://` URL, so a
 missing variable fails at boot with a clear message.
 
-5) Create the database users (first start only)
+5) Deploy, migrate and create the first admin
 
 ```bash
-sudo docker compose up -d db        # creates api_to_do_qa, waits for "healthy"
-sudo docker compose exec db mariadb -uroot -p
-```
-
-```sql
-CREATE USER 'qa_app'@'%' IDENTIFIED BY '<same value as DB_PASSWORD>';
-GRANT SELECT, INSERT, UPDATE, DELETE ON api_to_do_qa.* TO 'qa_app'@'%';
-
-CREATE USER 'qa_migrator'@'%' IDENTIFIED BY '<same value as MIGRATE_DB_PASSWORD>';
-GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, INDEX, ALTER, REFERENCES
-  ON api_to_do_qa.* TO 'qa_migrator'@'%';   -- no DROP on production
-```
-
-6) Build, migrate and create the first admin
-
-```bash
-sudo docker compose up -d --build          # the app waits for db to be healthy
-sudo docker compose exec app npm run migrate         # once, as qa_migrator
-sudo docker compose exec app npm run create-admin    # first admin (interactive)
+sudo bash deploy.sh <your-repo-url> master   # pulls, builds, starts and runs npm run migrate
+sudo docker compose --env-file .env.production exec app npm run create-admin   # first admin (interactive, once)
 ```
 
 - Caddy listens on ports 80 and 443 and automatically obtains a TLS certificate for the domain; it reverse-proxies to the Node app on port 4000 (internal only).
 - `npm run migrate` holds a per-database lock, so two runs can never overlap; re-running it is a no-op.
 
-7) Verify without a session
+6) Verify without a session
 
 ```bash
 curl -i https://your.domain/api/auth/me          # 401 unauthenticated (no cookie)
@@ -247,25 +212,21 @@ curl -i https://your.domain/                     # 302 to /login.html
 Plain HTTP is redirected with `308` to HTTPS (HSTS is enabled in production).
 Then log in, change the password and log out from the browser.
 
-8) Daily backup (from the host, outside the container)
+7) Daily backup (from the host, outside the container)
 
-```cron
-# crontab -e: inside a crontab, every literal % of the command must be written as \%
-0 3 * * * cd /opt/api-to-do-qa && sudo docker compose exec -T db sh -c 'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mysqldump -uroot --single-transaction api_to_do_qa' | gzip > /var/backups/api-to-do-qa_$(date +\%F).sql.gz
-```
-
-The dump is written to the host filesystem (outside the container and the
-`db_data` volume), so it survives `docker compose down`. Full details:
+`ops/provision-db.sh` enables a systemd timer that dumps the database every day
+at 02:00 into `/var/backups/api-to-do-qa/` on the host (outside the container
+and the `mariadb_data` volume) and keeps 14 days. Full details:
 [`db/README.md` §7.4](db/README.md).
 
-9) Confirm
+8) Confirm
 
 - Check logs:
 
 ```bash
-sudo docker compose logs -f caddy
-sudo docker compose logs -f app
-sudo docker compose logs -f db
+sudo docker compose --env-file .env.production logs -f caddy
+sudo docker compose --env-file .env.production logs -f app
+sudo docker compose --env-file .env.production logs -f db
 ```
 
 - Open `https://your.domain` in a browser. Caddy will redirect with HTTPS.
@@ -291,7 +252,7 @@ To deploy a new version:
 ```bash
 cd /opt/api-to-do-qa
 git pull
-sudo docker compose up -d --build
+sudo docker compose --env-file .env.production up -d --build
 ```
 
 13) Optional: run as non-root docker user

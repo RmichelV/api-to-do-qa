@@ -194,42 +194,37 @@ Caddy terminates TLS for the domain and proxies to the app with
 `X-Forwarded-Proto`, so `TRUST_PROXY=1` tells Express to trust it (§5.6, T10).
 Run it only on the server; locally use §1 (`docker-compose.dev.yml`).
 
-### 7.1 Environment files: `.env.production` + `.env.db` (git-ignored, never inside the image)
+### 7.1 Environment file: `.env.production` (git-ignored, never inside the image)
 
-Each service reads its own file (`env_file` in `docker-compose.yml`), so the
-database root password never reaches the app container (T10, L35):
-`.gitignore` keeps both files out of git and `.dockerignore` keeps them out of
-the image. Copy the templates on the server and fill them in.
-
-**`.env.production` — read by the app (no root password here):**
+One file, `/opt/api-to-do-qa/.env.production` (mode 600), holds every value.
+`ops/provision-db.sh` creates it on the first run with random passwords and
+never overwrites an existing one. Compose reads it only for interpolation
+(`docker compose --env-file .env.production ...`), and each service lists the
+variables it receives, so the app container never gets `MARIADB_ROOT_PASSWORD`.
+`.gitignore` keeps it out of git and `.dockerignore` keeps it out of the image.
 
 ```ini
 NODE_ENV=production
 PORT=4000
 APP_ORIGIN=https://your.domain
+TRUST_PROXY=1
 
-# `db` is the compose service name: the database publishes no ports and is
-# reached only over the internal network.
+# `db` is the compose service name, reached over the internal network.
 DB_HOST=db
 DB_PORT=3306
 DB_NAME=api_to_do_qa
 DB_USER=qa_app
 DB_PASSWORD=<long random value>
 DB_SSL=false
-DB_CONNECTION_LIMIT=5
-
-SESSION_DAYS=7
-TRUST_PROXY=1
 
 MIGRATE_DB_USER=qa_migrator
 MIGRATE_DB_PASSWORD=<long random value>
-```
 
-**`.env.db` — read by the `db` service only:**
-
-```ini
-# root of the db container: used to create the users (§7.2) and to dump (§7.4)
+# db service only: creates the users (§7.2) and runs the dumps (§7.4)
 MARIADB_ROOT_PASSWORD=<long random value>
+
+# read by ops/apply-db-firewall.sh
+DB_ALLOWED_IPS=<ipv4 or cidr, comma-separated>
 ```
 
 At startup `loadConfig` refuses to boot in production unless `TRUST_PROXY=1`,
@@ -237,41 +232,42 @@ At startup `loadConfig` refuses to boot in production unless `TRUST_PROXY=1`,
 or wrong variable fails immediately with a clear message instead of running
 with a cookie or a proxy configuration that cannot work.
 
-### 7.2 First start: database and users (once)
+### 7.2 First start: provisioning (once)
 
 ```bash
-docker compose up -d db     # first start with an empty volume creates api_to_do_qa (utf8mb4_unicode_ci)
-docker compose ps           # "db ... (healthy)" means ready
+sudo bash ops/provision-db.sh
 ```
 
-Then create the two users **once**, from inside the container (interactive
-prompt, so the root password never lands in shell history or `ps`):
+It creates `.env.production` if missing, installs the firewall and daily
+backup systemd units, and starts the stack. On the first start with an empty
+`mariadb_data` volume the db container creates `api_to_do_qa`
+(utf8mb4_unicode_ci) and runs `db/init-users.sh`, which creates:
+
+- `qa_app` — DML only (§5.6), password `DB_PASSWORD`;
+- `qa_migrator` — DML + CREATE, ALTER, INDEX, REFERENCES, and **no DROP** on
+  production, password `MIGRATE_DB_PASSWORD`.
+
+Init scripts run only on an empty volume: changing the passwords later in
+`.env.production` does not change the users. Never rename or delete the
+`mariadb_data` volume — it holds the production data. There is no test
+database on the server: the integration tests (§5) never run in production.
+
+The database port is bound to `127.0.0.1:3306` on the host only. To inspect
+the database from your machine, open an SSH tunnel and point your client at
+`127.0.0.1:3307` as `qa_migrator`:
 
 ```bash
-docker compose exec db mariadb -uroot -p
+ssh -L 3307:127.0.0.1:3306 <user>@<vps-ip>
 ```
-
-```sql
--- runtime user: DML only (§5.6)
-CREATE USER 'qa_app'@'%' IDENTIFIED BY '<same value as DB_PASSWORD>';
-GRANT SELECT, INSERT, UPDATE, DELETE ON api_to_do_qa.* TO 'qa_app'@'%';
-
--- migration user: DDL for `npm run migrate`, and NO DROP on production (§5.6)
-CREATE USER 'qa_migrator'@'%' IDENTIFIED BY '<same value as MIGRATE_DB_PASSWORD>';
-GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, INDEX, ALTER, REFERENCES
-  ON api_to_do_qa.* TO 'qa_migrator'@'%';
-```
-
-The two users' passwords come from `DB_PASSWORD` and `MIGRATE_DB_PASSWORD` in
-`.env.production`. There is no test database on the
-server: the integration tests (§5) never run in production.
 
 ### 7.3 App, migrations and first admin (inside the app container)
 
+`deploy.sh` runs the first two steps on every deploy. Manually:
+
 ```bash
-docker compose up -d --build        # the app waits for db to be healthy
-docker compose exec app npm run migrate        # once, as qa_migrator
-docker compose exec app npm run create-admin   # first admin, interactive
+docker compose --env-file .env.production up -d --build   # the app waits for db to be healthy
+docker compose --env-file .env.production exec app npm run migrate        # as qa_migrator
+docker compose --env-file .env.production exec app npm run create-admin   # first admin, interactive, once
 ```
 
 - `npm run migrate` takes a server-side `GET_LOCK` per database (T10): two
@@ -282,18 +278,17 @@ docker compose exec app npm run create-admin   # first admin, interactive
 
 ### 7.4 Daily backup (run from the host, outside the container)
 
-The dump is produced on the **host** and written to the **host** filesystem,
-so it lives outside the container and outside the `db_data` volume:
+`ops/provision-db.sh` enables the `api-to-do-qa-db-backup.timer` systemd unit,
+which runs `ops/backup-db.sh` every day at 02:00. The dump is produced on the
+**host** and written to `/var/backups/api-to-do-qa/` (mode 700), outside the
+container and the `mariadb_data` volume; files older than 14 days are deleted.
 
-```cron
-# crontab -e: inside a crontab, every literal % of the command must be written as \%
-0 3 * * * cd /opt/api-to-do-qa && docker compose exec -T db sh -c 'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mysqldump -uroot --single-transaction api_to_do_qa' | gzip > /var/backups/api-to-do-qa_$(date +\%F).sql.gz
+```bash
+systemctl list-timers api-to-do-qa-db-backup.timer   # next run
+sudo systemctl start api-to-do-qa-db-backup.service  # backup now
 ```
 
-The db container already has `MARIADB_ROOT_PASSWORD` in its environment (from
-`.env.db`); `MYSQL_PWD` keeps it out of the process list. Keep a retention policy (for
-example `find /var/backups -name 'api-to-do-qa_*.sql.gz' -mtime +30 -delete`)
-and test a restore into a scratch database from time to time.
+Test a restore into a scratch database from time to time.
 
 ### 7.5 Verify without a session (design §8.2 step 6)
 

@@ -2,22 +2,29 @@
 # Do NOT use it for local development: docker-compose.dev.yml is the local
 # database (db/README.md §1). Run this stack only on the server.
 #
-# Secrets and host-specific values live in git-ignored env files that
-# .dockerignore keeps out of the image build, one per service:
-#   .env.production — the app: NODE_ENV/APP_ORIGIN/DB_*/TRUST_PROXY
-#   .env.db         — the db service: MARIADB_ROOT_PASSWORD, which the app
-#                     container never receives (plan T10, L35)
-# In .env.production, DB_HOST must be `db` — the compose service name — so the
-# app resolves the database on the internal network. Full variable list:
-# db/README.md §7.
+# All values come from one git-ignored file, /opt/api-to-do-qa/.env.production
+# (created by ops/provision-db.sh), passed to compose for interpolation:
+#   docker compose --env-file .env.production up -d --build
+# Each service lists only the variables it needs, so the app container never
+# receives MARIADB_ROOT_PASSWORD. DB_HOST must be `db` — the compose service
+# name — so the app resolves the database on the internal network.
 services:
   app:
     build: .
     image: api-to-do-qa:latest
-    env_file: .env.production
     environment:
-      - NODE_ENV=production
-      - PORT=4000
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-4000}
+      APP_ORIGIN: ${APP_ORIGIN:?APP_ORIGIN is required}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      DB_HOST: ${DB_HOST:-db}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      DB_USER: ${DB_USER:?DB_USER is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      MIGRATE_DB_USER: ${MIGRATE_DB_USER:?MIGRATE_DB_USER is required}
+      MIGRATE_DB_PASSWORD: ${MIGRATE_DB_PASSWORD:?MIGRATE_DB_PASSWORD is required}
+      DB_SSL: ${DB_SSL:-false}
     expose:
       - "4000"
     # The app starts only after the database answers its healthcheck, so
@@ -29,20 +36,26 @@ services:
 
   db:
     image: mariadb:10.11
-    env_file: .env.db
-    environment:
-      # Creates api_to_do_qa (utf8mb4_unicode_ci via the flags below) on the
-      # first start with an empty volume. The qa_app / qa_migrator users are
-      # created by hand, with no DROP: db/README.md §7.
-      MARIADB_DATABASE: api_to_do_qa
-    # No `ports`: the database is never reachable from outside the compose
-    # network. Backups run from the host with `docker compose exec db ...`
-    # and land on the host filesystem (db/README.md §7.4).
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?MARIADB_ROOT_PASSWORD is required}
+      MARIADB_DATABASE: ${DB_NAME:?DB_NAME is required}
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      DB_USER: ${DB_USER:?DB_USER is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      MIGRATE_DB_USER: ${MIGRATE_DB_USER:?MIGRATE_DB_USER is required}
+      MIGRATE_DB_PASSWORD: ${MIGRATE_DB_PASSWORD:?MIGRATE_DB_PASSWORD is required}
     volumes:
-      - db_data:/var/lib/mysql
+      # Keep this volume name: it already holds the server's database.
+      - mariadb_data:/var/lib/mysql
+      # Creates qa_app / qa_migrator (no DROP) on the first start only.
+      - ./db/init-users.sh:/docker-entrypoint-initdb.d/10-init-users.sh:ro
+    # Bound to the host loopback only: never reachable from the internet.
+    # Admin access goes through an SSH tunnel (db/README.md §7).
+    ports:
+      - "127.0.0.1:3306:3306"
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
@@ -67,4 +80,4 @@ services:
 volumes:
   caddy_data:
   caddy_config:
-  db_data:
+  mariadb_data:
