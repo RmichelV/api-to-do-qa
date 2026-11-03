@@ -170,7 +170,7 @@ These steps describe how to deploy the app on an Ubuntu VPS using Docker Compose
 - A `Dockerfile`, a production `docker-compose.yml` (app + MariaDB + Caddy), a `docker-compose.dev.yml` (local database only) and a `Caddyfile` were added to the project to simplify deployment.
   - Edit `Caddyfile` and set your real domain.
   - If you want a different port for the app, update both `Dockerfile` and `docker-compose.yml` accordingly.
-  - `.dockerignore` keeps `test/`, `odd/`, `docs/`, `db/docker/` and every `.env*` file out of the image.
+  - `.dockerignore` keeps `test/`, `db/docker/` and every `.env*` file out of the image.
 
 4) Provision the server (first time only)
 
