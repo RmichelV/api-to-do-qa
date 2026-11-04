@@ -29,6 +29,43 @@
       </div>
     </header>
 
+    <nav class="action-nav" id="action-nav" aria-label="Analysis actions">
+      <button class="action-nav__toggle" id="action-nav-toggle" type="button" aria-expanded="false" aria-controls="action-nav-items" aria-label="Expand analysis menu" title="Expand analysis menu" onclick="toggleActionNav()">
+        <span class="action-nav__icon" aria-hidden="true">☰</span>
+        <span class="action-nav__label">Expand menu</span>
+      </button>
+      <div class="action-nav__items" id="action-nav-items">
+        <button class="action-nav__item action-nav__item--run" type="button" aria-label="Run full analysis" title="Run full analysis" onclick="runFullAnalysis()">
+          <span class="action-nav__icon" aria-hidden="true">⚡</span>
+          <span class="action-nav__label">Run All</span>
+        </button>
+        <button class="action-nav__item action-nav__item--desktop" type="button" aria-label="Desktop text review" title="Desktop text review" onclick="runTextReading()">
+          <span class="action-nav__icon" aria-hidden="true">🖥️</span>
+          <span class="action-nav__label">Text Review · Desktop</span>
+        </button>
+        <button class="action-nav__item action-nav__item--mobile" type="button" aria-label="Mobile text review" title="Mobile text review" onclick="runTextReadingMobile()">
+          <span class="action-nav__icon" aria-hidden="true">📱</span>
+          <span class="action-nav__label">Text Review · Mobile</span>
+        </button>
+        <button class="action-nav__item action-nav__item--links" type="button" aria-label="Read links and H1" title="Read links and H1" onclick="runLinkReading()">
+          <span class="action-nav__icon" aria-hidden="true">🔗</span>
+          <span class="action-nav__label">Read Links · H1</span>
+        </button>
+        <button class="action-nav__item action-nav__item--anchors" type="button" aria-label="Check internal anchors" title="Check internal anchors" onclick="runAnchorReading()">
+          <span class="action-nav__icon" aria-hidden="true">⚓</span>
+          <span class="action-nav__label">Anchors · Internal</span>
+        </button>
+        <button class="action-nav__item action-nav__item--images" type="button" aria-label="Scan images" title="Scan images" onclick="runImageReading()">
+          <span class="action-nav__icon" aria-hidden="true">🖼️</span>
+          <span class="action-nav__label">Images · Alt + Title</span>
+        </button>
+        <button class="action-nav__item action-nav__item--help" type="button" aria-label="Run All help" title="Run All help" aria-haspopup="dialog" aria-controls="review-help-dialog" onclick="openHelpDialog('runAll')">
+          <span class="action-nav__icon" aria-hidden="true">ⓘ</span>
+          <span class="action-nav__label">Run All help</span>
+        </button>
+      </div>
+    </nav>
+
     <main class="app-main" id="app-main">
 
       <section class="todo-panel" id="todo-panel" style="display:none">
@@ -56,54 +93,21 @@
           <label for="url">Target URL</label>
           <input type="text" id="url" placeholder="https://example.com" autocomplete="off" spellcheck="false" />
         </div>
-        <div class="input-group">
-          <label for="co">CO · Original Content</label>
-          <textarea id="co" placeholder="Paste the original content here…"></textarea>
-        </div>
-        <div class="input-group">
-          <label for="check-links">Links to check <small style="font-weight:400;color:#6b7280">(one path per line — paste raw HTML, labels or comma-separated paths, they will be cleaned automatically)</small></label>
-          <textarea id="check-links" placeholder="/new-inventory/index.htm&#10;/financing/center.htm&#10;/used-inventory/index.htm" style="min-height:5rem" onpaste="setTimeout(cleanLinksInput,0)" onblur="cleanLinksInput()"></textarea>
+        <div class="form-fields-row">
+          <div class="input-group">
+            <label for="co">CO · Original Content</label>
+            <textarea id="co" placeholder="Paste the original content here…"></textarea>
+          </div>
+          <div class="input-group">
+            <label for="check-links">Links to check <small style="font-weight:400;color:#6b7280">(you can paste links directly, one per line)</small></label>
+            <textarea id="check-links" placeholder="/new-inventory/index.htm&#10;/financing/center.htm&#10;/used-inventory/index.htm" style="min-height:5rem" onpaste="setTimeout(cleanLinksInput,0)" onblur="cleanLinksInput()"></textarea>
+          </div>
         </div>
         <div class="form-footer">
           <label class="toggle-label">
             <input type="checkbox" id="show-content" />
             <span>Show extracted content (CP &amp; CO)</span>
           </label>
-        </div>
-      </section>
-
-      <section class="actions-section">
-        <div class="run-all-row">
-          <button class="btn-run-all" onclick="runFullAnalysis()">⚡ Run All</button>
-          <button class="help-trigger" type="button" aria-label="Run All help" aria-haspopup="dialog" aria-controls="review-help-dialog" title="Run All help" onclick="openHelpDialog('runAll')"><span aria-hidden="true">i</span></button>
-        </div>
-        <div class="btn-grid">
-          <button class="btn-action btn-action--desktop" onclick="runTextReading()">
-            <span class="btn-action__icon">🖥️</span>
-            <span class="btn-action__label">Text Review</span>
-            <span class="btn-action__sub">Desktop</span>
-          </button>
-          <button class="btn-action btn-action--mobile" onclick="runTextReadingMobile()">
-            <span class="btn-action__icon">📱</span>
-            <span class="btn-action__label">Text Review</span>
-            <span class="btn-action__sub">Mobile</span>
-          </button>
-          <button class="btn-action btn-action--links" onclick="runLinkReading()">
-            <span class="btn-action__icon">🔗</span>
-            <span class="btn-action__label">Read Links</span>
-            <span class="btn-action__sub">+ H1</span>
-          </button>
-          <button class="btn-action btn-action--anchors" onclick="runAnchorReading()">
-            <span class="btn-action__icon">⚓</span>
-            <span class="btn-action__label">Anchors</span>
-            <span class="btn-action__sub">Internal</span>
-            <span class="btn-action__sub">Runs separately · not included in Run All</span>
-          </button>
-          <button class="btn-action btn-action--images" onclick="runImageReading()">
-            <span class="btn-action__icon">🖼️</span>
-            <span class="btn-action__label">Images</span>
-            <span class="btn-action__sub">Alt + Title</span>
-          </button>
         </div>
       </section>
 
@@ -291,6 +295,19 @@
         if (appMain) {
           appMain.classList.toggle("app-main--todo-open", willShow);
         }
+      }
+
+      function toggleActionNav() {
+        const toggle = document.getElementById("action-nav-toggle");
+        const expanded = document.body.classList.toggle("action-nav-expanded");
+        const icon = toggle.querySelector(".action-nav__icon");
+        const label = toggle.querySelector(".action-nav__label");
+        const action = expanded ? "Collapse" : "Expand";
+        toggle.setAttribute("aria-expanded", String(expanded));
+        toggle.setAttribute("aria-label", `${action} analysis menu`);
+        toggle.title = `${action} analysis menu`;
+        icon.textContent = expanded ? "‹" : "☰";
+        label.textContent = `${action} menu`;
       }
 
       function setTodoItem(id, checked) {

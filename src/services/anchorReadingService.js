@@ -48,6 +48,43 @@ function checkTargetsInHtml(html, anchors) {
 	}));
 }
 
+function consolidateAnchorResults(results) {
+	const consolidate = (key) => {
+		const byHref = new Map();
+
+		for (const result of results) {
+			const seen = new Set();
+			for (const anchor of result[key] || []) {
+				if (seen.has(anchor.href)) continue;
+				seen.add(anchor.href);
+
+				let record = byHref.get(anchor.href);
+				if (!record) {
+					record = { anchor, runs: 0, targetExistsVotes: 0 };
+					byHref.set(anchor.href, record);
+				}
+				record.runs++;
+				if (anchor.targetExists) record.targetExistsVotes++;
+			}
+		}
+
+		return [...byHref.values()]
+			.filter(record => record.runs >= 2)
+			.map(({ anchor, targetExistsVotes, runs }) => key === 'anchors'
+				? { ...anchor, targetExists: targetExistsVotes > runs / 2 }
+				: anchor);
+	};
+
+	const response = {
+		anchors: consolidate('anchors'),
+		misconfiguredAnchors: consolidate('misconfiguredAnchors'),
+	};
+	if (results.every(result => result.error)) {
+		response.error = results.at(-1).error;
+	}
+	return response;
+}
+
 // ─────────────────────────────────────────────
 // Strategy 1: fetch + cheerio (no browser)
 // ─────────────────────────────────────────────
@@ -166,14 +203,26 @@ async function tryPlaywrightStrategy(url, options = {}) {
 // ─────────────────────────────────────────────
 
 export const extractAndValidateAnchors = async (url, options = {}) => {
-	// Strategy 1: fast, no browser
-	try {
-		const result = await tryFetchStrategy(url);
-		if (result) return result;
-	} catch {
-		// fetch failed → continue to fallback
+	const results = [];
+	let lastError;
+	let completedRuns = 0;
+
+	for (let attempt = 0; attempt < 3; attempt++) {
+		try {
+			// Strategy 1: fast, no browser
+			let result = await tryFetchStrategy(url);
+			if (!result) {
+				// Strategy 2: fallback with Playwright
+				result = await tryPlaywrightStrategy(url, options);
+			}
+			results.push(result);
+			completedRuns++;
+		} catch (error) {
+			lastError = error;
+			results.push({ anchors: [], misconfiguredAnchors: [] });
+		}
 	}
 
-	// Strategy 2: fallback with Playwright (no clicks, no scrolls, no isolation)
-	return tryPlaywrightStrategy(url, options);
+	if (completedRuns === 0) throw lastError;
+	return consolidateAnchorResults(results);
 };
