@@ -34,7 +34,10 @@ export const classifyImage = (image, pageUrl) => {
 export const readImages = async (url) => {
   console.log(`[image-reading] Fetch+clean images: ${url}`);
   const scrapedImages = await scrapePageImages(url);
-  const images = scrapedImages.map(image => classifyImage(image, url));
+  const images = scrapedImages
+    .map(image => classifyImage(image, url))
+    .filter(image => !image.hasClipPath)
+    .map(({ hasClipPath, ...image }) => image);
   console.log(`[image-reading] Found ${images.length} images`);
   return { images };
 };

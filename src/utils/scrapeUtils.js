@@ -140,18 +140,43 @@ export const scrapePageImages = async (url) => {
   const images = [];
   wrapper.find('img').each((_, el) => {
     const image = $(el);
+    const isDisclaimerPlaceholder = image.attr('src')?.trim().toLowerCase() === 'dr-photoupload-front'
+      && image.parents('[data-widget-name="content-disclaimer"]').length > 0;
+    if (isDisclaimerPlaceholder) return;
     if (image.is('.skeleton-shimmer, .default-asset-placeholder, [class*="asset-placeholder"]')) return;
     if (image.parents('.content-tabbed').length) return;
     const isDefaultImageWidget = image.parents('[data-widget-name="image-default"]').length > 0;
+    const imageAndAncestors = [el, ...image.parents().toArray()];
+    const hasClipPathStyle = (style) => style.split(';').some(declaration => {
+      const separator = declaration.indexOf(':');
+      if (separator === -1) return false;
+      const property = declaration.slice(0, separator).trim().toLowerCase();
+      const value = declaration.slice(separator + 1)
+        .replace(/!\s*important\s*$/i, '')
+        .trim()
+        .toLowerCase();
+      return ['clip-path', '-webkit-clip-path'].includes(property)
+        && value !== ''
+        && value !== 'none';
+    });
+    const hasClipPath = imageAndAncestors.some(node => hasClipPathStyle($(node).attr('style') || ''));
+    const isImageProxy = image.is('[hidden], [role="presentation"], .d-none, .responsive-image, .dynamic-resize');
+    const hasClippedBackgroundSibling = isImageProxy && imageAndAncestors.some(node =>
+      $(node).children().toArray().some(sibling => {
+        const style = $(sibling).attr('style') || '';
+        const hasBackgroundUrl = /(?:^|;)\s*background(?:-image)?\s*:[^;]*url\s*\(/i.test(style);
+        return hasClipPathStyle(style) && hasBackgroundUrl;
+      })
+    );
 
-    const isBackgroundImageProxy = image.is('[hidden], [role="presentation"], .d-none, .responsive-image, .dynamic-resize')
-      && [el, ...image.parents().toArray()].some(node => {
+    const isBackgroundImageProxy = isImageProxy
+      && imageAndAncestors.some(node => {
         const element = $(node);
         const style = element.attr('style') || '';
         const hasBackgroundUrl = /(?:^|;)\s*background(?:-image)?\s*:[^;]*url\s*\(/i.test(style);
         return hasBackgroundUrl || element.attr('data-responsive-image-bg') === 'true' && /url\s*\(/i.test(style);
       });
-    if (isBackgroundImageProxy) return;
+    if (isBackgroundImageProxy || hasClippedBackgroundSibling) return;
 
     const pictureSources = image.parents('picture').first().find('source[srcset]').map((_, source) => $(source).attr('srcset')).get();
     const srcsetCandidates = [image.attr('data-srcset'), image.attr('srcset'), ...pictureSources]
@@ -174,6 +199,7 @@ export const scrapePageImages = async (url) => {
       alt: image.attr('alt') ?? null,
       title: isDefaultImageWidget ? 'Title not required' : image.attr('title') ?? null,
       titleRequired: !isDefaultImageWidget,
+      hasClipPath,
     });
   });
 
