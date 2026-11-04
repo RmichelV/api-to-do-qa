@@ -15,13 +15,11 @@ function classifyAnchorsFromHtml(html, pageUrl) {
 	const $ = cheerio.load(html);
 	const well = [];
 	const misc = [];
-	const seen = new Set();
 
 	$('.ddc-wrapper a').each((_, el) => {
 		const href = $(el).attr('href') || '';
 		const text = $(el).text().trim();
-		if (!text || !href.includes('#') || seen.has(href)) return;
-		seen.add(href);
+		if (!text || !href.includes('#')) return;
 
 		const hashIdx = href.indexOf('#');
 		const base = href.substring(0, hashIdx);
@@ -50,25 +48,27 @@ function checkTargetsInHtml(html, anchors) {
 
 function consolidateAnchorResults(results) {
 	const consolidate = (key) => {
-		const byHref = new Map();
+		const byIdentity = new Map();
 
 		for (const result of results) {
-			const seen = new Set();
+			const occurrences = new Map();
 			for (const anchor of result[key] || []) {
-				if (seen.has(anchor.href)) continue;
-				seen.add(anchor.href);
+				const baseIdentity = JSON.stringify([anchor.href, anchor.text]);
+				const occurrence = occurrences.get(baseIdentity) || 0;
+				occurrences.set(baseIdentity, occurrence + 1);
+				const identity = JSON.stringify([baseIdentity, occurrence]);
 
-				let record = byHref.get(anchor.href);
+				let record = byIdentity.get(identity);
 				if (!record) {
 					record = { anchor, runs: 0, targetExistsVotes: 0 };
-					byHref.set(anchor.href, record);
+					byIdentity.set(identity, record);
 				}
 				record.runs++;
 				if (anchor.targetExists) record.targetExistsVotes++;
 			}
 		}
 
-		return [...byHref.values()]
+		return [...byIdentity.values()]
 			.filter(record => record.runs >= 2)
 			.map(({ anchor, targetExistsVotes, runs }) => key === 'anchors'
 				? { ...anchor, targetExists: targetExistsVotes > runs / 2 }
@@ -155,15 +155,13 @@ async function tryPlaywrightStrategy(url, options = {}) {
 		const { wellConfigured, misconfigured } = await page.evaluate((pageUrl) => {
 			const wrapper = document.querySelector('.ddc-wrapper');
 			if (!wrapper) return { wellConfigured: [], misconfigured: [] };
-			const seen = new Set();
 			const well = [];
 			const misc = [];
 
 			wrapper.querySelectorAll('a').forEach(a => {
 				const href = a.getAttribute('href') || '';
 				const text = (a.innerText || '').trim();
-				if (!text || !href.includes('#') || seen.has(href)) return;
-				seen.add(href);
+				if (!text || !href.includes('#')) return;
 
 				const hashIdx = href.indexOf('#');
 				const base = href.substring(0, hashIdx);

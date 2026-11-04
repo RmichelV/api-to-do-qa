@@ -11,7 +11,8 @@ test('anchor analysis runs three times and returns the majority result', async (
     response.writeHead(200, { 'content-type': 'text/html' });
     response.end(`
       <div class="ddc-wrapper">
-        <a href="#section">Section</a>
+        <a href="#section">Button 1</a>
+        <a href="#section">Button 2</a>
         ${target}
         <a href="/other#section">Other page</a>
       </div>
@@ -28,7 +29,11 @@ test('anchor analysis runs three times and returns the majority result', async (
 
   assert.equal(requests, 3);
   assert.deepEqual(result.anchors, [{
-    text: 'Section',
+    text: 'Button 1',
+    href: '#section',
+    targetExists: true,
+  }, {
+    text: 'Button 2',
     href: '#section',
     targetExists: true,
   }]);
