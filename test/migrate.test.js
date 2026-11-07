@@ -42,11 +42,25 @@ async function connect(config) {
 }
 
 async function dropAuthSchema(conn) {
+  // Children first: qa_record_bugs → qa_records reference users, and
+  // DROP TABLE refuses to remove a table another FK points at.
+  await conn.query('DROP TABLE IF EXISTS qa_record_bugs');
+  await conn.query('DROP TABLE IF EXISTS qa_records');
   await conn.query('DROP TABLE IF EXISTS login_attempts');
   await conn.query('DROP TABLE IF EXISTS user_sessions');
   await conn.query('DROP TABLE IF EXISTS users');
   await conn.query('DROP TABLE IF EXISTS schema_migrations');
 }
+
+const ALL_MIGRATIONS = [
+  '001_create_users',
+  '002_create_user_sessions',
+  '003_create_login_attempts',
+  '004_create_qa_records',
+  '005_create_qa_record_bugs',
+];
+
+const ALL_TABLES = ['users', 'user_sessions', 'login_attempts', 'qa_records', 'qa_record_bugs'];
 
 async function tableExists(conn, schema, table) {
   const [[row]] = await conn.query(
@@ -65,22 +79,18 @@ test('applies pending migrations in order and records versions', { skip: skipRea
 
   const result = await runMigrations(config);
 
-  assert.deepEqual(result.applied, [
-    '001_create_users',
-    '002_create_user_sessions',
-    '003_create_login_attempts',
-  ]);
+  assert.deepEqual(result.applied, ALL_MIGRATIONS);
   assert.deepEqual(result.skipped, []);
 
   const [versions] = await conn.query('SELECT version FROM schema_migrations ORDER BY version');
   assert.deepEqual(versions.map((row) => row.version), [...result.applied].sort());
 
-  for (const table of ['users', 'user_sessions', 'login_attempts']) {
+  for (const table of ALL_TABLES) {
     assert.equal(await tableExists(conn, config.name, table), true, `table ${table} should exist`);
   }
 
-  // S7: portable charset/collation on every auth table.
-  for (const table of ['users', 'user_sessions', 'login_attempts']) {
+  // S7: portable charset/collation on every table.
+  for (const table of ALL_TABLES) {
     const [[row]] = await conn.query(
       'SELECT table_collation FROM information_schema.tables WHERE table_schema = ? AND table_name = ?',
       [config.name, table]
@@ -96,18 +106,14 @@ test('second run is a no-op (idempotent)', { skip: skipReason }, async (t) => {
   await dropAuthSchema(conn);
 
   const first = await runMigrations(config);
-  assert.equal(first.applied.length, 3);
+  assert.equal(first.applied.length, ALL_MIGRATIONS.length);
 
   const second = await runMigrations(config);
   assert.deepEqual(second.applied, []);
-  assert.deepEqual(second.skipped.sort(), [
-    '001_create_users',
-    '002_create_user_sessions',
-    '003_create_login_attempts',
-  ]);
+  assert.deepEqual(second.skipped.sort(), [...ALL_MIGRATIONS].sort());
 
   const [[row]] = await conn.query('SELECT COUNT(*) AS n FROM schema_migrations');
-  assert.equal(Number(row.n), 3);
+  assert.equal(Number(row.n), ALL_MIGRATIONS.length);
 });
 
 test('stops at the first failing file and does not record its version', { skip: skipReason }, async (t) => {
@@ -159,9 +165,5 @@ test('fails fast while another session holds the migration lock', { skip: skipRe
 
   await conn.query('SELECT RELEASE_LOCK(?)', [lockName]);
   const result = await runMigrations(config);
-  assert.deepEqual(result.applied, [
-    '001_create_users',
-    '002_create_user_sessions',
-    '003_create_login_attempts',
-  ]);
+  assert.deepEqual(result.applied, ALL_MIGRATIONS);
 });
