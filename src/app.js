@@ -8,6 +8,7 @@ import imageReadingRoutes from './routes/imageReadingRoutes.js'
 import fullAnalysisRoutes from './routes/fullAnalysisRoutes.js'
 import authRoutes from './routes/authRoutes.js'
 import adminUserRoutes from './routes/adminUserRoutes.js'
+import qaRecordRoutes from './routes/qaRecordRoutes.js'
 import { activeBrowsers } from './services/textReadingService.js'
 import { activeBrowsersMobile } from './services/textReadingMobileService.js'
 import { activeBrowsersLink } from './services/linkReadingService.js'
@@ -65,6 +66,12 @@ export function createApp({ config, pool }) {
   // 403 forbidden before any handler; the guards of §7.2 (last_admin,
   // self_change) live in the service.
   app.use('/api/admin/users', requireRole('admin'), adminUserRoutes({ pool }));
+
+  // §6 step 9b: save a QA (PLAN F2). Behind requireAuth +
+  // requirePasswordChanged; no role guard on purpose — qa_engineer and
+  // qa_shadow both save their own records (D5), and the owner always comes
+  // from the session.
+  app.use('/api/qa-records', qaRecordRoutes({ pool }));
 
   // §6 step 10: existing QA routers, contract unchanged (S12).
   app.use('/api/text-reading', textReadingRoutes);

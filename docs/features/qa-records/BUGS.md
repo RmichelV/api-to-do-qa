@@ -31,9 +31,9 @@ The column **"Tool today"** shows what QA API Tester already checks in its curre
 
 | ID      | Bug                                                      | Type         | Severity    | Tool today | Check type           |
 | ------- | -------------------------------------------------------- | ------------ | ----------- | ---------- | -------------------- |
-| OPP-01  | Margins and paddings                                     | Styling      | Opportunity | No         | _To decide_          |
-| OPP-02  | Visual styling (colors, gradients, CTAs, links, content) | Styling      | Opportunity | No         | _To decide_          |
-| FAIL-01 | Cropped images                                           | Styling      | Failed      | No         | _To decide_          |
+| OPP-01  | Margins and paddings                                     | Styling      | Opportunity | No         | Manual               |
+| OPP-02  | Visual styling (colors, gradients, CTAs, links, content) | Styling      | Opportunity | No         | Manual               |
+| FAIL-01 | Cropped images                                           | Styling      | Failed      | No         | Manual               |
 | FAIL-02 | Image attributes: src                                    | Images       | Failed      | Yes        | Tool                 |
 | FAIL-03 | Image attributes: title                                  | Images       | Failed      | Yes        | Tool                 |
 | FAIL-04 | Image attributes: alt                                    | Images       | Failed      | Yes        | Tool                 |
@@ -43,16 +43,16 @@ The column **"Tool today"** shows what QA API Tester already checks in its curre
 | FAIL-08 | Anchors not configured in Composer                       | Anchors      | Failed      | Yes        | Tool                 |
 | FAIL-09 | Relative path with anchor                                | Anchors      | Failed      | Partial    | Tool                 |
 | FAIL-10 | Double H1 tags                                           | H1           | Failed      | Yes        | Tool                 |
-| FAIL-11 | Incorrect H1 page title                                  | H1           | Failed      | No         | _To decide_          |
-| FAIL-12 | Inventory: wrong number of vehicles                      | Inventory    | Failed      | No         | _To decide_          |
-| FAIL-13 | Inventory: wrong vehicle inventory                       | Inventory    | Failed      | No         | _To decide_          |
-| FAIL-14 | Inventory: wrong inventory style                         | Inventory    | Failed      | No         | _To decide_          |
-| FAIL-15 | Sitemap XML/HTML not enabled                             | SEO          | Failed      | No         | _To decide_          |
-| FAIL-16 | Lead source: incorrect Source field in forms             | Forms        | Failed      | No         | _To decide_          |
+| FAIL-11 | Incorrect H1 page title                                  | H1           | Failed      | No         | Manual               |
+| FAIL-12 | Inventory: wrong number of vehicles                      | Inventory    | Failed      | No         | Manual               |
+| FAIL-13 | Inventory: wrong vehicle inventory                       | Inventory    | Failed      | No         | Manual               |
+| FAIL-14 | Inventory: wrong inventory style                         | Inventory    | Failed      | No         | Manual               |
+| FAIL-15 | Sitemap XML/HTML not enabled                             | SEO          | Failed      | No         | Manual               |
+| FAIL-16 | Lead source: incorrect Source field in forms             | Forms        | Failed      | No         | Manual               |
 | FAIL-17 | FAQ Schema                                               | SEO          | Failed      | No         | Schema.org validator |
 | CRIT-01 | Missing copy                                             | Copy         | Critical    | Yes        | Tool                 |
 | CRIT-02 | Wrong copy                                               | Copy         | Critical    | Partial    | Tool + Manual        |
-| CRIT-03 | Instructions not followed                                | Instructions | Critical    | No         | _To decide_          |
+| CRIT-03 | Instructions not followed                                | Instructions | Critical    | No         | Manual               |
 
 "Tool today" reflects the latest version of QA API Tester. FAIL-17 uses the Schema.org validator, as the source document indicates.
 
@@ -102,14 +102,14 @@ For very specific requests on an existing page, such as "Update the FAQ section"
 
 ### FAIL-04 — Image attributes: alt
 
-- Missing title attribute.
-- Empty title attribute.
-- Title does not match the image.
+- Missing alt attribute.
+- Empty alt attribute.
+- Alt does not match the image.
 - **Bug applies:** to Content widgets, raw widgets, image widget.
 - **No bug applies:** to backgrounds, Posting cases.
 - **Tool today:** checked by QA API Tester.
 
-> Note: the source document says "title" in this section. To confirm whether it means the **alt** attribute.
+> Note: the source document said "title" in this section; confirmed on Nov 10, 2026 that it means the **alt** attribute.
 
 ### FAIL-05 — Relative link
 
@@ -152,7 +152,7 @@ _Source note: We should use the QA tool._
 _Source note: We should use the QA tool._
 
 - **Bug applies:** when a relative path is combined with an anchor in the same URL.
-- **Tool today:** lists anchors that point to another address as "misconfigured". To confirm if this covers the rule.
+- **Tool today:** lists anchors that point to another address as "misconfigured". Confirmed on Nov 10, 2026: FAIL-09 is checked by the tool only.
 
 ### FAIL-10 — Double H1 tags
 

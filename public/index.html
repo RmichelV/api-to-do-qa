@@ -111,6 +111,29 @@
         </div>
       </section>
 
+      <!-- Save QA (PLAN F2): the record is created ONLY by this button,
+           never by running the tool. -->
+      <section class="form-card save-qa" id="save-qa-card">
+        <div class="save-qa__header">
+          <h3>Guardar QA</h3>
+          <span>Saves the run's summary. Running the tool never saves anything.</span>
+        </div>
+        <div class="form-fields-row">
+          <div class="input-group">
+            <label for="save-task-id">Task ID</label>
+            <input type="text" id="save-task-id" placeholder="D-174735" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="input-group">
+            <label for="save-qa-note">Note for the QA Shadow <small style="font-weight:400;color:#6b7280">(optional, only read at save time)</small></label>
+            <input type="text" id="save-qa-note" placeholder="Special specification for this task…" autocomplete="off" />
+          </div>
+        </div>
+        <div class="form-footer save-qa__footer">
+          <button type="button" class="btn-save-qa" id="save-qa-button" onclick="saveQaRecord()">Guardar QA</button>
+          <p class="save-qa-message" id="save-qa-message" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+
       <dialog class="help-dialog" id="review-help-dialog" aria-labelledby="review-help-title">
         <div class="help-dialog__header">
           <h2 id="review-help-title"></h2>
@@ -431,6 +454,265 @@
           imagesEl.textContent = cancelMsg;
       }
 
+      // --- SAVE QA (PLAN F2) ---
+      // Every check mirrors into `qaRun` as soon as the tool reports it, so
+      // "Guardar QA" can send the D3 summary of the current run. Checks that
+      // never ran stay "not_run". Nothing here talks to the server: a record
+      // is created only when the button is pressed, never by a run.
+      const QA_CHECK_NAMES = ["h1", "linkStatus", "linksAdded", "textDesktop", "textMobile", "images", "anchors"];
+
+      function createQaRun() {
+        const checks = {};
+        for (const name of QA_CHECK_NAMES) checks[name] = { status: "not_run" };
+        return { version: 1, ranAt: null, checks };
+      }
+
+      let qaRun = createQaRun();
+
+      function setQaCheck(name, check) {
+        qaRun.checks[name] = check;
+        qaRun.ranAt = new Date().toISOString();
+      }
+
+      // D3 caps: at most 20 items per check, each item at most 200 chars.
+      function qaItemText(value) {
+        const text = String(value ?? "").replace(/\s+/g, " ").trim();
+        return text.length > 200 ? `${text.slice(0, 197)}…` : text;
+      }
+
+      // D32: every check stores `result` (the same line its panel shows, so
+      // the QA Shadow reads what the engineer saw) and one item per finding
+      // with its BUGS.md id and device (D23: "M" only when the finding comes
+      // from the mobile analysis, "D" otherwise). `bugId` is null when the
+      // finding has no single BUGS.md id; the Shadow classifies it (F5).
+      // Type and severity of each bug the tool reports, from the Summary
+      // table of docs/features/qa-records/BUGS.md (D20: every finding carries
+      // its category so the comment line can be built from it).
+      const QA_BUG_INFO = {
+        "FAIL-03": { type: "Images", severity: "Failed" },
+        "FAIL-04": { type: "Images", severity: "Failed" },
+        "FAIL-05": { type: "Links", severity: "Failed" },
+        "FAIL-06": { type: "Links", severity: "Failed" },
+        "FAIL-07": { type: "Links", severity: "Failed" },
+        "FAIL-08": { type: "Anchors", severity: "Failed" },
+        "FAIL-09": { type: "Anchors", severity: "Failed" },
+        "FAIL-10": { type: "H1", severity: "Failed" },
+        "CRIT-01": { type: "Copy", severity: "Critical" },
+      };
+
+      function qaFinding(bugId, device, text) {
+        const info = QA_BUG_INFO[bugId] || { type: null, severity: null };
+        return { bugId, type: info.type, severity: info.severity, device, text: qaItemText(text) };
+      }
+
+      // textDesktop / textMobile (CRIT-01): only the panel's summary line
+      // ("INCOMPLETE — CO lines: 18, present: 15, missing: 3"), not every
+      // missing line, to keep the record light. `total` is the CO lines,
+      // `failed` the ones the page does not have.
+      function recordTextCompareCheck(name, data) {
+        const details = (data && data.details) || [];
+        const total = data && data.co && data.co.lines ? data.co.lines.length : 0;
+        const missing = details.filter((d) => !d.found).length;
+        if (!total) {
+          setQaCheck(name, { status: "not_run" });
+          return;
+        }
+        const complete = !!(data.result && data.result.complete);
+        const result = `${complete ? "COMPLETE" : "INCOMPLETE"} — CO lines: ${total}, present: ${total - missing}, missing: ${missing}`;
+        const device = name === "textMobile" ? "M" : "D";
+        setQaCheck(name, {
+          status: complete ? "pass" : "fail",
+          result,
+          total,
+          failed: missing,
+          items: complete ? [] : [qaFinding("CRIT-01", device, result)],
+        });
+      }
+
+      // h1 mirrors the H1 panel: the same result line and the H1 texts it
+      // found, so a "fail" always says why. `failed` counts the extra H1s
+      // (2 tags → total 2, failed 1). `mobileMismatch` is the cross-device
+      // check the panel reports on its own.
+      function recordQaH1(h1Texts, srOnlyText, mobileMismatch = false) {
+        const texts = Array.isArray(h1Texts) ? h1Texts : [];
+        const count = texts.length;
+        const found = [
+          ...texts.slice(0, 10).map((t) => `H1: ${qaItemText(t)}`),
+          ...(srOnlyText ? [`sr-only: ${qaItemText(srOnlyText)}`] : []),
+        ];
+        let result;
+        if (count === 0) {
+          result = {
+            status: "fail",
+            result: srOnlyText ? "No visible H1 found, only sr-only H1 is present" : "No H1 was found",
+            total: 0,
+            failed: 0,
+            items: [qaFinding(null, "D", srOnlyText ? `Only sr-only H1: ${srOnlyText}` : "No H1 on the page")],
+          };
+        } else if (count > 1) {
+          result = {
+            status: "fail",
+            result: `There are ${count} visible H1s (expected: 1)`,
+            total: count,
+            failed: count - 1,
+            items: texts.slice(0, 20).map((t) => qaFinding("FAIL-10", "D", `H1: ${t}`)),
+          };
+        } else if (srOnlyText && normalizeStr(texts[0]) !== normalizeStr(srOnlyText)) {
+          result = {
+            status: "fail",
+            result: "H1 and sr-only H1 are different",
+            total: 1,
+            failed: 0,
+            items: [qaFinding(null, "D", `H1: ${texts[0]} / sr-only: ${srOnlyText}`)],
+          };
+        } else {
+          result = {
+            status: "pass",
+            result: srOnlyText ? "There is only one H1 and it matches the sr-only H1" : "There is only one visible H1",
+            total: 1,
+            failed: 0,
+            items: [],
+          };
+        }
+        if (mobileMismatch) {
+          result = {
+            ...result,
+            status: "fail",
+            result: `${result.result}; mobile H1 differs from desktop H1`,
+            items: [...result.items, qaFinding(null, "M", "Mobile H1 differs from desktop H1")].slice(0, 20),
+          };
+        }
+        setQaCheck("h1", { ...result, found });
+      }
+
+      // Host without "www.", or "" when the value is not an http(s) URL.
+      function qaHost(value) {
+        try {
+          const u = new URL(String(value || ""));
+          return /^https?:$/.test(u.protocol) ? u.hostname.replace(/^www\./, "").toLowerCase() : "";
+        } catch {
+          return "";
+        }
+      }
+
+      // linkStatus: one item per link that fails, with its text, so the QA
+      // Shadow knows which link it is (D32). Not HTTP 200 → FAIL-06 (broken
+      // link). FAIL-05 (relative link) only when the absolute URL points to
+      // the dealer's own site: BUGS.md "No bug applies" to other domains,
+      // and the ABS badge also marks external, mailto: and tel: links.
+      // Capped at 20 items.
+      function recordQaLinkStatus(entries) {
+        if (!entries.length) {
+          setQaCheck("linkStatus", { status: "not_run" });
+          return;
+        }
+        const pageHost = qaHost(document.getElementById("url").value);
+        const label = (entry) => (entry.text ? ` "${qaItemText(entry.text)}"` : "");
+        const broken = entries.filter((entry) => entry.code !== 200);
+        const absolute = entries.filter(
+          (entry) => entry.isRelative === false && pageHost !== "" && qaHost(entry.url) === pageHost
+        );
+        const failing = new Set([...broken, ...absolute]);
+        const parts = [];
+        if (broken.length) parts.push(`${broken.length} not returning 200`);
+        if (absolute.length) parts.push(`${absolute.length} absolute`);
+        setQaCheck("linkStatus", {
+          status: failing.size ? "fail" : "pass",
+          result: failing.size
+            ? `${failing.size} of ${entries.length} links failed (${parts.join(", ")})`
+            : `All ${entries.length} links returned 200 and are relative`,
+          total: entries.length,
+          failed: failing.size,
+          items: [
+            ...broken.map((entry) => qaFinding("FAIL-06", "D", `${entry.code || "no response"}${label(entry)} ${entry.url}`)),
+            ...absolute.map((entry) => qaFinding("FAIL-05", "D", `Absolute URL${label(entry)} ${entry.url}`)),
+          ].slice(0, 20),
+        });
+      }
+
+      // images: missing alt → FAIL-04, missing title → FAIL-03, one item
+      // per missing attribute so each maps to one BUGS.md id.
+      function recordQaImages(images, error) {
+        if (error || !Array.isArray(images) || images.length === 0) {
+          setQaCheck("images", { status: "not_run" });
+          return;
+        }
+        const failing = images.filter((img) => !img || !img.hasAlt || !img.hasTitle);
+        const items = [];
+        for (const img of failing) {
+          const src = (img && (img.imageUrl || img.src)) || "unknown image";
+          if (!img || !img.hasAlt) items.push(qaFinding("FAIL-04", "D", `Missing alt: ${src}`));
+          if (!img || !img.hasTitle) items.push(qaFinding("FAIL-03", "D", `Missing title: ${src}`));
+        }
+        setQaCheck("images", {
+          status: failing.length ? "fail" : "pass",
+          result: failing.length
+            ? `${failing.length} of ${images.length} images missing alt or title`
+            : `All ${images.length} images have alt and title`,
+          total: images.length,
+          failed: failing.length,
+          items: items.slice(0, 20),
+        });
+      }
+
+      // The record itself: POST only when the button is pressed (D11, D12).
+      async function saveQaRecord() {
+        const taskInput = document.getElementById("save-task-id");
+        const noteInput = document.getElementById("save-qa-note");
+        const message = document.getElementById("save-qa-message");
+        const button = document.getElementById("save-qa-button");
+        const pageUrl = document.getElementById("url").value.trim();
+        const taskId = taskInput.value.trim();
+
+        function showSaveMessage(text, kind) {
+          message.textContent = text;
+          message.className = `save-qa-message${kind ? ` save-qa-message--${kind}` : ""}`;
+        }
+
+        if (!pageUrl) {
+          showSaveMessage("Enter the Target URL first: it is stored with the QA.", "error");
+          return;
+        }
+        if (!taskId) {
+          showSaveMessage("Enter the Task ID, for example D-174735.", "error");
+          return;
+        }
+
+        button.disabled = true;
+        showSaveMessage("Saving…", "");
+        try {
+          const resp = await fetch("/api/qa-records", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ taskId, pageUrl, note: noteInput.value, summary: qaRun }),
+          });
+          const body = await resp.json().catch(() => ({}));
+
+          // Same rule as the rest of the app: only "unauthenticated" sends
+          // the user back to the login screen.
+          if (resp.status === 401 && body?.error === "unauthenticated") {
+            window.location.href = "/login.html";
+            return;
+          }
+          if (resp.status === 201) {
+            showSaveMessage(`QA saved for Task ID ${body.record.taskId}.`, "ok");
+            return;
+          }
+          if (resp.status === 409) {
+            showSaveMessage(
+              body.message || `Task ID ${taskId.toUpperCase()} already exists. Nothing was saved.`,
+              "error"
+            );
+            return;
+          }
+          showSaveMessage(body.message || `Could not save the QA (HTTP ${resp.status}).`, "error");
+        } catch (error) {
+          showSaveMessage(`Could not save the QA: ${error.message}`, "error");
+        } finally {
+          button.disabled = false;
+        }
+      }
+
       // --- TEXT READING ---
 
       async function runTextReading() {
@@ -489,6 +771,8 @@
           };
           compareSummary.textContent = `${badge} — CO lines: ${counts.total}, present: ${counts.present}, missing: ${counts.missing}`;
 
+          recordTextCompareCheck("textDesktop", data);
+
           const lines = renderDetailLines(
             details,
             data.cp && data.cp.lines ? data.cp.lines : [],
@@ -500,6 +784,7 @@
           cpDiv.textContent = `Error: ${error.message}`;
           coDiv.textContent = coInput || "";
           compareSummary.textContent = "Error during comparison";
+          setQaCheck("textDesktop", { status: "not_run" });
         } finally {
           removeAbortController(ac);
         }
@@ -567,6 +852,8 @@
           };
           compareSummary.textContent = `${badge} — CO lines: ${counts.total}, present: ${counts.present}, missing: ${counts.missing}`;
 
+          recordTextCompareCheck("textMobile", data);
+
           const lines = renderDetailLines(
             details,
             data.cp && data.cp.lines ? data.cp.lines : [],
@@ -576,7 +863,10 @@
         } catch (error) {
           if (error.name === "AbortError") return;
           cpDiv.textContent = `Error: ${error.message}`;
+          coDiv.textContent = coInput || "";
           compareSummary.textContent = "Error during mobile comparison";
+          setQaCheck("textMobile", { status: "not_run" });
+
         } finally {
           removeAbortController(ac);
         }
@@ -621,6 +911,7 @@
             if (mobileH1.length) details.push(`Mobile H1: ${mobileH1.map((t) => escapeHtml(t)).join(' | ')}`);
             if (desktopSrOnly) details.push(`Desktop sr-only: ${escapeHtml(desktopSrOnly)}`);
             if (mobileSrOnly) details.push(`Mobile sr-only: ${escapeHtml(mobileSrOnly)}`);
+            recordQaH1(desktopH1, desktopSrOnly, true);
             document.getElementById("h1-summary").textContent = "🔴 Mobile H1 differs from desktop H1";
             document.getElementById("h1-summary").className = "h1-summary status-fail";
             document.getElementById("h1-details").innerHTML = details.join("<br>");
@@ -632,13 +923,14 @@
           if (!anchors.length) {
             anchorsDiv.textContent = "No visible links were found in .ddc-wrapper";
             setTodoItem("todo-link-statuses", false);
+            recordQaLinkStatus([]);
             await renderLinkCheck([], url);
             return;
           }
           anchorsDiv.innerHTML = buildAnchorsTable(anchors);
           // Request HTTP statuses (without a browser)
           try {
-            const statuses = await updateLinkStatuses(anchors.map((a) => a.url));
+            const statuses = await updateLinkStatuses(anchors.map((a) => a.url), anchors);
             const withStatus = anchors.map((a, idx) => ({
               ...a,
               status: statuses[idx] ? statuses[idx].status : 0,
@@ -652,6 +944,9 @@
         } catch (error) {
           if (error.name === "AbortError") return;
           anchorsDiv.textContent = `Error extracting links: ${error.message}`;
+          setQaCheck("h1", { status: "not_run" });
+          setQaCheck("linkStatus", { status: "not_run" });
+          setQaCheck("linksAdded", { status: "not_run" });
         } finally {
           removeAbortController(ac);
         }
@@ -677,8 +972,10 @@
           const data = await resp.json();
           if (!resp.ok) throw new Error((data && data.error) || resp.statusText);
           output.innerHTML = renderImageTable(data.images || [], url);
+          recordQaImages(data.images);
         } catch (error) {
           if (error.name === "AbortError") return;
+          setQaCheck("images", { status: "not_run" });
           output.innerHTML = renderImageTable([], url, error.message);
         } finally {
           removeAbortController(ac);
@@ -689,9 +986,9 @@
         const raw = (document.getElementById("check-links").value || "").trim();
         const container = document.getElementById("link-check-output");
         if (!container) return;
-        if (!raw) { container.innerHTML = ""; setTodoItem("todo-links-present", false); return; }
+        if (!raw) { container.innerHTML = ""; setTodoItem("todo-links-present", false); setQaCheck("linksAdded", { status: "not_run" }); return; }
         const paths = raw.split("\n").map((l) => l.trim()).filter(Boolean);
-        if (!paths.length) { container.innerHTML = ""; setTodoItem("todo-links-present", false); return; }
+        if (!paths.length) { container.innerHTML = ""; setTodoItem("todo-links-present", false); setQaCheck("linksAdded", { status: "not_run" }); return; }
 
         function resolveRequestedUrl(input, basePageUrl) {
           const rawValue = String(input || "").trim();
@@ -816,6 +1113,18 @@
 
         const found = paths.filter((p) => !!findRelativeMatch(p, entries)).length;
         setTodoItem("todo-links-present", paths.length > 0 && found === paths.length);
+
+        // linksAdded (D3): every requested link the page does not contain.
+        const missingPaths = paths.filter((p) => !findRelativeMatch(p, entries));
+        setQaCheck("linksAdded", {
+          status: missingPaths.length ? "fail" : "pass",
+          result: missingPaths.length
+            ? `${missingPaths.length} of ${paths.length} requested links NOT FOUND`
+            : `All ${paths.length} requested links IN PAGE`,
+          total: paths.length,
+          failed: missingPaths.length,
+          items: missingPaths.slice(0, 20).map((p) => qaFinding("FAIL-07", "D", `${p} — NOT FOUND`)),
+        });
         const badge = found === paths.length
           ? `<span style="color:#16a34a;font-weight:700">${found}/${paths.length} found</span>`
           : `<span style="color:#dc2626;font-weight:700">${found}/${paths.length}</span>`;
@@ -904,7 +1213,7 @@
             `;
       }
 
-      async function updateLinkStatuses(urls) {
+      async function updateLinkStatuses(urls, links = []) {
         const resp = await fetch("/api/link-reading/statuses", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -922,6 +1231,8 @@
         });
         const all200 = statuses.length > 0 && statuses.every((s) => Number(s.status) === 200);
         setTodoItem("todo-link-statuses", all200);
+
+        recordQaLinkStatus(statuses.map((s, idx) => ({ url: urls[idx], code: Number(s.status) || 0, text: links[idx] && links[idx].text, isRelative: links[idx] && links[idx].isRelative })));
         return statuses;
       }
 
@@ -949,6 +1260,8 @@
         const h1Summary = document.getElementById("h1-summary");
         const h1Details = document.getElementById("h1-details");
         const count = h1Texts.length;
+
+        recordQaH1(h1Texts, srOnlyText);
 
         if (count > 1) {
           h1Summary.textContent = `🔴 There are ${count} visible H1s (expected: 1)`;
@@ -1019,6 +1332,7 @@
           // If no anchors of either type were found
           if (!anchors.length && !misconfiguredAnchors.length) {
             anchorDiv.textContent = "No anchors were found in .ddc-wrapper";
+            setQaCheck("anchors", { status: "pass", result: "No anchors were found", total: 0, failed: 0, items: [] });
             return;
           }
 
@@ -1050,9 +1364,31 @@
           }
 
           anchorDiv.innerHTML = htmlContent;
+
+          // anchors (D3): misconfigured anchors plus anchors whose target
+          // does not exist (FAIL-08 / FAIL-09).
+          const missingTarget = anchors.filter((a) => !a.targetExists);
+          const anchorItems = [
+            ...misconfiguredAnchors.map((a) => qaFinding("FAIL-09", "D", `Misconfigured anchor: ${a.href || a.text}`)),
+            ...missingTarget.map((a) => qaFinding("FAIL-08", "D", `Target missing: ${a.href || a.text}`)),
+          ];
+          const anchorFailures = misconfiguredAnchors.length + missingTarget.length;
+          const anchorParts = [];
+          if (missingTarget.length) anchorParts.push(`${missingTarget.length} without target`);
+          if (misconfiguredAnchors.length) anchorParts.push(`${misconfiguredAnchors.length} misconfigured`);
+          setQaCheck("anchors", {
+            status: anchorFailures ? "fail" : "pass",
+            result: anchorFailures
+              ? `${anchorFailures} anchor issues (${anchorParts.join(", ")})`
+              : `All ${anchors.length} anchors point to an existing section`,
+            total: anchors.length + misconfiguredAnchors.length,
+            failed: anchorFailures,
+            items: anchorItems.slice(0, 20),
+          });
         } catch (error) {
           if (error.name === "AbortError") return;
           anchorDiv.textContent = `Error validating anchor links: ${error.message}`;
+          setQaCheck("anchors", { status: "not_run" });
         } finally {
           removeAbortController(ac);
         }
@@ -1259,6 +1595,10 @@
         };
         document.getElementById(summaryId).textContent =
           `${badge} — CO lines: ${counts.total}, present: ${counts.present}, missing: ${counts.missing}`;
+        recordTextCompareCheck(
+          summaryId === "compare-mobile-summary" ? "textMobile" : "textDesktop",
+          data
+        );
         const lines = renderDetailLines(
           details,
           data.cp && data.cp.lines ? data.cp.lines : [],
@@ -1312,6 +1652,7 @@
             url,
             data.imageError || null,
           );
+          recordQaImages(data.images, data.imageError);
 
           // Desktop CP and CO
           document.getElementById("cp-output").textContent = (desktop.cp && desktop.cp.text) || "";
@@ -1354,6 +1695,7 @@
             if (mobileH1.length) details.push(`Mobile H1: ${mobileH1.map((t) => escapeHtml(t)).join(' | ')}`);
             if (desktopSrOnly) details.push(`Desktop sr-only: ${escapeHtml(desktopSrOnly)}`);
             if (mobileSrOnly) details.push(`Mobile sr-only: ${escapeHtml(mobileSrOnly)}`);
+            recordQaH1(desktopH1, desktopSrOnly, true);
             document.getElementById("h1-summary").textContent = "🔴 Mobile H1 differs from desktop H1";
             document.getElementById("h1-summary").className = "h1-summary status-fail";
             document.getElementById("h1-details").innerHTML = details.join("<br>");
@@ -1366,17 +1708,22 @@
           if (!anchors.length) {
             document.getElementById("anchors-output").textContent = "No visible links were found in .ddc-wrapper";
             setTodoItem("todo-link-statuses", false);
+            recordQaLinkStatus([]);
             await renderLinkCheck([], url);
           } else {
             document.getElementById("anchors-output").innerHTML = buildAnchorsTableWithStatus(anchors);
             const all200 = anchors.length > 0 && anchors.every((a) => Number(a.status) === 200);
             setTodoItem("todo-link-statuses", all200);
+            recordQaLinkStatus(anchors.map((a) => ({ url: a.url, code: Number(a.status) || 0, text: a.text, isRelative: a.isRelative })));
             await renderLinkCheck(anchors, url);
           }
         } catch (error) {
           if (error.name === "AbortError") return;
           document.getElementById("cp-output").textContent = `Error: ${error.message}`;
           document.getElementById("compare-summary").textContent = "Error during full analysis";
+          for (const name of ["textDesktop", "textMobile", "h1", "linkStatus", "linksAdded", "images"]) {
+            setQaCheck(name, { status: "not_run" });
+          }
         } finally {
           removeAbortController(ac);
         }
@@ -1442,6 +1789,15 @@
 
         // Clear the QA checklist
         resetTodoList();
+
+        // Reset the collected summary and the save form (PLAN F2): after a
+        // reset there is no run to save.
+        qaRun = createQaRun();
+        document.getElementById("save-task-id").value = "";
+        document.getElementById("save-qa-note").value = "";
+        const saveMessage = document.getElementById("save-qa-message");
+        saveMessage.textContent = "";
+        saveMessage.className = "save-qa-message";
 
         // Close the QA Todo panel
         const todoPanel = document.getElementById("todo-panel");

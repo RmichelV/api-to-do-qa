@@ -34,8 +34,22 @@ Cada fase se puede probar sola y cierra con su commit. Las reglas vienen solo de
 - **D6. Quién es el QA Shadow:** "el qa shadow me lo pasa una persona y yo asigno en la herramienta". La Admin asigna el rol; el campo "QA Shadow" del cierre es el usuario logueado con ese rol (se toma de la sesión, no se elige a mano).
 - **D21. Status final y dispositivo:** "el shadow elige en la parte manual en que dispositivo es el bug y si el estado final seria algo asi Critical si solo es 1 y si son mas de 1 como critical (1) , Failed (2) , opportunity (1)". Con un solo bug, el status es su severidad (`Critical`). Con más de uno, el conteo por severidad: `Critical (1), Failed (2), Opportunity (1)`. Sin bugs: `Passed`. En cada bug manual que marca como Bug, el Shadow elige el dispositivo (`M`, `D` o `M/D`).
 - **D19. Checklist manual = bugs que la herramienta no revisa** (de `BUGS.md`, ver F0).
+
+Respuestas de la usuaria del 2026-11-10 a las dudas pendientes:
+
+- **D22. Task ID:** una letra, un guion y números, como `D-147856` (una sola letra). Se guarda en mayúsculas.
+- **D23. Dispositivo de los bugs de la herramienta:** "si no dice mobile es desktop y ya esto lo revisa el shadow". `M` cuando el hallazgo viene del análisis mobile; `D` en todos los demás.
+- **D24. Checklist completo para cerrar:** "hay que completar todos aunque sea con N/A pero todos tienen que estar cerrados para continuar".
+- **D25. QA sin bugs:** "si no tiene bug es passed sin mas comments". El status es `Passed`, no se genera comentario y el campo de comentario queda opcional.
+- **D26. N/A sobre hallazgos de la herramienta:** el Shadow puede marcar como N/A un hallazgo automático con un botón de editar; es opcional, no obligatorio.
+- **D27. Explicación del N/A opcional:** "si quiere puede explciar no quiero hacerlo muy pesado".
+- **D28. FAIL-09 lo revisa solo la herramienta** (no va al checklist manual).
+- **D29. Los bugs "To decide" de `BUGS.md` son manuales** (columna Check type actualizada).
+- **D30. FAIL-04 es el atributo alt** y lo revisa la herramienta (texto corregido en `BUGS.md`).
+- **D31. CSV:** el del Admin y el del Shadow tienen **las mismas columnas**; la lista la pasa la usuaria (Dudas 1).
+- **D32. Resumen legible para el Shadow** (2026-11-10, sobre F2): "TIENES QUE PONER EL RESULTADO QUE DA CADA SECCION POR LO MENOS EL RESUMEN Y EN LOS LINKS TIENE QUE MOSTRAR LOS FAILED SI NO EL SHADOW NO SABRA CUAL ES EL PROBLEMA SI GUARDAMOS INFO TAN AMBIGUA OBVIO NO TIENE QUE SER MUY EXPLICITO". Cada check guarda la misma línea de resultado que muestra su panel y el detalle de lo que falló (en links, cada link que falló con su código), cada hallazgo con su ID de bug y dispositivo.
 - **D20. Comentario: una línea por bug** con el formato `Dispositivo / Tipo / Severidad / Descripción`. Ejemplos literales de la usuaria: "M/D / Styling / Failed / Croppe Images" y "M/D / Instructions / Critical / The instructions was not followed as requested". `M/D` = mobile y desktop. Si hay más de un bug, se registra cada uno. El QA Shadow puede editar el comentario. El tipo de cada bug está en la columna **Type** de `BUGS.md` (agregada por Claude Code con criterio propio, a pedido de la usuaria): Styling, Images, Links, Anchors, H1, Inventory, SEO, Forms, Copy, Instructions.
-- **D7. Tabla de criterios (cargada en `BUGS.md`; falta la regla de combinación y el formato del comentario, Dudas 4 y 5):** los bugs manuales junto con los automáticos dan el estado final (Passed, Opportunity, Failed, Critical). La tabla de criterios se usa al cerrar el QA para categorizar el estado **y para generar el comentario**.
+- **D7. Tabla de criterios (cargada en `BUGS.md`; regla del status en D21 y formato del comentario en D20):** los bugs manuales junto con los automáticos dan el estado final (Passed, Opportunity, Failed, Critical). La tabla de criterios se usa al cerrar el QA para categorizar el estado **y para generar el comentario**.
 - `SPEC.md` actualizado el 2026-11-07 con D1, D2, D4, D5, D6 y D7.
 
 ---
@@ -49,8 +63,8 @@ Cada fase se puede probar sola y cierra con su commit. Las reglas vienen solo de
 **Tareas:**
 - [x] Listar cada bug y marcarlo como "lo detecta la herramienta" o "manual" (paso 1): columnas "Tool today" y "Check type".
 - [x] Clasificar cada bug como Opportunity, Failed o Critical (paso 2).
-- [ ] Definir la regla que combina los bugs encontrados en un status final (Dudas 4).
-- [x] Definir el formato del comentario generado (D20); tipos en `BUGS.md`; falta el dispositivo (Dudas 5).
+- [x] Definir la regla que combina los bugs encontrados en un status final (D21, D25).
+- [x] Definir el formato del comentario generado (D20); tipos en `BUGS.md`; dispositivo en D21 y D23.
 - [x] Derivar la lista de ítems del checklist manual: los bugs que la herramienta **no** revisa (ver abajo).
 
 **Checklist manual del QA Shadow** (D19: "los bugs que no agarra la herramienta son los que tenes que poner el check list manual"). Cada ítem: Passed / Bug / N/A.
@@ -152,21 +166,22 @@ Consecuencia para F1: el resumen (D3) guarda cada hallazgo de la herramienta **c
 **Archivos:**
 - `src/services/qaRecordService.js`, `src/controllers/qaRecordController.js`, `src/routes/qaRecordRoutes.js`
 - `src/app.js` (montar `/api/qa-records` después de `requireAuth`)
-- `public/index.html` (botón y campo Task ID)
-- `test/qaRecordsApi.test.js`, `test/routeInventory.test.js`
+- `public/index.html` (botón y campo Task ID), `public/styles.css` (estilo de la tarjeta Guardar QA)
+- `test/qaRecordsApi.test.js`, `test/routeInventory.test.js` (no hizo falta editarlo: recorre el router solo y ya exige 401 en la ruta nueva)
 
 **Tareas:**
-- [ ] `POST /api/qa-records` con Task ID, nota opcional para el QA Shadow (D12) y el resumen de la corrida; el owner es `req.user.id`.
-- [ ] Validar el formato del Task ID (D11): letra, guion y números, como `D-174735`. *Supuesto a confirmar:* se acepta una o más letras, se guarda en mayúsculas (`d-174735` = `D-174735`) y los números pueden crecer de largo.
-- [ ] Si el Task ID ya existe → **409**, sin tocar el registro existente ("no se puede guardar otro encima").
-- [ ] Se acepta aunque haya bugs.
-- [ ] Botón **"Guardar QA"** en `index.html`: se guarda solo al presionarlo, nunca al correr la herramienta.
-- [ ] Mensaje claro en pantalla cuando el Task ID ya existe.
-- [ ] Agregar la ruta al inventario de rutas protegidas.
+- [x] `POST /api/qa-records` con Task ID, nota opcional para el QA Shadow (D12) y el resumen de la corrida; el owner es `req.user.id`.
+- [x] Validar el formato del Task ID (D22): **una** letra, guion y números, como `D-147856`; se guarda en mayúsculas (`d-147856` = `D-147856`) y los números pueden crecer de largo. *(Corregido en la revisión: la primera versión aceptaba varias letras.)*
+- [x] Resumen legible (D32, D23): cada check guarda `result` (la línea que muestra su panel) y en `items` cada hallazgo con `bugId`, `device` y texto; en links, cada link que falla con su código y los absolutos (FAIL-05). *(Agregado en la revisión.)*
+- [x] Si el Task ID ya existe → **409**, sin tocar el registro existente ("no se puede guardar otro encima").
+- [x] Se acepta aunque haya bugs.
+- [x] Botón **"Guardar QA"** en `index.html`: se guarda solo al presionarlo, nunca al correr la herramienta.
+- [x] Mensaje claro en pantalla cuando el Task ID ya existe.
+- [x] Agregar la ruta al inventario de rutas protegidas.
 
 **Criterios de aceptación:**
 - Sin sesión → 401 `unauthenticated`.
-- Un `qa_shadow` también puede guardar su QA (D5).
+- Un `qa_shadow` también puede guardar su QA (D5). *Cumplido por construcción:* la ruta no tiene guardia de rol, solo sesión. Sin el rol `qa_shadow` (F4) todavía no hay con quién probarlo.
 - Primer guardado → 201; segundo con el mismo Task ID → 409 y el primero queda igual.
 - Correr la herramienta no crea registros.
 
@@ -174,6 +189,21 @@ Consecuencia para F1: el resumen (D3) guarda cada hallazgo de la herramienta **c
 1. Entrar como `qa_engineer`, correr la herramienta sobre una URL, escribir un Task ID y presionar "Guardar QA" → mensaje de éxito.
 2. Presionar otra vez con el mismo Task ID → mensaje de que ya existe.
 3. Correr la herramienta de nuevo sin presionar el botón → en la base no aparece un registro nuevo.
+
+> Hecho el 2026-11-10. Decisiones de implementación:
+> - **El resumen se arma en el navegador** a partir de lo que cada panel ya muestra (`qaRun` en `index.html`), con los límites de D3 (20 ítems por check, 200 caracteres por ítem, 16 KB por registro validados en el servidor). Checks nunca corridos quedan `not_run`; si un run falla, sus checks vuelven a `not_run` en vez de conservar un resultado viejo.
+> - **`pageUrl` es obligatorio** (la columna es `NOT NULL`) y sale del campo Target URL. La nota opcional se guarda como `NULL` cuando está vacía y se limita a 2000 caracteres.
+> - **`task_id` se guarda en mayúsculas** y se rechaza con 400 todo lo que no sea una letra, guion y números (D22).
+> - **F2 no escribe `qa_record_bugs` ni los conteos D21**: siguen en 0 y vacíos hasta que F5 cierre el registro. Los llamadores de `insertBugs` llegan en F5 (`source: 'tool'` para los hallazgos automáticos) y en el checklist manual.
+> - `test/routeInventory.test.js` no se tocó: detecta la ruta nueva solo y exige 401 sin sesión.
+>
+> Revisión de Claude Code (2026-11-10), corregido en esta fase:
+> - **Task ID con una sola letra** (D22): `DA-174735` ahora responde 400 (RED → GREEN en `qaRecordsApi.test.js`).
+> - **Resumen legible** (D32): cada check guarda `result` con la misma línea que muestra su panel; H1 guarda además `found` (los H1 y el sr-only que vio). Cada hallazgo es `{ bugId, device, text }`: texto CRIT-01, doble H1 FAIL-10, link sin 200 FAIL-06 (con su texto, código y URL), link absoluto FAIL-05, link pedido que falta FAIL-07, alt FAIL-04, title FAIL-03, anchor sin destino FAIL-08, anchor mal configurado FAIL-09. Los hallazgos de H1 sin un ID único de `BUGS.md` (sin H1, H1 distinto del sr-only, H1 mobile distinto) van con `bugId: null` para que el Shadow los clasifique.
+> - **FAIL-05 solo para URLs absolutas del sitio del dealer**: el badge ABS de la tabla también marca links externos, `mailto:` y `tel:`, que según `BUGS.md` no son bug.
+> - **Resumen compacto** (pedido de la usuaria, 2026-11-10): texto desktop y mobile guardan **solo la línea de resumen** del panel (`INCOMPLETE — CO lines: 18, present: 15, missing: 3`) como un único hallazgo CRIT-01, sin las líneas faltantes; links pedidos guardan solo los que faltan (`/new-inventory/index.htm — NOT FOUND`, FAIL-07). Cada hallazgo lleva también `type` y `severity` de la tabla Summary de `BUGS.md` (`{ bugId, type, severity, device, text }`).
+> - **Dispositivo** (D23): `M` en los hallazgos del análisis mobile (texto mobile, H1 mobile distinto); `D` en el resto.
+> - El servidor valida `result` (texto de hasta 200 caracteres) y `found` (mismos límites que `items`). `npm test`: 141/142; el único fallo es el `EPIPE` intermitente de `create-admin.test.js`, que aparte pasa 4/4.
 
 ---
 
@@ -262,6 +292,7 @@ Consecuencia para F1: el resumen (D3) guarda cada hallazgo de la herramienta **c
 - [ ] Formulario con QA Comment, QA Status y checklist manual (Passed / Bug / N/A por ítem). Sin QA Link (D2).
 - [ ] El campo "QA Shadow" se guarda con el usuario de la sesión (D6); no se elige a mano.
 - [ ] Al cerrar, calcular el estado final y generar el comentario con la tabla de criterios de F0 (D7), a partir de los hallazgos automáticos (resumen D3) y del checklist manual.
+- [ ] Tabla de bugs en un solo lugar: el servidor tiene el catálogo de `BUGS.md` (ID → tipo y severidad) y toma el tipo y la severidad de ahí al cerrar. Hoy `QA_BUG_INFO` de `public/index.html` (F2) los copia para etiquetar los hallazgos; F5 deja de depender de esa copia.
 - [ ] El Shadow puede editar el status y el comentario generados antes de confirmar el cierre (D8).
 - [ ] Botón **"Cerrar QA"**: después del cierre no se puede editar nada (409 en cualquier cambio).
 - [ ] Revisar o cerrar un QA propio → 403 (D5).
@@ -358,9 +389,9 @@ Consecuencia para F1: el resumen (D3) guarda cada hallazgo de la herramienta **c
 
 | Fase | Estado | Commit |
 |---|---|---|
-| F0 Documento de bugs y tabla de criterios | `BUGS.md` cargado; checklist manual definido; **falta la regla del status y el formato del comentario** (Dudas 4 y 5) | — |
+| F0 Documento de bugs y tabla de criterios | completa: `BUGS.md` con tipos, checklist manual (D19, D28, D29), status (D21, D25) y comentario (D20) | — |
 | F1 Tabla | completada 2026-11-07: migraciones 004 (qa_records) y 005 (qa_record_bugs), repository, 7 tests en verde; `npm run migrate` es no-op al repetir. Corrección 2026-11-07: 005 agregó `source ENUM('tool','manual')` (D9), bases locales sincronizadas. F4 pasa a la migración 006 | — (sin commit, a pedido) |
-| F2 Guardar QA | pendiente | — |
+| F2 Guardar QA | completada 2026-11-10 y corregida en la revisión (D22 una letra, D32 resumen legible con `result`, `found` y hallazgos `{ bugId, device, text }`); 10 tests en `qaRecordsApi.test.js`; suite 141/142 (fallo intermitente `EPIPE` de `create-admin`, ajeno a F2) | — (sin commit) |
 | F3 Vista Engineer | pendiente | — |
 | F4 Rol QA Shadow | pendiente; decidido (D1, D6) | — |
 | F5 Vista Shadow y cierre | pendiente; depende de F0 y F4 | — |
@@ -368,19 +399,10 @@ Consecuencia para F1: el resumen (D3) guarda cada hallazgo de la herramienta **c
 | F7 Vista Admin y CSV | pendiente; Duda 1 | — |
 | F8 Borrado mensual | pendiente; decidido (D4) | — |
 
-Orden sugerido: F1 → F2 → F3 → F4 se pueden hacer ya. F5 espera F0.
+Orden sugerido: F1 y F2 completadas; se pueden hacer ya F3 → F4. F5 espera F0.
 
 ## Dudas
 
-Resueltas el 2026-11-07: D1 a D18 (ver Decisiones) y actualización de `SPEC.md`.
+Resueltas: D1 a D18 (2026-11-07) y D22 a D31 (2026-11-10). Ver Decisiones.
 
-1. **Columnas de los CSV:** ¿qué columnas lleva el del Admin y cuáles el del Shadow? (Propuesta para revisar: Task ID, owner, fecha de guardado, URL, QA Shadow, fecha de cierre, QA Status, QA Comment y conteo de bugs automáticos y manuales.)
-2. **Checklist manual:** ¿hay que completar todos los ítems para poder cerrar, o se puede cerrar con ítems vacíos?
-3. **Task ID (supuesto de D11):** ¿puede tener más de una letra (`DA-1`)? ¿`d-174735` y `D-174735` son el mismo?
-4. **Dispositivo de los bugs automáticos:** el Shadow lo elige en los manuales (D21). Para los de la herramienta, *supuesto a confirmar:* texto según dónde falló (`D`, `M` o `M/D`), y el resto (links, imágenes, anchors, H1) como `M/D`; el Shadow lo puede corregir editando el comentario.
-5. **Comentario de un QA sin bugs:** ¿qué dice? (Propuesta: `Passed`.)
-6. **Falsos positivos de la herramienta:** BUGS.md tiene excepciones que la herramienta no distingue (por ejemplo, H1 repetidos con el mismo texto, H1 heredados de widgets de Composer, imágenes de fondo sin title). ¿El Shadow puede marcar como N/A un hallazgo automático para que no cuente en el status?
-7. **N/A con explicación:** BUGS.md dice que un Failed o Critical fuera del alcance "can be marked as N/A with a brief explanation". ¿El N/A del checklist pide un texto obligatorio?
-8. **FAIL-09 (Tool: Partial):** BUGS.md dice "To confirm if this covers the rule". ¿Lo dejamos solo en la herramienta o también como ítem del checklist manual?
-9. **FAIL-04:** BUGS.md dice "title" en la sección de alt y tiene una nota para confirmarlo. ¿Es el atributo **alt**?
-10. **"Check type: To decide":** varios bugs siguen con "_To decide_" en BUGS.md. ¿Confirmás que todos son manuales, como quedaron en el checklist?
+1. **Columnas de los CSV** (D31): la usuaria pasa la lista; los dos CSV usan las mismas columnas.

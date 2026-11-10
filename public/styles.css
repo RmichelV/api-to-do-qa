@@ -643,6 +643,61 @@ textarea {
   cursor: pointer;
 }
 
+/* ── Save QA (PLAN F2) ── */
+.save-qa__header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.save-qa__header h3 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.save-qa__header span {
+  font-size: 0.78rem;
+  color: #6b7280;
+}
+
+.save-qa__footer {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.btn-save-qa {
+  padding: 0.7rem 1.4rem;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.92rem;
+  font-weight: 700;
+  font-family: inherit;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
+  transition: filter 0.15s, transform 0.1s;
+}
+
+.btn-save-qa:hover:not(:disabled) { filter: brightness(1.08); }
+.btn-save-qa:active:not(:disabled) { transform: scale(0.99); }
+.btn-save-qa:disabled { opacity: 0.6; cursor: wait; }
+
+.save-qa-message {
+  margin: 0;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.save-qa-message--ok    { color: #16a34a; }
+.save-qa-message--error { color: #dc2626; }
+
 .btn-run-all {
   flex: 1;
   padding: 0.85rem;
