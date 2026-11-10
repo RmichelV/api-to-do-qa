@@ -152,3 +152,6 @@ temp/
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# Local Claude Code instructions (not shared)
+CLAUDE.md
