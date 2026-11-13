@@ -115,6 +115,23 @@ export async function findByTaskId(pool, taskId) {
   return { ...mapRecord(row), bugs: bugRows };
 }
 
+// Lookup by primary key (F3 PATCH): the record without its bugs, or null
+// when the id does not exist. Authorization (owner, closed) is the service's
+// job — this layer only talks SQL.
+export async function findById(pool, id) {
+  const [rows] = await pool.execute(`SELECT ${RECORD_COLUMNS} FROM qa_records WHERE id = ?`, [id]);
+  const row = rows[0];
+  return row === undefined ? null : mapRecord(row);
+}
+
+// Task ID correction (F3, spec step 4): only the Task ID and the timestamp
+// move. The UNIQUE key on task_id makes a duplicate fail with ER_DUP_ENTRY,
+// which the service turns into 409.
+export async function updateTaskId(pool, id, taskId, now = new Date()) {
+  await pool.execute('UPDATE qa_records SET task_id = ?, updated_at = ? WHERE id = ?', [taskId, now, id]);
+  return findById(pool, id);
+}
+
 // Listing (F3 "Mis QA", F7): every filter is optional and applied as given —
 // the month boundaries in Bolivia time (D13) are computed by the service.
 // `from` is inclusive and `to` exclusive ([from, to)), newest record first.

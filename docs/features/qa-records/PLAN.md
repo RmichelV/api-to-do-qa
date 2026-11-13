@@ -47,6 +47,7 @@ Respuestas de la usuaria del 2026-11-10 a las dudas pendientes:
 - **D29. Los bugs "To decide" de `BUGS.md` son manuales** (columna Check type actualizada).
 - **D30. FAIL-04 es el atributo alt** y lo revisa la herramienta (texto corregido en `BUGS.md`).
 - **D31. CSV:** el del Admin y el del Shadow tienen **las mismas columnas**; la lista la pasa la usuaria (Dudas 1).
+- **D33. El dueño ve su resumen desde "Mis QA"** (2026-11-12): con un clic en "Ver", también en QA pendientes. La revisión del Shadow sigue visible solo al cerrar (D10, F6).
 - **D32. Resumen legible para el Shadow** (2026-11-10, sobre F2): "TIENES QUE PONER EL RESULTADO QUE DA CADA SECCION POR LO MENOS EL RESUMEN Y EN LOS LINKS TIENE QUE MOSTRAR LOS FAILED SI NO EL SHADOW NO SABRA CUAL ES EL PROBLEMA SI GUARDAMOS INFO TAN AMBIGUA OBVIO NO TIENE QUE SER MUY EXPLICITO". Cada check guarda la misma línea de resultado que muestra su panel y el detalle de lo que falló (en links, cada link que falló con su código), cada hallazgo con su ID de bug y dispositivo.
 - **D20. Comentario: una línea por bug** con el formato `Dispositivo / Tipo / Severidad / Descripción`. Ejemplos literales de la usuaria: "M/D / Styling / Failed / Croppe Images" y "M/D / Instructions / Critical / The instructions was not followed as requested". `M/D` = mobile y desktop. Si hay más de un bug, se registra cada uno. El QA Shadow puede editar el comentario. El tipo de cada bug está en la columna **Type** de `BUGS.md` (agregada por Claude Code con criterio propio, a pedido de la usuaria): Styling, Images, Links, Anchors, H1, Inventory, SEO, Forms, Copy, Instructions.
 - **D7. Tabla de criterios (cargada en `BUGS.md`; regla del status en D21 y formato del comentario en D20):** los bugs manuales junto con los automáticos dan el estado final (Passed, Opportunity, Failed, Critical). La tabla de criterios se usa al cerrar el QA para categorizar el estado **y para generar el comentario**.
@@ -217,13 +218,14 @@ Consecuencia para F1: el resumen (D3) guarda cada hallazgo de la herramienta **c
 - `test/qaRecordsApi.test.js`
 
 **Tareas:**
-- [ ] `GET /api/qa-records/mine`: solo los registros cuyo owner es el usuario, del día 1 al último día del mes en curso **en hora de Bolivia** (D13), por fecha de guardado.
-- [ ] El Engineer solo puede **ver** su QA y **editar el Task ID**; la nota para el Shadow y el resumen no se editan (D12).
-- [ ] `PATCH /api/qa-records/:id` para cambiar el Task ID, solo si es del usuario.
-- [ ] Task ID nuevo ya existente → **409**, sin cambios.
-- [ ] Registro cerrado → **409**, sin cambios.
-- [ ] Pantalla con la lista y la edición del Task ID.
-- [ ] "Mis QA" funciona igual para `qa_engineer` y `qa_shadow` (D5).
+- [x] `GET /api/qa-records/mine`: solo los registros cuyo owner es el usuario, del día 1 al último día del mes en curso **en hora de Bolivia** (D13), por fecha de guardado.
+- [x] El Engineer solo puede **ver** su QA y **editar el Task ID**; la nota para el Shadow y el resumen no se editan (D12).
+- [x] `PATCH /api/qa-records/:id` para cambiar el Task ID, solo si es del usuario.
+- [x] Task ID nuevo ya existente → **409**, sin cambios.
+- [x] Registro cerrado → **409**, sin cambios.
+- [x] Pantalla con la lista y la edición del Task ID.
+- [x] "Mis QA" funciona igual para `qa_engineer` y `qa_shadow` (D5).
+- [x] Botón **"Ver"** en cada fila (D33): muestra el resumen de la herramienta por sección (`result` y hallazgos `bugId · type · severity · device · text`) y la nota para el Shadow. Sin la revisión del Shadow (D10) ni PDF (F6).
 
 **Criterios de aceptación:**
 - Un usuario nunca ve ni edita registros de otro (403 o 404).
@@ -236,6 +238,17 @@ Consecuencia para F1: el resumen (D3) guarda cada hallazgo de la herramienta **c
 2. Entrar con el primero a "Mis QA": solo aparece el suyo.
 3. Editar el Task ID a uno libre → se actualiza. Editarlo al Task ID del otro usuario → bloqueado.
 4. Después de F5: cerrar el QA como Shadow y comprobar que ya no se puede editar.
+
+> Hecho el 2026-11-12. Decisiones de implementación:
+> - **El mes de Bolivia se calcula en el servicio** (`boliviaMonthRange`, exportada): `now - 4h` y se leen los campos UTC → ventana `[día 1 04:00 UTC, día 1 del mes siguiente 04:00 UTC)`. Se pasa como `Date` al repository (el pool usa `timezone: 'Z'`), así el límite es exacto aunque el servidor no esté en UTC.
+> - **Dueño desconocido o registro ajeno = 404 `not_found`** (la aceptación permite 403 o 404): no se filtra si el id existe.
+> - **`PATCH` acepta solo `taskId`**; cualquier otro campo (note, summary…) → 400, así D12 queda garantizado en el servidor. Mismo `taskId` que el actual → **200 sin tocar nada** (no es un 409 contra sí mismo).
+> - **Códigos:** `task_id_exists` (409 duplicado), `record_closed` (409 cerrado), `validation_error` (400). Los dos 409 se verifican en el servidor y dejan la fila igual.
+> - **`closedAt` entró a `toQaRecordShape`** (lista y POST) para que la pantalla pinte Open/Closed y oculte el editor; sigue sin exponer checklist/status/comment, que llegan en F6.
+> - **`qa_shadow` en "Mis QA" queda cumplido por construcción:** las rutas no tienen guardia de rol, solo sesión (mismo criterio que F2). El rol `qa_shadow` recién existe en F4, así que todavía no hay con quién probarlo.
+> - **Pantalla:** `public/my-qa.html` + `my-qa.js` reutilizan las clases `admin-*`; link **"Mis QA"** en la barra de `index.html`. En `styles.css`: `input[type="text"]` suma los estilos de `admin-card`, y clases nuevas `.admin-badge--closed` y `.myqa-task-id`.
+> - **Tests:** 8 nuevos en `test/qaRecordsApi.test.js` (18 en total): sesión, mes de Bolivia con los dos bordes (dentro del día 1 a las 04:00 UTC y fuera un milisegundo antes), edición del owner, 400 de formato y de campo desconocido, 404 ajeno, 409 duplicado, 409 cerrado y la pantalla estática. RED → GREEN. **Suite: 150/150.**
+> - **Corrección en la revisión (Claude Code):** `pageUrl` solo acepta URLs `http(s)` (400 si no), porque se muestra como link en "Mis QA" y luego en las vistas del Shadow y del Admin: una URL `javascript:` sería XSS. `my-qa.js` además arma el link solo si es `http(s)`.
 
 ---
 
@@ -392,14 +405,14 @@ Consecuencia para F1: el resumen (D3) guarda cada hallazgo de la herramienta **c
 | F0 Documento de bugs y tabla de criterios | completa: `BUGS.md` con tipos, checklist manual (D19, D28, D29), status (D21, D25) y comentario (D20) | — |
 | F1 Tabla | completada 2026-11-07: migraciones 004 (qa_records) y 005 (qa_record_bugs), repository, 7 tests en verde; `npm run migrate` es no-op al repetir. Corrección 2026-11-07: 005 agregó `source ENUM('tool','manual')` (D9), bases locales sincronizadas. F4 pasa a la migración 006 | — (sin commit, a pedido) |
 | F2 Guardar QA | completada 2026-11-10 y corregida en la revisión (D22 una letra, D32 resumen legible con `result`, `found` y hallazgos `{ bugId, device, text }`); 10 tests en `qaRecordsApi.test.js`; suite 141/142 (fallo intermitente `EPIPE` de `create-admin`, ajeno a F2) | — (sin commit) |
-| F3 Vista Engineer | pendiente | — |
+| F3 Vista Engineer | completada 2026-11-12: `GET /mine` (mes de Bolivia D13), `PATCH /:id` (solo owner, solo taskId), 404 ajeno, 409 duplicado y 409 cerrado, pantalla `my-qa.html`/`my-qa.js` con link "Mis QA" en `index.html`; 18 tests en `qaRecordsApi.test.js`, suite 150/150 | — (sin commit) |
 | F4 Rol QA Shadow | pendiente; decidido (D1, D6) | — |
 | F5 Vista Shadow y cierre | pendiente; depende de F0 y F4 | — |
 | F6 Resultado y PDF para el Engineer | pendiente; decidido (D2) | — |
 | F7 Vista Admin y CSV | pendiente; Duda 1 | — |
 | F8 Borrado mensual | pendiente; decidido (D4) | — |
 
-Orden sugerido: F1 y F2 completadas; se pueden hacer ya F3 → F4. F5 espera F0.
+Orden sugerido: F1, F2 y F3 completadas; sigue F4 → F5 (F5 espera F0 y F4).
 
 ## Dudas
 

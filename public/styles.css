@@ -264,6 +264,7 @@ body.auth-body {
    change-password screens keep their current look. */
 .admin-card input[type="email"],
 .admin-card input[type="password"],
+.admin-card input[type="text"],
 .admin-card select {
   width: 100%;
   padding: 0.6rem 0.8rem;
@@ -279,6 +280,7 @@ body.auth-body {
 
 .admin-card input[type="email"]:focus,
 .admin-card input[type="password"]:focus,
+.admin-card input[type="text"]:focus,
 .admin-card select:focus {
   border-color: #2563eb;
   background: #fff;
@@ -327,6 +329,34 @@ body.auth-body {
 
 .admin-badge--on  { background: #dcfce7; color: #166534; }
 .admin-badge--off { background: #fee2e2; color: #991b1b; }
+/* F3 "Mis QA": a QA closed by the QA Shadow is no longer editable. */
+.admin-badge--closed { background: #e5e7eb; color: #374151; }
+
+.myqa-task-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
+
+/* F3 D33: read-only view of a saved QA (summary per section + the note). */
+#mq-view-dialog { width: min(640px, calc(100vw - 2rem)); }
+.myqa-view__block + .myqa-view__block { margin-top: 1.1rem; }
+.myqa-view__note { white-space: pre-wrap; overflow-wrap: anywhere; }
+.myqa-section {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fafbfc;
+  padding: 0.6rem 0.75rem;
+  margin-top: 0.6rem;
+}
+.myqa-section:first-child { margin-top: 0; }
+.myqa-section h4 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  margin: 0 0 0.35rem;
+}
+.myqa-section__name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; }
+.myqa-section__result { font-size: 0.8rem; color: #374151; margin: 0; }
+.myqa-findings { margin: 0.4rem 0 0; padding-left: 1.1rem; font-size: 0.78rem; color: #111827; }
+.myqa-findings li { margin-bottom: 0.15rem; overflow-wrap: anywhere; }
 
 .admin-row { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
 .admin-row select { max-width: 9.5rem; }

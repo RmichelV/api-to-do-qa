@@ -1,5 +1,7 @@
-// Save a QA record (PLAN F2 / SPEC step 3). Services never read `req`
-// (§4.5): the controller passes the session user id explicitly.
+// Save a QA record (PLAN F2 / SPEC step 3) and manage it afterwards (PLAN
+// F3 / SPEC step 4: the owner's month list and the Task ID correction).
+// Services never read `req` (§4.5): the controller passes the session user
+// id explicitly.
 //
 // The rule of this phase is "one record per Task ID": a second save with the
 // same Task ID answers 409 and the existing record is untouched ("no se
@@ -43,6 +45,22 @@ function requireNonEmptyString(value, field, maxLength) {
     throw new AppError(400, 'validation_error', `${field} must be at most ${maxLength} characters.`);
   }
   return trimmed;
+}
+
+// The page URL is rendered as a link in every QA view: only absolute
+// http(s) URLs are accepted, so javascript:/data: URLs never get stored.
+function assertPageUrl(value) {
+  const pageUrl = requireNonEmptyString(value, 'pageUrl', MAX_PAGE_URL_LENGTH);
+  let protocol;
+  try {
+    protocol = new URL(pageUrl).protocol;
+  } catch {
+    protocol = null;
+  }
+  if (protocol !== 'http:' && protocol !== 'https:') {
+    throw new AppError(400, 'validation_error', 'pageUrl must be an http or https URL.');
+  }
+  return pageUrl;
 }
 
 // D22: one letter, dash, digits; stored uppercase.
@@ -218,6 +236,7 @@ function assertSummary(value) {
 
 // Public shape: only what saving produces. Review fields (checklist, status,
 // comment) are added by F5/F6 and must not leak before the record is closed.
+// `closedAt` is what F3 uses to know whether the Task ID is still editable.
 export function toQaRecordShape(record) {
   return {
     id: record.id,
@@ -226,8 +245,24 @@ export function toQaRecordShape(record) {
     pageUrl: record.page_url,
     note: record.note_for_shadow,
     summary: record.summary,
+    closedAt: record.closed_at,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
+  };
+}
+
+// D13: the month is cut in Bolivia time — America/La_Paz is UTC-4 with no
+// daylight saving, so the local month runs from 04:00 UTC on day 1 to 04:00
+// UTC on day 1 of the next month. Shifting "now" by -4h and reading the UTC
+// fields gives the local calendar date without a timezone library.
+export function boliviaMonthRange(now = new Date()) {
+  const BOLIVIA_OFFSET_MS = -4 * 60 * 60 * 1000;
+  const local = new Date(now.getTime() + BOLIVIA_OFFSET_MS);
+  const year = local.getUTCFullYear();
+  const month = local.getUTCMonth();
+  return {
+    from: new Date(Date.UTC(year, month, 1, 4)),
+    to: new Date(Date.UTC(year, month + 1, 1, 4)),
   };
 }
 
@@ -241,7 +276,7 @@ export function createQaRecordService({ pool }) {
         throw new AppError(401, 'unauthenticated', 'Sign in to save a QA.');
       }
       const taskId = assertTaskId(body?.taskId);
-      const pageUrl = requireNonEmptyString(body?.pageUrl, 'pageUrl', MAX_PAGE_URL_LENGTH);
+      const pageUrl = assertPageUrl(body?.pageUrl);
       const note = assertNote(body?.note);
       const summary = assertSummary(body?.summary);
 
@@ -270,6 +305,71 @@ export function createQaRecordService({ pool }) {
             409,
             'task_id_exists',
             `Task ID ${taskId} already has a saved QA. Nothing was overwritten.`
+          );
+        }
+        throw error;
+      }
+    },
+
+    // GET /api/qa-records/mine (F3): the session user's own records of the
+    // month in progress, cut in Bolivia time (D13) and ordered by save date.
+    // Only the owner ever sees their own list; the role is irrelevant, so
+    // qa_engineer and qa_shadow work exactly the same (D5).
+    async listMine({ ownerId }) {
+      if (!ownerId) {
+        throw new AppError(401, 'unauthenticated', 'Sign in to see your saved QA.');
+      }
+      const { from, to } = boliviaMonthRange();
+      const records = await qaRecordRepository.list(pool, { ownerId, from, to });
+      return records.map(toQaRecordShape);
+    },
+
+    // PATCH /api/qa-records/:id (F3, spec step 4): only the Task ID can be
+    // corrected, only by the owner, only while the QA is open (F5 closes it).
+    // Anything else answers 404/409/400 and leaves the record untouched.
+    async updateTaskId({ id, ownerId, body }) {
+      assertNoUnknownFields(body, ['taskId']); // D12: the note and the summary are not editable
+      if (!ownerId) {
+        throw new AppError(401, 'unauthenticated', 'Sign in to edit a QA.');
+      }
+      const taskId = assertTaskId(body?.taskId);
+
+      const record = await qaRecordRepository.findById(pool, id);
+      // Not found and "not yours" answer the same way: no existence leak.
+      if (!record || record.owner_id !== ownerId) {
+        throw new AppError(404, 'not_found', 'QA record not found.');
+      }
+      if (record.closed_at) {
+        throw new AppError(
+          409,
+          'record_closed',
+          'This QA was closed by the QA Shadow and can no longer be edited.'
+        );
+      }
+      // Correcting it to the value it already has is a no-op, not a conflict.
+      if (record.task_id === taskId) return toQaRecordShape(record);
+
+      if (await qaRecordRepository.findByTaskId(pool, taskId)) {
+        throw new AppError(
+          409,
+          'task_id_exists',
+          `Task ID ${taskId} already has a saved QA. Nothing was changed.`
+        );
+      }
+
+      try {
+        const updated = await qaRecordRepository.updateTaskId(pool, id, taskId);
+        if (!updated) {
+          throw new AppError(404, 'not_found', 'QA record not found.');
+        }
+        return toQaRecordShape(updated);
+      } catch (error) {
+        // Unique key race: another save claimed the Task ID meanwhile.
+        if (error?.code === 'ER_DUP_ENTRY') {
+          throw new AppError(
+            409,
+            'task_id_exists',
+            `Task ID ${taskId} already has a saved QA. Nothing was changed.`
           );
         }
         throw error;

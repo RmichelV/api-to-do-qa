@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My QA · QA API Tester</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar__inner">
+        <div class="topbar__brand">
+          <span aria-hidden="true">🤖</span>
+          <span class="topbar__title">QA API Tester</span>
+        </div>
+        <nav class="topbar__nav">
+          <div class="topbar__auth">
+            <span id="auth-user-name" class="topbar__user"></span>
+            <a class="ctrl-btn ctrl-btn--link" href="/">Tool</a>
+            <a class="ctrl-btn ctrl-btn--link" href="/change-password.html">Change password</a>
+            <button id="auth-logout" class="ctrl-btn ctrl-btn--logout">Logout</button>
+          </div>
+        </nav>
+      </div>
+    </header>
+
+    <main class="admin-main">
+      <div class="admin-card">
+        <h1 class="auth-title">My QA</h1>
+        <p class="auth-subtitle">
+          Your saved QA tasks for the current month (cut in Bolivia time). After saving, the only
+          thing you can change is the Task ID — the note and the summary are fixed, and once the QA
+          Shadow closes the QA nothing can be edited anymore.
+        </p>
+
+        <p id="mq-error" class="auth-error" role="alert" hidden></p>
+        <p id="mq-success" class="auth-success" role="status" hidden></p>
+
+        <section class="admin-section" aria-labelledby="mq-list-title">
+          <div class="admin-section__header">
+            <h2 id="mq-list-title" class="admin-subtitle">Saved QA this month</h2>
+            <button type="button" id="mq-refresh" class="ctrl-btn ctrl-btn--link">Refresh</button>
+          </div>
+          <div class="admin-table-wrap">
+            <table class="admin-table" id="mq-table">
+              <thead>
+                <tr>
+                  <th scope="col">Task ID</th>
+                  <th scope="col">Page</th>
+                  <th scope="col">Saved</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Action</th>
+                </tr>
+              </thead>
+              <tbody id="mq-records"></tbody>
+            </table>
+          </div>
+          <p id="mq-empty" class="admin-empty" hidden>
+            Nothing saved this month yet. Run the tool and press “Guardar QA” to save one.
+          </p>
+        </section>
+      </div>
+    </main>
+
+    <!-- D33: the saved QA, read-only. The Shadow's review and the PDF live
+         in F6 and must not appear here yet (D10). -->
+    <dialog class="help-dialog" id="mq-view-dialog" aria-labelledby="mq-view-title">
+      <div class="help-dialog__header">
+        <h2 id="mq-view-title">QA</h2>
+        <button class="help-dialog__close" type="button" id="mq-view-close" aria-label="Close">x</button>
+      </div>
+      <p id="mq-view-url" class="admin-note"></p>
+
+      <section class="myqa-view__block" aria-labelledby="mq-view-note-title">
+        <h3 id="mq-view-note-title" class="admin-subtitle">Note for the QA Shadow</h3>
+        <p id="mq-view-note" class="myqa-view__note"></p>
+      </section>
+
+      <section class="myqa-view__block" aria-labelledby="mq-view-summary-title">
+        <h3 id="mq-view-summary-title" class="admin-subtitle">Saved summary</h3>
+        <div id="mq-view-sections"></div>
+      </section>
+    </dialog>
+
+    <script src="auth-bar.js" defer></script>
+    <script src="my-qa.js" defer></script>
+  </body>
+</html>

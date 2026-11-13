@@ -159,6 +159,27 @@ async function seedAndLogin(t) {
   return { base, pool, ownerId, cookie };
 }
 
+// A second signed-in user in the same app instance (F3: two engineers must
+// never see or edit each other's records).
+async function seedExtraUser(base, pool, { email, password, fullName, role = 'qa_engineer' } = {}) {
+  const id = await seedUser(pool, { email, password, fullName, role });
+  const cookie = await loginAs(base, email, password);
+  return { id, cookie };
+}
+
+// D13: the month is cut in Bolivia time (America/La_Paz, UTC-4, no DST).
+// Mirrors the service: the local month starts at 04:00 UTC on day 1 and the
+// window is [from, to).
+function boliviaMonthRange(now = new Date()) {
+  const local = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+  const year = local.getUTCFullYear();
+  const month = local.getUTCMonth();
+  return {
+    from: new Date(Date.UTC(year, month, 1, 4)),
+    to: new Date(Date.UTC(year, month + 1, 1, 4)),
+  };
+}
+
 test('POST /api/qa-records requires a session', { skip: skipReason }, async (t) => {
   const { base } = await startApp(t);
 
@@ -336,6 +357,14 @@ test('unknown fields and a missing pageUrl are rejected with 400', { skip: skipR
   assert.equal(noUrl.status, 400);
   assert.equal((await noUrl.json()).error, 'validation_error');
 
+  // The URL is rendered as a link (F3 and later the Shadow/Admin views):
+  // only http(s) is accepted, so a javascript: URL can never be stored.
+  for (const pageUrl of ['javascript:alert(1)', 'data:text/html,x', 'not a url', 'ftp://example.com/']) {
+    const bad = await request(base, 'POST', '/api/qa-records', saveBody({ taskId: 'D-200001', pageUrl }), cookieHeader(cookie));
+    assert.equal(bad.status, 400, `pageUrl ${pageUrl} must be rejected`);
+    assert.equal((await bad.json()).error, 'validation_error');
+  }
+
   // An empty note is allowed and stored as NULL (D12 says it is optional).
   const noNote = await request(
     base,
@@ -363,4 +392,246 @@ test('index.html saves only through the Guardar QA button', () => {
   const posts = html.match(/fetch\("\/api\/qa-records"/g) ?? [];
   assert.equal(posts.length, 1, 'only saveQaRecord may POST to /api/qa-records');
   assert.match(html, /async function saveQaRecord/);
+});
+
+// ---------------------------------------------------------------------
+// F3: the QA Engineer's own list ("Mis QA") and the Task ID correction.
+// ---------------------------------------------------------------------
+
+test('GET /api/qa-records/mine requires a session', { skip: skipReason }, async (t) => {
+  const { base } = await startApp(t);
+
+  const response = await request(base, 'GET', '/api/qa-records/mine');
+
+  assert.equal(response.status, 401);
+  assert.equal((await response.json()).error, 'unauthenticated');
+});
+
+test('mine lists only this user\'s records of the current month, cut in Bolivia time (D13)', { skip: skipReason }, async (t) => {
+  const { base, pool, ownerId, cookie } = await seedAndLogin(t);
+
+  await request(base, 'POST', '/api/qa-records', saveBody({ taskId: 'D-174735' }), cookieHeader(cookie));
+  await request(base, 'POST', '/api/qa-records', saveBody({ taskId: 'D-147856' }), cookieHeader(cookie));
+
+  // Another user's record must never show up.
+  const other = await seedExtraUser(base, pool, {
+    email: 'other-engineer@example.com',
+    password: 'other engineer password 1',
+    fullName: 'Other Engineer',
+  });
+  await request(base, 'POST', '/api/qa-records', saveBody({ taskId: 'D-100001' }), cookieHeader(other.cookie));
+
+  // Month boundaries in Bolivia time: exactly at the first instant of the
+  // month (inclusive) and one millisecond before it (previous month).
+  const { from } = boliviaMonthRange();
+  await qaRecordRepository.insert(pool, {
+    id: randomUUID(),
+    taskId: 'D-300001',
+    ownerId,
+    pageUrl: 'https://example.com/on-boundary/',
+    summary: { version: 1, checks: {} },
+    now: from,
+  });
+  await qaRecordRepository.insert(pool, {
+    id: randomUUID(),
+    taskId: 'D-300002',
+    ownerId,
+    pageUrl: 'https://example.com/previous-month/',
+    summary: { version: 1, checks: {} },
+    now: new Date(from.getTime() - 1),
+  });
+
+  const response = await request(base, 'GET', '/api/qa-records/mine', undefined, cookieHeader(cookie));
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  const taskIds = body.records.map((record) => record.taskId).sort();
+  assert.deepEqual(taskIds, ['D-147856', 'D-174735', 'D-300001']);
+  assert.ok(!taskIds.includes('D-100001'), 'another user\'s record must not appear');
+  assert.ok(!taskIds.includes('D-300002'), 'records from the previous month must not appear');
+  for (const record of body.records) {
+    assert.equal(record.ownerId, ownerId);
+    assert.ok(record.pageUrl);
+    assert.ok(record.createdAt);
+    assert.ok('closedAt' in record, 'the list must tell whether the QA is closed');
+  }
+});
+
+test('the owner can correct the Task ID with PATCH (spec step 4)', { skip: skipReason }, async (t) => {
+  const { base, pool, cookie } = await seedAndLogin(t);
+  const created = await request(base, 'POST', '/api/qa-records', saveBody(), cookieHeader(cookie));
+  const { id } = (await created.json()).record;
+
+  const patched = await request(
+    base,
+    'PATCH',
+    `/api/qa-records/${id}`,
+    { taskId: 'd-999001' },
+    cookieHeader(cookie)
+  );
+
+  assert.equal(patched.status, 200);
+  const body = await patched.json();
+  assert.equal(body.record.taskId, 'D-999001');
+  assert.equal(await qaRecordRepository.findByTaskId(pool, 'D-174735'), null);
+  const stored = await qaRecordRepository.findByTaskId(pool, 'D-999001');
+  assert.equal(stored.id, id);
+  // Only the Task ID moves: the note and the summary stay untouched (D12).
+  assert.equal(stored.note_for_shadow, 'Special spec: keep the CTA above the fold.');
+  assert.deepEqual(stored.summary, summaryFixture());
+
+  // Sending the same value again is a no-op, not a 409 against itself.
+  const again = await request(base, 'PATCH', `/api/qa-records/${id}`, { taskId: 'D-999001' }, cookieHeader(cookie));
+  assert.equal(again.status, 200);
+  assert.equal((await again.json()).record.taskId, 'D-999001');
+});
+
+test('PATCH rejects a malformed Task ID and unknown fields with 400', { skip: skipReason }, async (t) => {
+  const { base, cookie } = await seedAndLogin(t);
+  const created = await request(base, 'POST', '/api/qa-records', saveBody(), cookieHeader(cookie));
+  const { id } = (await created.json()).record;
+
+  const invalid = ['174735', 'D174735', 'DA-174735', '   ', 42, null, undefined];
+  for (const taskId of invalid) {
+    const body = taskId === undefined ? {} : { taskId };
+    const response = await request(base, 'PATCH', `/api/qa-records/${id}`, body, cookieHeader(cookie));
+    assert.equal(response.status, 400, `taskId ${JSON.stringify(taskId)} must be rejected`);
+    assert.equal((await response.json()).error, 'validation_error');
+  }
+
+  // Only the Task ID can be edited (D12: the note and the summary are not).
+  const unknown = await request(
+    base,
+    'PATCH',
+    `/api/qa-records/${id}`,
+    { taskId: 'D-999001', note: 'changed' },
+    cookieHeader(cookie)
+  );
+  assert.equal(unknown.status, 400);
+  assert.equal((await unknown.json()).error, 'validation_error');
+});
+
+test('nobody can edit a record that is not theirs (404, unchanged)', { skip: skipReason }, async (t) => {
+  const { base, pool, ownerId, cookie } = await seedAndLogin(t);
+  const created = await request(base, 'POST', '/api/qa-records', saveBody(), cookieHeader(cookie));
+  const { id } = (await created.json()).record;
+
+  const other = await seedExtraUser(base, pool, {
+    email: 'other-engineer@example.com',
+    password: 'other engineer password 1',
+    fullName: 'Other Engineer',
+  });
+  const response = await request(
+    base,
+    'PATCH',
+    `/api/qa-records/${id}`,
+    { taskId: 'D-424242' },
+    cookieHeader(other.cookie)
+  );
+
+  assert.equal(response.status, 404);
+  assert.equal((await response.json()).error, 'not_found');
+  const stored = await qaRecordRepository.findByTaskId(pool, 'D-174735');
+  assert.equal(stored.owner_id, ownerId);
+  assert.equal(stored.task_id, 'D-174735');
+
+  // An id nobody owns answers the same way (no existence leak).
+  const missing = await request(
+    base,
+    'PATCH',
+    `/api/qa-records/${randomUUID()}`,
+    { taskId: 'D-424242' },
+    cookieHeader(cookie)
+  );
+  assert.equal(missing.status, 404);
+  assert.equal((await missing.json()).error, 'not_found');
+});
+
+test('PATCH to a Task ID that already exists answers 409 and changes nothing', { skip: skipReason }, async (t) => {
+  const { base, pool, cookie } = await seedAndLogin(t);
+  await request(base, 'POST', '/api/qa-records', saveBody({ taskId: 'D-174735' }), cookieHeader(cookie));
+  const taken = await request(base, 'POST', '/api/qa-records', saveBody({ taskId: 'D-147856' }), cookieHeader(cookie));
+  const { id } = (await taken.json()).record;
+
+  const response = await request(
+    base,
+    'PATCH',
+    `/api/qa-records/${id}`,
+    { taskId: 'D-174735' },
+    cookieHeader(cookie)
+  );
+
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).error, 'task_id_exists');
+  assert.equal((await qaRecordRepository.findByTaskId(pool, 'D-147856')).task_id, 'D-147856');
+  assert.equal((await qaRecordRepository.findByTaskId(pool, 'D-174735')).task_id, 'D-174735');
+});
+
+test('a closed record cannot be edited (409, unchanged)', { skip: skipReason }, async (t) => {
+  const { base, pool, cookie } = await seedAndLogin(t);
+  const created = await request(base, 'POST', '/api/qa-records', saveBody(), cookieHeader(cookie));
+  const { id } = (await created.json()).record;
+
+  // F5 closes the record; until then this column is NULL (migration 004).
+  await pool.execute('UPDATE qa_records SET closed_at = UTC_TIMESTAMP(3), closed_by = owner_id WHERE id = ?', [id]);
+
+  const response = await request(
+    base,
+    'PATCH',
+    `/api/qa-records/${id}`,
+    { taskId: 'D-999001' },
+    cookieHeader(cookie)
+  );
+
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).error, 'record_closed');
+  const stored = await qaRecordRepository.findByTaskId(pool, 'D-174735');
+  assert.equal(stored.task_id, 'D-174735');
+  assert.ok(stored.closed_at);
+});
+
+// F3 screen: the link from the tool's top bar and the Task ID editor.
+test('the Mis QA screen exists, is linked from index.html and edits the Task ID', () => {
+  const html = fs.readFileSync(path.join(PUBLIC_DIR, 'my-qa.html'), 'utf8');
+
+  assert.match(html, /id="mq-error"/);
+  assert.match(html, /id="mq-success"/);
+  assert.match(html, /id="mq-records"/);
+  assert.match(html, /id="mq-empty"/);
+  assert.match(html, /src="my-qa\.js"/);
+  assert.match(html, /src="auth-bar\.js"/);
+
+  const js = fs.readFileSync(path.join(PUBLIC_DIR, 'my-qa.js'), 'utf8');
+  assert.match(js, /fetch\("\/api\/qa-records\/mine"\)/);
+  assert.match(js, /method: "PATCH"/);
+
+  const index = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8');
+  assert.match(index, /href="\/my-qa\.html"/);
+});
+
+// D33: the "Ver" button of "Mis QA" shows the summary the list already
+// carries — every section's `result` and its findings as
+// `bugId · type · severity · device · text` — plus the note for the Shadow.
+// No Shadow review and no PDF here (F6). Everything is rendered with
+// textContent, so no data ever reaches innerHTML.
+test('the Ver button shows the summary by section and the note, without innerHTML', () => {
+  const html = fs.readFileSync(path.join(PUBLIC_DIR, 'my-qa.html'), 'utf8');
+  assert.match(html, /id="mq-view-dialog"/);
+  assert.match(html, /id="mq-view-title"/);
+  assert.match(html, /id="mq-view-url"/);
+  assert.match(html, /id="mq-view-note"/);
+  assert.match(html, /id="mq-view-sections"/);
+
+  const js = fs.readFileSync(path.join(PUBLIC_DIR, 'my-qa.js'), 'utf8');
+  assert.match(js, /actionButton\('Ver', 'ver'\)/);
+  assert.match(js, /dataset\.action === 'ver'/);
+  assert.match(js, /record\.summary/);
+  assert.match(js, /record\.note/);
+  // One line per finding: bugId · type · severity · device · text (D33).
+  assert.match(js, /bugId/);
+  assert.match(js, /' · '/);
+  // Escaping rule: the data is never injected as HTML.
+  assert.doesNotMatch(js, /innerHTML/);
+  assert.doesNotMatch(js, /insertAdjacentHTML/);
+  assert.doesNotMatch(js, /outerHTML/);
 });
