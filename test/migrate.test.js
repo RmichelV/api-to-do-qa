@@ -58,6 +58,7 @@ const ALL_MIGRATIONS = [
   '003_create_login_attempts',
   '004_create_qa_records',
   '005_create_qa_record_bugs',
+  '006_add_qa_shadow_role',
 ];
 
 const ALL_TABLES = ['users', 'user_sessions', 'login_attempts', 'qa_records', 'qa_record_bugs'];
@@ -97,6 +98,17 @@ test('applies pending migrations in order and records versions', { skip: skipRea
     );
     assert.equal(row.table_collation, 'utf8mb4_unicode_ci', `${table} collation`);
   }
+
+  // PLAN F4 (D1): 006 appended qa_shadow to the role ENUM, without DROP.
+  const [[role]] = await conn.query(
+    "SELECT COLUMN_TYPE AS type FROM information_schema.columns " +
+      "WHERE table_schema = ? AND table_name = 'users' AND column_name = 'role'",
+    [config.name]
+  );
+  assert.equal(
+    String(role.type).toLowerCase().replace(/\s+/g, ''),
+    "enum('admin','qa_engineer','qa_shadow')"
+  );
 });
 
 test('second run is a no-op (idempotent)', { skip: skipReason }, async (t) => {

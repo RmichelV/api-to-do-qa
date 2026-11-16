@@ -1,0 +1,11 @@
+-- 006: the QA Shadow role (PLAN F4, decisions D1 and D6).
+--
+-- One logical change, no DROP: production migrates as `qa_migrator`, which
+-- only gets ALTER/CREATE (db/README §5.6). `qa_shadow` is appended to the
+-- ENUM so existing rows keep their stored indexes (admin = 1,
+-- qa_engineer = 2); inserting the value in the middle would renumber the
+-- members that follow it.
+--
+-- The Admin assigns the role weekly from the users screen (D1, D6); it is
+-- not fixed and F4 (D9) clears the reviewer's open work when it is removed.
+ALTER TABLE users MODIFY role ENUM('admin', 'qa_engineer', 'qa_shadow') NOT NULL;

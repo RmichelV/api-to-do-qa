@@ -143,6 +143,9 @@ async function startApp(t) {
     { email: 'inventory@example.com', fullName: 'Inventory User', role: 'qa_engineer', password: 'inventory password 123' },
     // Needed for the admin-only files of plan T9b.
     { email: 'inventory-admin@example.com', fullName: 'Inventory Admin', role: 'admin', password: 'inventory admin password 1' },
+    // PLAN F4: the Shadow page is qa_shadow-only, so the inventory needs a
+    // session that carries that role to prove it is reachable at all.
+    { email: 'inventory-shadow@example.com', fullName: 'Inventory Shadow', role: 'qa_shadow', password: 'inventory shadow password 1' },
   ]) {
     await userRepository.create(pool, {
       id: randomUUID(),
@@ -173,7 +176,22 @@ async function startApp(t) {
   const adminRaw = adminLogin.headers.get('set-cookie') ?? '';
   const adminCookie = /qa_session=([^;]*)/.exec(adminRaw)[1];
 
-  return { base, cookie, adminCookie, routes: collectRoutes(app, recorded.mounts) };
+  const shadowLogin = await fetch(`${base}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: APP_ORIGIN },
+    body: JSON.stringify({ email: 'inventory-shadow@example.com', password: 'inventory shadow password 1' }),
+  });
+  assert.equal(shadowLogin.status, 200);
+  const shadowRaw = shadowLogin.headers.get('set-cookie') ?? '';
+  const shadowCookie = /qa_session=([^;]*)/.exec(shadowRaw)[1];
+
+  return {
+    base,
+    cookie,
+    adminCookie,
+    shadowCookie,
+    routes: collectRoutes(app, recorded.mounts),
+  };
 }
 
 test('route inventory: anonymous requests only reach the public allow-list', { skip: skipReason }, async (t) => {
@@ -241,12 +259,14 @@ test('public allow-list: login page, styles and healthz answer anonymously', { s
 });
 
 test('static files in public/ redirect anonymous visitors and serve with a session', { skip: skipReason }, async (t) => {
-  const { base, cookie, adminCookie } = await startApp(t);
+  const { base, cookie, adminCookie, shadowCookie } = await startApp(t);
   const files = listFiles(PUBLIC_DIR);
   assert.ok(files.includes('index.html'));
 
   // Plan T9b: the admin screen is gated by the ROLE, not only by the session.
   const adminOnly = new Set(['admin-users.html', 'admin-users.js']);
+  // PLAN F4: same rule for the Shadow screen, with the qa_shadow role (D6).
+  const shadowOnly = new Set(['shadow.html']);
 
   for (const file of files) {
     const anon = await fetch(`${base}/${file}`, { redirect: 'manual' });
@@ -268,6 +288,26 @@ test('static files in public/ redirect anonymous visitors and serve with a sessi
         headers: { Cookie: `qa_session=${adminCookie}` },
       });
       assert.equal(asAdmin.status, 200, `/${file} with an admin session`);
+      continue;
+    }
+
+    if (shadowOnly.has(file)) {
+      const asQa = await fetch(`${base}/${file}`, {
+        headers: { Cookie: `qa_session=${cookie}` },
+        redirect: 'manual',
+      });
+      assert.equal(asQa.status, 403, `/${file} must be qa_shadow-only, even typing the URL`);
+      // The Admin assigns the role to somebody else: without it they are
+      // refused too.
+      const asAdmin = await fetch(`${base}/${file}`, {
+        headers: { Cookie: `qa_session=${adminCookie}` },
+        redirect: 'manual',
+      });
+      assert.equal(asAdmin.status, 403, `/${file} with an admin session but no qa_shadow`);
+      const asShadow = await fetch(`${base}/${file}`, {
+        headers: { Cookie: `qa_session=${shadowCookie}` },
+      });
+      assert.equal(asShadow.status, 200, `/${file} with a qa_shadow session`);
       continue;
     }
 

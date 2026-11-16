@@ -132,6 +132,32 @@ export async function updateTaskId(pool, id, taskId, now = new Date()) {
   return findById(pool, id);
 }
 
+// D9 (PLAN F4): dropping the qa_shadow role releases the reviewer's work in
+// one statement pair. Only OPEN records move (closed_at IS NULL): a closed
+// review is history and is never touched. The reviewer's manual marks are
+// deleted (source = 'manual') and the review itself is cleared back to
+// pending — reviewer_id, checklist, qa_comment and qa_status go to NULL, so
+// the record shows up in every Shadow's list again. Tool findings survive:
+// they came from the run, not from the reviewer.
+//
+// Order matters: the DELETE reads reviewer_id through a subquery on
+// qa_records, so it runs before the UPDATE clears it. `pool` is a connection
+// when the caller (adminUserService) opens a transaction — every function
+// here only calls .execute, so both work.
+export async function releaseShadowReviews(pool, reviewerId, now = new Date()) {
+  await pool.execute(
+    'DELETE FROM qa_record_bugs WHERE source = ? AND record_id IN ' +
+      '(SELECT id FROM qa_records WHERE reviewer_id = ? AND closed_at IS NULL)',
+    ['manual', reviewerId]
+  );
+  const [result] = await pool.execute(
+    'UPDATE qa_records SET reviewer_id = NULL, checklist = NULL, qa_comment = NULL, ' +
+      'qa_status = NULL, updated_at = ? WHERE reviewer_id = ? AND closed_at IS NULL',
+    [now, reviewerId]
+  );
+  return result.affectedRows;
+}
+
 // Listing (F3 "Mis QA", F7): every filter is optional and applied as given —
 // the month boundaries in Bolivia time (D13) are computed by the service.
 // `from` is inclusive and `to` exclusive ([from, to)), newest record first.

@@ -20,7 +20,7 @@ import { sessionMiddleware } from './middleware/sessionMiddleware.js'
 import { publicAllowList } from './middleware/publicAllowList.js'
 import { requireAuth } from './middleware/requireAuth.js'
 import { requireRole } from './middleware/requireRole.js'
-import { requireAdminPage } from './middleware/requireAdminPage.js'
+import { requireAdminPage, requirePageRole } from './middleware/requireAdminPage.js'
 import { requirePasswordChanged } from './middleware/requirePasswordChanged.js'
 import { originCheck } from './middleware/originCheck.js'
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js'
@@ -100,6 +100,10 @@ export function createApp({ config, pool }) {
   // signed-in non-admin gets 403 even typing the URL, while every other file
   // in public/ stays behind requireAuth alone.
   app.use(requireAdminPage(['/admin-users.html', '/admin-users.js']));
+  // PLAN F4: the Shadow screen is qa_shadow-only (D6: the Admin assigns the
+  // role weekly). Same shape as the admin gate — a session with any other
+  // role answers 403 even typing the URL. F5 adds /shadow.js next to it.
+  app.use(requirePageRole('qa_shadow', ['/shadow.html']));
   app.use(express.static(PUBLIC_DIR, { index: false }));
   app.get('/', (req, res) => {
     res.sendFile(path.join(PUBLIC_DIR, 'index.html'));

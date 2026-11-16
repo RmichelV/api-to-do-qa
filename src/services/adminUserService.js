@@ -13,10 +13,15 @@
 import { randomUUID } from 'node:crypto';
 import * as userRepository from '../repositories/userRepository.js';
 import * as sessionRepository from '../repositories/sessionRepository.js';
+import * as qaRecordRepository from '../repositories/qaRecordRepository.js';
 import { hash, validatePolicy } from './passwordService.js';
 import { AppError } from '../utils/errors.js';
 
-export const USER_ROLES = Object.freeze(['admin', 'qa_engineer']);
+// Every role the users screen may set (D1: qa_shadow is assigned and removed
+// weekly, it is not fixed). The ENUM of users.role must stay in sync — the
+// server validates against this list, so a role the schema cannot store is
+// rejected with 400 instead of failing the UPDATE.
+export const USER_ROLES = Object.freeze(['admin', 'qa_engineer', 'qa_shadow']);
 const MAX_EMAIL_LENGTH = 254;
 const MAX_FULL_NAME_LENGTH = 120;
 
@@ -162,29 +167,43 @@ export function createAdminUserService({ pool }) {
         target.role === 'admin' &&
         target.is_active === 1 &&
         ((patch.role !== undefined && patch.role !== 'admin') || patch.isActive === false);
+      // D9 (PLAN F4): taking the qa_shadow role away releases that reviewer's
+      // open work — their unclosed reviews go back to pending — in the SAME
+      // transaction as the role change, so the two can never disagree. Only
+      // role removal counts: deactivating a Shadow or renaming them leaves
+      // their reviews alone.
+      const releasesShadowReviews =
+        target.role === 'qa_shadow' && patch.role !== undefined && patch.role !== 'qa_shadow';
 
       let updated;
-      if (!removesActiveAdmin) {
+      if (!removesActiveAdmin && !releasesShadowReviews) {
         updated = await userRepository.updateUser(pool, { id, ...patch });
       } else {
         const connection = await pool.getConnection();
         try {
           await connection.beginTransaction();
-          // Locking read: a concurrent demotion cannot slip between the
-          // count and the update.
-          const activeAdminIds = await userRepository.listActiveAdminIdsForUpdate(connection);
-          const otherAdmins = activeAdminIds.filter((adminId) => adminId !== id);
-          if (otherAdmins.length === 0) {
-            throw new AppError(409, 'last_admin', 'At least one active admin must remain.');
-          }
-          if (id === actorId) {
-            throw new AppError(
-              409,
-              'self_change',
-              'Admins cannot demote or deactivate their own account.'
-            );
+          if (removesActiveAdmin) {
+            // Locking read: a concurrent demotion cannot slip between the
+            // count and the update.
+            const activeAdminIds = await userRepository.listActiveAdminIdsForUpdate(connection);
+            const otherAdmins = activeAdminIds.filter((adminId) => adminId !== id);
+            if (otherAdmins.length === 0) {
+              throw new AppError(409, 'last_admin', 'At least one active admin must remain.');
+            }
+            if (id === actorId) {
+              throw new AppError(
+                409,
+                'self_change',
+                'Admins cannot demote or deactivate their own account.'
+              );
+            }
           }
           updated = await userRepository.updateUser(connection, { id, ...patch });
+          if (releasesShadowReviews) {
+            // Runs before the commit: if the release fails the role stays
+            // qa_shadow, and if the role update fails nothing was released.
+            await qaRecordRepository.releaseShadowReviews(connection, id);
+          }
           await connection.commit();
         } catch (error) {
           try {

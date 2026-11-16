@@ -264,12 +264,12 @@ Consecuencia para F1: el resumen (D3) guarda cada hallazgo de la herramienta **c
 - `test/adminUsersApi.test.js`, `test/qaRecordsShadow.test.js`
 
 **Tareas:**
-- [ ] Agregar `qa_shadow` al `ENUM` de roles y a `USER_ROLES`.
-- [ ] En la pantalla de usuarios, la Admin cambia el rol a `qa_shadow` y de vuelta a `qa_engineer` cuando termina la semana (la pantalla ya edita el rol con `PATCH /api/admin/users/:id`).
-- [ ] Guarda en el servidor: sin rol `qa_shadow` → 403 en las rutas y la página del Shadow.
-- [ ] Mantener las guardas existentes (no quedarse sin admin activo, no cambiarse el rol a sí misma).
-- [ ] Se pueden asignar varios `qa_shadow` a la vez (D9).
-- [ ] Al quitarle el rol `qa_shadow` a alguien, borrar en la misma transacción sus revisiones sin cerrar; esos QA vuelven a pendientes (D9). Las revisiones ya cerradas no se tocan.
+- [x] Agregar `qa_shadow` al `ENUM` de roles y a `USER_ROLES`.
+- [x] En la pantalla de usuarios, la Admin cambia el rol a `qa_shadow` y de vuelta a `qa_engineer` cuando termina la semana (la pantalla ya edita el rol con `PATCH /api/admin/users/:id`).
+- [x] Guarda en el servidor: sin rol `qa_shadow` → 403 en las rutas y la página del Shadow.
+- [x] Mantener las guardas existentes (no quedarse sin admin activo, no cambiarse el rol a sí misma).
+- [x] Se pueden asignar varios `qa_shadow` a la vez (D9).
+- [x] Al quitarle el rol `qa_shadow` a alguien, borrar en la misma transacción sus revisiones sin cerrar; esos QA vuelven a pendientes (D9). Las revisiones ya cerradas no se tocan.
 
 **Criterios de aceptación:**
 - Solo Admin puede cambiar el rol.
@@ -280,6 +280,18 @@ Consecuencia para F1: el resumen (D3) guarda cada hallazgo de la herramienta **c
 1. Como Admin, cambiar a dos usuarios a `qa_shadow`.
 2. Entrar con cada uno → ven la vista Shadow. Entrar con un `qa_engineer` → 403.
 3. Con uno de ellos, empezar a revisar un QA sin cerrarlo. Volverle el rol a `qa_engineer` → pierde el acceso y ese QA vuelve a pendientes sin lo que había cargado.
+
+> Hecho el 2026-11-16. Decisiones de implementación:
+> - **Migración 006** (`db/migrations/006_add_qa_shadow_role.sql`): un solo `ALTER TABLE users MODIFY role ENUM('admin','qa_engineer','qa_shadow') NOT NULL`, sin DROP (producción migra como `qa_migrator`). `qa_shadow` se agrega **al final** del ENUM: insertarlo en el medio renumeraría los valores que siguen.
+> - **`USER_ROLES`** pasa a `['admin','qa_engineer','qa_shadow']` y es la lista con la que el servidor valida; el selector de rol de `admin-users` (alta y fila) suma la opción `qa_shadow`. El alta y el cambio de rol siguen yendo por `POST`/`PATCH /api/admin/users`.
+> - **Página del Shadow:** `public/shadow.html` mínima — topbar (Tool, Change password, Logout) y un aviso de que la cola de pendientes y el formulario llegan en F5, sin `shadow.js`. Se protege con `requirePageRole('qa_shadow', ['/shadow.html'])`, montada al lado de la guarda de admin en `src/app.js`. `requireAdminPage` quedó como caso particular de `requirePageRole` (mismo HTML y mensaje de 403 para admin), así F5 solo agrega `/shadow.js` a esa lista.
+> - **Guarda de API:** F4 no monta rutas nuevas (la vista real es F5). El contrato queda probado con `requireRole('qa_shadow')` corriendo en un servidor HTTP real dentro de `qaRecordsShadow.test.js`: 401 sin sesión (default deny, antes que 403), 403 `forbidden` con `qa_engineer` o `admin`, `next()` con `qa_shadow`. F5 monta esa misma guarda en las rutas Shadow.
+> - **Vigencia del rol sin re-login:** `sessionMiddleware` lee `users` en **cada** request, así que el cambio de rol se aplica en el siguiente request con la misma cookie. Probado en los dos sentidos: 403 → (PATCH a `qa_shadow`) → 200 → (PATCH a `qa_engineer`) → 403, con `GET /api/auth/me` devolviendo 200 y el rol nuevo todo el tiempo.
+> - **D9 en la misma transacción:** `updateUser` abre transacción cuando el rol **sale** de `qa_shadow` y, antes del commit, `qaRecordRepository.releaseShadowReviews` borra los `qa_record_bugs` con `source='manual'` de los registros **abiertos** de ese revisor (`closed_at IS NULL`) y pone `reviewer_id`, `checklist`, `qa_comment` y `qa_status` en NULL. El DELETE va antes que el UPDATE porque el subconsulta lee `reviewer_id`. Los cerrados y los de otros Shadows no se tocan; los hallazgos `source='tool'` sobreviven (salen del run, no del revisor).
+> - **Solo la baja dispara la limpieza:** un rename, un PATCH con el mismo rol, o bajar el rol de un usuario que no es `qa_shadow` no ejecutan `releaseShadowReviews`. Desactivar una cuenta tampoco (pide "al quitarle el rol").
+> - **Atomicidad:** vive en el código (una transacción, rollback si falla cualquiera de los dos pasos); los tests no fuerzan un fallo a mitad de camino, solo verifican el resultado conjunto.
+> - **Tests RED → GREEN:** `test/adminUsersApi.test.js` (3) — alta y cambio a `qa_shadow`, dos Shadow a la vez, y guardas admin vigentes (`self_change` con dos admins, `last_admin` con uno solo, 403 de todo el API para un Shadow). `test/qaRecordsShadow.test.js` (5) — página 302/403/403/200, guarda de API, siguiente request sin re-login, D9 completo (lo abierto se limpia, lo cerrado y lo de otros queda intacto, `tool` sobrevive) y "D9 solo al bajar el rol". `migrate.test.js` suma 006 y verifica el ENUM; `routeInventory.test.js` trata `shadow.html` como gated y por eso agrega un usuario `qa_shadow` a su seed. **Suite: 159/159.**
+> - `npm run migrate` aplicó 006 y es no-op al repetirlo.
 
 ---
 
@@ -406,13 +418,13 @@ Consecuencia para F1: el resumen (D3) guarda cada hallazgo de la herramienta **c
 | F1 Tabla | completada 2026-11-07: migraciones 004 (qa_records) y 005 (qa_record_bugs), repository, 7 tests en verde; `npm run migrate` es no-op al repetir. Corrección 2026-11-07: 005 agregó `source ENUM('tool','manual')` (D9), bases locales sincronizadas. F4 pasa a la migración 006 | — (sin commit, a pedido) |
 | F2 Guardar QA | completada 2026-11-10 y corregida en la revisión (D22 una letra, D32 resumen legible con `result`, `found` y hallazgos `{ bugId, device, text }`); 10 tests en `qaRecordsApi.test.js`; suite 141/142 (fallo intermitente `EPIPE` de `create-admin`, ajeno a F2) | — (sin commit) |
 | F3 Vista Engineer | completada 2026-11-12: `GET /mine` (mes de Bolivia D13), `PATCH /:id` (solo owner, solo taskId), 404 ajeno, 409 duplicado y 409 cerrado, pantalla `my-qa.html`/`my-qa.js` con link "Mis QA" en `index.html`; 18 tests en `qaRecordsApi.test.js`, suite 150/150 | — (sin commit) |
-| F4 Rol QA Shadow | pendiente; decidido (D1, D6) | — |
-| F5 Vista Shadow y cierre | pendiente; depende de F0 y F4 | — |
+| F4 Rol QA Shadow | completada 2026-11-16: migración 006 (ENUM con `qa_shadow`, sin DROP), `USER_ROLES` y selector de rol, `requirePageRole` para `shadow.html`, guarda `requireRole('qa_shadow')` para F5, D9 en la misma transacción; RED → GREEN, `npm run migrate` no-op al repetir, suite 159/159 | — (sin commit, a pedido) |
+| F5 Vista Shadow y cierre | pendiente; depende de F0 y F4 (F4 lista) | — |
 | F6 Resultado y PDF para el Engineer | pendiente; decidido (D2) | — |
 | F7 Vista Admin y CSV | pendiente; Duda 1 | — |
 | F8 Borrado mensual | pendiente; decidido (D4) | — |
 
-Orden sugerido: F1, F2 y F3 completadas; sigue F4 → F5 (F5 espera F0 y F4).
+Orden sugerido: F1 a F4 completadas; sigue F5 (F5 espera F0 y F4, ambas listas).
 
 ## Dudas
 

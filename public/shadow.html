@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>QA Shadow · QA API Tester</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar__inner">
+        <div class="topbar__brand">
+          <span aria-hidden="true">🤖</span>
+          <span class="topbar__title">QA API Tester</span>
+        </div>
+        <nav class="topbar__nav">
+          <div class="topbar__auth">
+            <span id="auth-user-name" class="topbar__user"></span>
+            <a class="ctrl-btn ctrl-btn--link" href="/">Tool</a>
+            <a class="ctrl-btn ctrl-btn--link" href="/change-password.html">Change password</a>
+            <button id="auth-logout" class="ctrl-btn ctrl-btn--logout">Logout</button>
+          </div>
+        </nav>
+      </div>
+    </header>
+
+    <!-- PLAN F4: only the page and its role guard. The pending list, the
+         search, the checklist and the closing (D8, D10, D14) are F5. -->
+    <main class="admin-main">
+      <div class="admin-card">
+        <h1 class="auth-title">QA Shadow</h1>
+        <p class="auth-subtitle">
+          Review queue of the QA Shadow. This screen is only reachable with the
+          <strong>qa_shadow</strong> role, which the Admin assigns from the Users screen.
+        </p>
+        <p class="admin-note">The pending list and the review form arrive with F5.</p>
+      </div>
+    </main>
+
+    <script src="auth-bar.js" defer></script>
+  </body>
+</html>

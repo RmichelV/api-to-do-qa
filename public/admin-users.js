@@ -6,7 +6,9 @@
 // back, with a short hint on what to do next. The client checks below are
 // for usability only; the API is the authority.
 const API = '/api/admin/users';
-const ROLES = ['admin', 'qa_engineer'];
+// Same list as USER_ROLES on the server (PLAN F4, D1): qa_shadow is the
+// weekly review role the Admin assigns and takes back from this screen.
+const ROLES = ['admin', 'qa_engineer', 'qa_shadow'];
 const MIN_LENGTH = 12;
 const MAX_LENGTH = 128;
 
