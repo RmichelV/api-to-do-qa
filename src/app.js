@@ -92,7 +92,13 @@ export function createApp({ config, pool }) {
   // is gated by the ROLE, not only by the session (§7.2, plan T9b): a
   // signed-in non-admin gets 403 even typing the URL, while every other file
   // in public/ stays behind requireAuth alone.
-  app.use(requireAdminPage(['/admin-users.html', '/admin-users.js']));
+  app.use(requireAdminPage([
+    '/admin-users.html',
+    '/admin-users.js',
+    '/upload-csv.html',
+    '/upload-csv.js',
+    '/csv-header.js',
+  ]));
   app.use(express.static(PUBLIC_DIR, { index: false }));
   app.get('/', (req, res) => {
     res.sendFile(path.join(PUBLIC_DIR, 'index.html'));

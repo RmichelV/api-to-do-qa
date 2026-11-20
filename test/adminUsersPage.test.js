@@ -42,7 +42,13 @@ const ADMIN_PASSWORD = 't9b admin password 1';
 const QA_EMAIL = 't9b-qa@example.com';
 const QA_PASSWORD = 't9b qa password 123';
 
-const ADMIN_PAGES = ['/admin-users.html', '/admin-users.js'];
+const ADMIN_PAGES = [
+  '/admin-users.html',
+  '/admin-users.js',
+  '/upload-csv.html',
+  '/upload-csv.js',
+  '/csv-header.js',
+];
 
 async function startApp(t) {
   const config = testConfig();
@@ -167,6 +173,33 @@ test('an admin session gets the page, the script and no cached HTML', { skip: sk
   assert.match(body, /status\s*===\s*401\s*&&\s*body\??\.error\s*===\s*['"]unauthenticated['"]/);
 });
 
+test('an admin session gets the CSV page and its validation scripts', { skip: skipReason }, async (t) => {
+  const { base: baseUrl, adminCookie } = await startApp(t);
+
+  const page = await get(baseUrl, '/upload-csv.html', adminCookie);
+  assert.equal(page.status, 200);
+  assert.equal(page.headers.get('cache-control'), 'no-store');
+  const html = await page.text();
+  assert.match(html, /id="csv-file"/);
+  assert.match(html, /accept="\.csv,text\/csv"/);
+  for (const header of [
+    'Deliverable Id',
+    'Website',
+    'URL',
+    'Links',
+    'Calls to Action',
+    'Completed Copy',
+    'Completed Page URL',
+  ]) {
+    assert.ok(html.includes(header), `expected the required CSV header ${header}`);
+  }
+
+  for (const scriptPath of ['/upload-csv.js', '/csv-header.js']) {
+    const script = await get(baseUrl, scriptPath, adminCookie);
+    assert.equal(script.status, 200, `${scriptPath} should be available to admins`);
+  }
+});
+
 test('index.html links to the admin page hidden, and auth-bar.js reveals it for admins', { skip: skipReason }, async (t) => {
   const { base: baseUrl, adminCookie } = await startApp(t);
 
@@ -179,10 +212,16 @@ test('index.html links to the admin page hidden, and auth-bar.js reveals it for 
   // Hidden in the markup: a non-admin never sees it flash in.
   assert.match(link[0], /\bhidden\b/);
 
+  const uploadLink = /<a[^>]*id="auth-upload-csv"[^>]*>Upload CSV File<\/a>/.exec(html);
+  assert.ok(uploadLink, 'expected an "Upload CSV File" link in the top bar');
+  assert.match(uploadLink[0], /href="\/upload-csv\.html"/);
+  assert.match(uploadLink[0], /\bhidden\b/);
+
   const bar = await get(baseUrl, '/auth-bar.js', adminCookie);
   assert.equal(bar.status, 200);
   const body = await bar.text();
   // Revealed only for the admin role (S13: "visible solo para admins").
   assert.match(body, /role\s*===\s*['"]admin['"]/);
   assert.match(body, /auth-users/);
+  assert.match(body, /auth-upload-csv/);
 });

@@ -6,6 +6,7 @@ const userName = document.getElementById('auth-user-name');
 const logoutButton = document.getElementById('auth-logout');
 // Ships hidden in index.html: only an admin gets it revealed (S13, T9b).
 const usersLink = document.getElementById('auth-users');
+const uploadCsvLink = document.getElementById('auth-upload-csv');
 
 function redirectToLogin() {
   window.location.href = '/login.html';
@@ -24,8 +25,9 @@ async function loadUser() {
     const { user } = await response.json();
     userName.textContent = user.fullName || user.email;
     userName.title = user.email;
-    if (usersLink && user.role === 'admin') {
-      usersLink.hidden = false;
+    if (user.role === 'admin') {
+      if (usersLink) usersLink.hidden = false;
+      if (uploadCsvLink) uploadCsvLink.hidden = false;
     }
   } catch {
     // Network hiccup: leave the bar as-is; do NOT redirect.
