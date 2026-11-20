@@ -11,7 +11,7 @@ import adminUserRoutes from './routes/adminUserRoutes.js'
 import { activeBrowsers } from './services/textReadingService.js'
 import { activeBrowsersMobile } from './services/textReadingMobileService.js'
 import { activeBrowsersLink } from './services/linkReadingService.js'
-import { activeBrowsersAnchor } from './services/anchorReadingService.js'
+import { activeAnchorFetchControllers } from './services/anchorReadingService.js'
 import { activeBrowsersFull } from './services/fullAnalysisService.js'
 import { securityHeaders } from './middleware/securityHeaders.js'
 import { httpsRedirect } from './middleware/httpsRedirect.js'
@@ -77,7 +77,9 @@ export function createApp({ config, pool }) {
   // Endpoint to cancel/stop all active processes
   app.post('/api/cancel', async (req, res) => {
     let closed = 0;
-    const allSets = [activeBrowsers, activeBrowsersMobile, activeBrowsersLink, activeBrowsersAnchor, activeBrowsersFull];
+    for (const controller of activeAnchorFetchControllers) controller.abort();
+    activeAnchorFetchControllers.clear();
+    const allSets = [activeBrowsers, activeBrowsersMobile, activeBrowsersLink, activeBrowsersFull];
     for (const set of allSets) {
       for (const browser of set) {
         try { await browser.close(); closed++; } catch {}

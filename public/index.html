@@ -238,7 +238,7 @@
         anchors: {
           title: "Anchors review guidance",
           notes: [
-            { text: "Some pages need an additional click on the Anchors button before the table appears. If the table is empty, click the button again and check once more." },
+            { text: "The anchor check retries HTTP 403 responses up to five times, with increasing delays. Other responses, including 404 Not Found, stop the check." },
           ],
         },
         images: {
@@ -1013,6 +1013,7 @@
           const data = await resp.json();
           if (!resp.ok)
             throw new Error((data && data.error) || resp.statusText);
+          if (data.error) throw new Error(data.error);
 
           const anchors = data.anchors || [];
           const misconfiguredAnchors = data.misconfiguredAnchors || [];

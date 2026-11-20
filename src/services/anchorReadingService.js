@@ -1,11 +1,9 @@
-import { chromium } from 'playwright';
 import * as cheerio from 'cheerio';
 import { getRandomUserAgent } from '../utils/stealth.js';
 
-// Global registry of active browsers so they can be cancelled
-export const activeBrowsersAnchor = new Set();
-
-const HEAVY_RESOURCE_TYPES = new Set(['image', 'media', 'font']);
+export const activeAnchorFetchControllers = new Set();
+const MAX_FORBIDDEN_ATTEMPTS = 5;
+const FORBIDDEN_RETRY_DELAY_MS = 1000;
 
 // ─────────────────────────────────────────────
 // Helpers compartidos
@@ -46,181 +44,63 @@ function checkTargetsInHtml(html, anchors) {
 	}));
 }
 
-function consolidateAnchorResults(results) {
-	const consolidate = (key) => {
-		const byIdentity = new Map();
-
-		for (const result of results) {
-			const occurrences = new Map();
-			for (const anchor of result[key] || []) {
-				const baseIdentity = JSON.stringify([anchor.href, anchor.text]);
-				const occurrence = occurrences.get(baseIdentity) || 0;
-				occurrences.set(baseIdentity, occurrence + 1);
-				const identity = JSON.stringify([baseIdentity, occurrence]);
-
-				let record = byIdentity.get(identity);
-				if (!record) {
-					record = { anchor, runs: 0, targetExistsVotes: 0 };
-					byIdentity.set(identity, record);
-				}
-				record.runs++;
-				if (anchor.targetExists) record.targetExistsVotes++;
-			}
-		}
-
-		return [...byIdentity.values()]
-			.filter(record => record.runs >= 2)
-			.map(({ anchor, targetExistsVotes, runs }) => key === 'anchors'
-				? { ...anchor, targetExists: targetExistsVotes > runs / 2 }
-				: anchor);
-	};
-
-	const response = {
-		anchors: consolidate('anchors'),
-		misconfiguredAnchors: consolidate('misconfiguredAnchors'),
-	};
-	if (results.every(result => result.error)) {
-		response.error = results.at(-1).error;
-	}
-	return response;
+function delay(ms, signal) {
+	return new Promise((resolve, reject) => {
+		const timer = setTimeout(() => {
+			signal.removeEventListener('abort', onAbort);
+			resolve();
+		}, ms);
+		const onAbort = () => {
+			clearTimeout(timer);
+			reject(signal.reason);
+		};
+		signal.addEventListener('abort', onAbort, { once: true });
+		if (signal.aborted) onAbort();
+	});
 }
 
-// ─────────────────────────────────────────────
-// Strategy 1: fetch + cheerio (no browser)
-// ─────────────────────────────────────────────
-
-async function tryFetchStrategy(url) {
+async function fetchAndValidateAnchors(url, { retryDelayMs = FORBIDDEN_RETRY_DELAY_MS } = {}) {
 	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), 15000);
-
+	activeAnchorFetchControllers.add(controller);
 	let html;
 	try {
-		const resp = await fetch(url, {
-			headers: {
-				'User-Agent': getRandomUserAgent(),
-				'Accept-Language': 'en-US,en;q=0.9',
-			},
-			signal: controller.signal,
-		});
-		if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-		html = await resp.text();
+		const headers = {
+			'User-Agent': getRandomUserAgent(),
+			'Accept-Language': 'en-US,en;q=0.9',
+		};
+
+		for (let attempt = 1; attempt <= MAX_FORBIDDEN_ATTEMPTS; attempt++) {
+			const timer = setTimeout(() => controller.abort(), 15000);
+			try {
+				const response = await fetch(url, { headers, signal: controller.signal });
+				if (response.status === 403) {
+					try { await response.body?.cancel(); } catch {}
+					if (attempt === MAX_FORBIDDEN_ATTEMPTS) {
+						throw new Error(`HTTP 403 after ${MAX_FORBIDDEN_ATTEMPTS} attempts`);
+					}
+				} else {
+					if (!response.ok) throw new Error(`HTTP ${response.status}`);
+					html = await response.text();
+					break;
+				}
+			} finally {
+				clearTimeout(timer);
+			}
+
+			await delay(retryDelayMs * 2 ** (attempt - 1), controller.signal);
+		}
 	} finally {
-		clearTimeout(timer);
+		activeAnchorFetchControllers.delete(controller);
 	}
 
 	const $ = cheerio.load(html);
-	if (!$('.ddc-wrapper').length) return null; // no wrapper → fallback
+	if (!$('.ddc-wrapper').length) {
+		return { anchors: [], misconfiguredAnchors: [], error: '.ddc-wrapper not found' };
+	}
 
 	const { wellConfigured, misconfigured } = classifyAnchorsFromHtml(html, url);
-	if (!wellConfigured.length && !misconfigured.length) return null; // no anchors → fallback
-
 	const anchors = checkTargetsInHtml(html, wellConfigured);
 	return { anchors, misconfiguredAnchors: misconfigured };
 }
 
-// ─────────────────────────────────────────────
-// Strategy 2: Playwright — DOM only, no clicks or scrolls
-// ─────────────────────────────────────────────
-
-async function tryPlaywrightStrategy(url, options = {}) {
-	const headless = options.headless ?? true;
-	let browser;
-	try {
-		browser = await chromium.launch({ headless });
-		activeBrowsersAnchor.add(browser);
-
-		const context = await browser.newContext({
-			userAgent: getRandomUserAgent(),
-			locale: 'en-US',
-		});
-		const page = await context.newPage();
-		page.setDefaultTimeout(30000);
-		page.setDefaultNavigationTimeout(30000);
-
-		await page.route('**/*', (route) => {
-			const type = route.request().resourceType();
-			if (HEAVY_RESOURCE_TYPES.has(type)) return route.abort();
-			return route.continue();
-		});
-
-		await page.goto(url, { waitUntil: 'load', timeout: 30000 });
-
-		try {
-			await page.waitForSelector('.ddc-wrapper', { timeout: 10000 });
-		} catch {
-			return { anchors: [], misconfiguredAnchors: [], error: '.ddc-wrapper not found' };
-		}
-
-		// Extract links from .ddc-wrapper without isolating the DOM
-		const { wellConfigured, misconfigured } = await page.evaluate((pageUrl) => {
-			const wrapper = document.querySelector('.ddc-wrapper');
-			if (!wrapper) return { wellConfigured: [], misconfigured: [] };
-			const well = [];
-			const misc = [];
-
-			wrapper.querySelectorAll('a').forEach(a => {
-				const href = a.getAttribute('href') || '';
-				const text = (a.innerText || '').trim();
-				if (!text || !href.includes('#')) return;
-
-				const hashIdx = href.indexOf('#');
-				const base = href.substring(0, hashIdx);
-				const id = href.substring(hashIdx + 1);
-				if (!id) return;
-
-				if (base === '' || base === pageUrl) {
-					well.push({ text, href, targetId: id });
-				} else {
-					misc.push({ text, href });
-				}
-			});
-			return { wellConfigured: well, misconfigured: misc };
-		}, url);
-
-		// Check all targets in a single evaluate call (without an await loop)
-		const anchors = await page.evaluate((items) => {
-			return items.map(a => ({
-				text: a.text,
-				href: a.href,
-				targetExists: !!(document.getElementById(a.targetId)
-					|| document.querySelector(`[id="${a.targetId}"]`)),
-			}));
-		}, wellConfigured);
-
-		return { anchors, misconfiguredAnchors: misconfigured };
-	} finally {
-		if (browser) {
-			activeBrowsersAnchor.delete(browser);
-			try { await browser.close(); } catch {}
-		}
-	}
-}
-
-// ─────────────────────────────────────────────
-// Entry point
-// ─────────────────────────────────────────────
-
-export const extractAndValidateAnchors = async (url, options = {}) => {
-	const results = [];
-	let lastError;
-	let completedRuns = 0;
-
-	for (let attempt = 0; attempt < 3; attempt++) {
-		try {
-			// Strategy 1: fast, no browser
-			let result = await tryFetchStrategy(url);
-			if (!result) {
-				// Strategy 2: fallback with Playwright
-				result = await tryPlaywrightStrategy(url, options);
-			}
-			results.push(result);
-			completedRuns++;
-		} catch (error) {
-			lastError = error;
-			results.push({ anchors: [], misconfiguredAnchors: [] });
-		}
-	}
-
-	if (completedRuns === 0) throw lastError;
-	return consolidateAnchorResults(results);
-};
+export const extractAndValidateAnchors = async (url, options) => fetchAndValidateAnchors(url, options);
