@@ -47,9 +47,11 @@ export const normalizeText = (raw) => {
 
   return decoded
     .replace(/\u00A0/g, ' ')
+    .replace(/\u00AD/g, '')
     .replace(/[\u2018\u2019]/g, "'")
     .replace(/[\u201C\u201D]/g, '"')
-    .replace(/[\u2014\u2013]/g, '-')
+    .replace(/[\u2010-\u2015\u2212]/g, '-')
+    .replace(/[®Ⓡⓡ]|\(\s*r\s*\)/gi, '')
     .split(/\r?\n/)
     .map(line => line.toLowerCase().replace(/\s+/g, ' ').trim())
     .filter(Boolean)
