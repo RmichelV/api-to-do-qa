@@ -43,6 +43,17 @@ import { requireRole } from '../src/middleware/requireRole.js';
 //      (D6) and locks every later edit (D10).
 //  10. D34: deactivating a qa_shadow releases their open reviews too.
 //  11. updateTaskId only touches open rows of their owner (atomic guard).
+//  12. D26/D27: a tool finding may be marked N/A with an optional
+//      explanation. The marks travel inside the checklist JSON column
+//      (`_na`, no migration) and the finding leaves the status, the
+//      counts, the comment and the bug rows.
+//  13. Invalid naFindings answer 400 before any state change — and before
+//      the 409 of an already closed QA.
+//  14. /shadow.js is gated with /shadow.html (the F5 screen is an asset
+//      of that page, never served to another role).
+//
+// The screen itself has no DOM test harness here: public/shadow.js is
+// covered by the server contract above and by the manual F5 check.
 //
 // Real database and real HTTP server.
 // Only TEST_DB_* — never DB_* (L10); skips without them.
@@ -260,7 +271,7 @@ function parseJsonColumn(value) {
 // 1. The page.
 // ---------------------------------------------------------------------
 
-test('/shadow.html is qa_shadow-only: 302 anonymous, 403 for every other role', { skip: skipReason }, async (t) => {
+test('/shadow.html and /shadow.js are qa_shadow-only: 302 anonymous, 403 for every other role', { skip: skipReason }, async (t) => {
   const { base, pool } = await startApp(t);
   await seedUser(pool, {
     email: 'shadow-engineer@example.com',
@@ -290,6 +301,20 @@ test('/shadow.html is qa_shadow-only: 302 anonymous, 403 for every other role', 
   const asShadow = await getPage(base, '/shadow.html', shadowCookie);
   assert.equal(asShadow.status, 200);
   assert.match(await asShadow.text(), /QA Shadow/);
+
+  // The script of that page is gated exactly like the page: without the
+  // role it is a page asset, so it never ships to another role (F5).
+  const scriptAnonymous = await getPage(base, '/shadow.js', null);
+  assert.equal(scriptAnonymous.status, 302);
+  assert.equal(scriptAnonymous.headers.get('location'), '/login.html');
+
+  const scriptEngineer = await getPage(base, '/shadow.js', engineerCookie);
+  assert.equal(scriptEngineer.status, 403, 'a qa_engineer must not read /shadow.js');
+  const scriptAdmin = await getPage(base, '/shadow.js', adminCookie);
+  assert.equal(scriptAdmin.status, 403);
+
+  const scriptShadow = await getPage(base, '/shadow.js', shadowCookie);
+  assert.equal(scriptShadow.status, 200);
 
   // The rest of the tool is untouched by the new gate.
   const index = await getPage(base, '/index.html', engineerCookie);
@@ -1419,4 +1444,357 @@ test('updateTaskId only moves open rows of their own owner (atomic WHERE + affec
   const foreignUpdate = await qaRecordRepository.updateTaskId(pool, foreignId, 'D-540011', ownerId);
   assert.equal(foreignUpdate, null, 'a row of another owner must not be updated');
   assert.equal((await recordRow(pool, foreignId)).task_id, 'D-540003');
+});
+
+// ---------------------------------------------------------------------
+// 14. F5 — D26/D27: a tool finding may be marked N/A, with an optional
+//     explanation, and it never counts towards the closure.
+// ---------------------------------------------------------------------
+
+// Two tool findings the closure tests already know (FAIL-06 and CRIT-01)
+// plus a check whose finding carries no BUGS.md id, so "one N/A", "all
+// N/A" and "never countable" are all observable in the same summary.
+function naSummary() {
+  return {
+    version: 1,
+    checks: {
+      h1: {
+        status: 'pass',
+        result: 'There is only one visible H1',
+        total: 1,
+        failed: 0,
+        items: [{ bugId: null, device: 'D', text: 'Only one H1' }],
+      },
+      linkStatus: {
+        status: 'fail',
+        result: '120 links, 1 failed',
+        total: 120,
+        failed: 1,
+        items: [
+          { bugId: 'FAIL-06', type: 'Links', severity: 'Failed', device: 'D', text: '404 https://example.com/old-page' },
+        ],
+      },
+      textDesktop: {
+        status: 'fail',
+        result: 'INCOMPLETE — CO lines: 18, present: 15, missing: 3',
+        total: 18,
+        failed: 3,
+        items: [
+          {
+            bugId: 'CRIT-01',
+            type: 'Copy',
+            severity: 'Critical',
+            device: 'D',
+            text: 'INCOMPLETE — CO lines: 18, present: 15, missing: 3',
+          },
+        ],
+      },
+    },
+  };
+}
+
+test('D26/D27: closing skips the tool findings marked N/A and stores the marks with the checklist', { skip: skipReason }, async (t) => {
+  const { base, pool } = await startApp(t);
+  const engineerId = await seedUser(pool, {
+    email: 'd26-engineer@example.com',
+    password: 'd26 password 1',
+  });
+  const shadowId = await seedUser(pool, {
+    email: 'd26-shadow@example.com',
+    password: 'd26 password 1',
+    role: 'qa_shadow',
+  });
+  const cookie = await loginAs(base, 'd26-shadow@example.com', 'd26 password 1');
+
+  // One of the two findings N/A, with its explanation (D26/D27: optional).
+  const explainedId = await seedRecord(pool, {
+    taskId: 'D-550001',
+    ownerId: engineerId,
+    reviewerId: shadowId,
+    summary: naSummary(),
+  });
+  const explained = await request(
+    base, 'POST', `/api/qa-records/${explainedId}/close`,
+    {
+      checklist: fullChecklist('passed'),
+      naFindings: { 'linkStatus#0': 'The dealer has no inventory feed, so the broken link is expected.' },
+    },
+    cookieHeader(cookie)
+  );
+  assert.equal(explained.status, 200);
+  const { record } = await explained.json();
+  assert.equal(record.qaStatus, 'Critical', 'the N/A finding must not reach the status (D26)');
+  assert.equal(
+    record.qaComment,
+    'D / Copy / Critical / INCOMPLETE — CO lines: 18, present: 15, missing: 3',
+    'the N/A finding must not reach the comment (D26)'
+  );
+  assert.equal(record.criticalCount, 1);
+  assert.equal(record.failedCount, 0, 'the N/A finding must not be counted (D26)');
+  assert.equal(record.opportunityCount, 0);
+  assert.deepEqual(await bugRows(pool, explainedId), [
+    {
+      bug_id: 'CRIT-01',
+      source: 'tool',
+      device: 'D',
+      type: 'Copy',
+      severity: 'Critical',
+      description: 'INCOMPLETE — CO lines: 18, present: 15, missing: 3',
+    },
+  ]);
+
+  const explainedRow = await recordRow(pool, explainedId);
+  assert.deepEqual(
+    parseJsonColumn(explainedRow.checklist),
+    {
+      ...fullChecklist('passed'),
+      _na: { 'linkStatus#0': 'The dealer has no inventory feed, so the broken link is expected.' },
+    },
+    'the marks are stored with the checklist, in its own key: no migration (D26)'
+  );
+
+  // Every finding N/A and no explanation at all (D27: the explanation is
+  // optional) → the QA passes with no comment, like a clean run.
+  const allNaId = await seedRecord(pool, {
+    taskId: 'D-550002',
+    ownerId: engineerId,
+    reviewerId: shadowId,
+    summary: naSummary(),
+  });
+  const allNa = await request(
+    base, 'POST', `/api/qa-records/${allNaId}/close`,
+    {
+      checklist: fullChecklist('passed'),
+      naFindings: { 'linkStatus#0': null, 'textDesktop#0': null },
+    },
+    cookieHeader(cookie)
+  );
+  assert.equal(allNa.status, 200);
+  const passed = (await allNa.json()).record;
+  assert.equal(passed.qaStatus, 'Passed');
+  assert.equal(passed.qaComment, null, 'no bugs left means no generated comment (D25)');
+  assert.equal(passed.criticalCount, 0);
+  assert.equal(passed.failedCount, 0);
+  assert.equal(passed.opportunityCount, 0);
+  assert.deepEqual(await bugRows(pool, allNaId), []);
+  assert.deepEqual(
+    parseJsonColumn((await recordRow(pool, allNaId)).checklist)._na,
+    { 'linkStatus#0': null, 'textDesktop#0': null },
+    'null is a stored mark, not a missing one (D27)'
+  );
+});
+
+test('D26: saving progress keeps the N/A marks; a later close without them counts the findings again', { skip: skipReason }, async (t) => {
+  const { base, pool } = await startApp(t);
+  const engineerId = await seedUser(pool, {
+    email: 'd26b-engineer@example.com',
+    password: 'd26 password 1',
+  });
+  const shadowId = await seedUser(pool, {
+    email: 'd26b-shadow@example.com',
+    password: 'd26 password 1',
+    role: 'qa_shadow',
+  });
+  const cookie = await loginAs(base, 'd26b-shadow@example.com', 'd26 password 1');
+  const recordId = await seedRecord(pool, {
+    taskId: 'D-550003',
+    ownerId: engineerId,
+    reviewerId: shadowId,
+    summary: naSummary(),
+  });
+
+  // "Guardar avance": the marks are stored with the draft and the QA stays
+  // open — the reviewer keeps working on it (D10).
+  const saved = await request(
+    base, 'PATCH', `/api/qa-records/${recordId}/review`,
+    {
+      checklist: { 'OPP-01': 'passed' },
+      naFindings: { 'linkStatus#0': 'no inventory feed on this page' },
+    },
+    cookieHeader(cookie)
+  );
+  assert.equal(saved.status, 200);
+  assert.deepEqual(parseJsonColumn((await saved.json()).record.checklist), {
+    'OPP-01': 'passed',
+    _na: { 'linkStatus#0': 'no inventory feed on this page' },
+  });
+
+  const afterSave = await recordRow(pool, recordId);
+  assert.equal(afterSave.closed_at, null, 'saving progress must not close the QA');
+  assert.equal(afterSave.qa_status, null, 'the status is only generated on closure');
+  assert.deepEqual(parseJsonColumn(afterSave.checklist)._na, {
+    'linkStatus#0': 'no inventory feed on this page',
+  });
+
+  // The payload carries the whole state: a later close that does not
+  // repeat the marks counts both findings again (the screen always sends
+  // exactly the marks it shows).
+  const closed = await request(
+    base, 'POST', `/api/qa-records/${recordId}/close`,
+    { checklist: fullChecklist('passed') },
+    cookieHeader(cookie)
+  );
+  assert.equal(closed.status, 200);
+  const record = (await closed.json()).record;
+  assert.equal(record.qaStatus, 'Critical (1), Failed (1)', 'without the marks both findings count again');
+  assert.equal(record.criticalCount, 1);
+  assert.equal(record.failedCount, 1);
+  const closedChecklist = parseJsonColumn((await recordRow(pool, recordId)).checklist);
+  assert.equal('_na' in closedChecklist, false, 'a payload without marks replaces the stored ones');
+  assert.deepEqual(
+    await bugSources(pool, recordId),
+    ['tool:FAIL-06', 'tool:CRIT-01'],
+    'both tool findings are back as bug rows'
+  );
+});
+
+test('D26: an invalid naFindings payload answers 400 before any state change', { skip: skipReason }, async (t) => {
+  const { base, pool } = await startApp(t);
+  const engineerId = await seedUser(pool, {
+    email: 'd26c-engineer@example.com',
+    password: 'd26 password 1',
+  });
+  const shadowId = await seedUser(pool, {
+    email: 'd26c-shadow@example.com',
+    password: 'd26 password 1',
+    role: 'qa_shadow',
+  });
+  const cookie = await loginAs(base, 'd26c-shadow@example.com', 'd26 password 1');
+  const openId = await seedRecord(pool, {
+    taskId: 'D-550004',
+    ownerId: engineerId,
+    reviewerId: shadowId,
+    summary: naSummary(),
+  });
+  const closedId = await seedRecord(pool, {
+    taskId: 'D-550005',
+    ownerId: engineerId,
+    reviewerId: shadowId,
+    summary: naSummary(),
+    checklist: fullChecklist('passed'),
+    qaStatus: 'Passed',
+    closedAt: new Date(),
+    closedBy: shadowId,
+  });
+
+  const save = (naFindings, id = openId) => request(
+    base, 'PATCH', `/api/qa-records/${id}/review`,
+    { checklist: { 'OPP-01': 'passed' }, naFindings },
+    cookieHeader(cookie)
+  );
+
+  // The key names one finding of the saved summary: "<check>#<index>".
+  for (const [label, naFindings] of [
+    ['a key without an index', { linkStatus: null }],
+    ['an index that does not exist', { 'linkStatus#9': null }],
+    ['a finding with no BUGS.md id (it never counts)', { 'h1#0': null }],
+    ['a non-string explanation', { 'linkStatus#0': 42 }],
+    ['an unbounded explanation', { 'linkStatus#0': 'x'.repeat(201) }],
+  ]) {
+    const refused = await save(naFindings);
+    assert.equal(refused.status, 400, label);
+    assert.equal((await refused.json()).error, 'validation_error', label);
+  }
+
+  // Unknown fields are still refused: the singular spelling is not the field.
+  const unknownField = await request(
+    base, 'PATCH', `/api/qa-records/${openId}/review`,
+    { checklist: { 'OPP-01': 'passed' }, naFinding: { 'linkStatus#0': null } },
+    cookieHeader(cookie)
+  );
+  assert.equal(unknownField.status, 400);
+
+  // None of the refusals touched the open record.
+  const openRow = await recordRow(pool, openId);
+  assert.equal(openRow.checklist, null);
+  assert.equal(openRow.qa_status, null);
+  assert.equal(openRow.closed_at, null);
+  assert.deepEqual(await bugRows(pool, openId), []);
+
+  // A closed QA still answers 409 — and a bad payload on it is still a
+  // 400: validation runs before the state guard, so a mistake is never
+  // hidden behind "already closed".
+  const closedValid = await request(
+    base, 'POST', `/api/qa-records/${closedId}/close`,
+    { checklist: fullChecklist('passed'), naFindings: { 'linkStatus#0': null } },
+    cookieHeader(cookie)
+  );
+  assert.equal(closedValid.status, 409);
+  assert.equal((await closedValid.json()).error, 'record_closed');
+
+  const closedInvalid = await request(
+    base, 'POST', `/api/qa-records/${closedId}/close`,
+    { checklist: fullChecklist('passed'), naFindings: { 'nope#0': null } },
+    cookieHeader(cookie)
+  );
+  assert.equal(closedInvalid.status, 400);
+  assert.equal((await closedInvalid.json()).error, 'validation_error');
+
+  // The closed QA is exactly as it was.
+  const closedRow = await recordRow(pool, closedId);
+  assert.deepEqual(parseJsonColumn(closedRow.checklist), fullChecklist('passed'));
+  assert.equal(closedRow.qa_status, 'Passed');
+  assert.ok(closedRow.closed_at);
+});
+
+// F5 "Guardar avance" must survive a reload: the pending queue hands the
+// reviewer back their own draft (checklist, N/A marks, bug devices and the
+// status/comment drafts) so the form can refill. Other rows never carry
+// review fields (D10: a draft belongs to whoever took the QA).
+test('F5: the queue returns the reviewer\'s saved draft so the form refills after a reload', { skip: skipReason }, async (t) => {
+  const { base, pool } = await startApp(t);
+  const engineerId = await seedUser(pool, {
+    email: 'f5-draft-engineer@example.com',
+    password: 'f5 draft password 1',
+  });
+  const shadow1Id = await seedUser(pool, {
+    email: 'f5-draft-shadow1@example.com',
+    password: 'f5 draft password 1',
+    role: 'qa_shadow',
+  });
+  await seedUser(pool, {
+    email: 'f5-draft-shadow2@example.com',
+    password: 'f5 draft password 1',
+    role: 'qa_shadow',
+  });
+
+  const mineId = await seedRecord(pool, { taskId: 'D-536001', ownerId: engineerId, summary: naSummary() });
+  const freeId = await seedRecord(pool, { taskId: 'D-536002', ownerId: engineerId });
+
+  const shadow1Cookie = await loginAs(base, 'f5-draft-shadow1@example.com', 'f5 draft password 1');
+  const take = await request(base, 'POST', `/api/qa-records/${mineId}/take`, {}, cookieHeader(shadow1Cookie));
+  assert.equal(take.status, 200);
+
+  const draft = {
+    checklist: { 'OPP-01': 'passed', 'FAIL-01': 'bug', 'CRIT-03': 'n/a' },
+    bugDevices: { 'FAIL-01': 'M/D' },
+    naFindings: { 'linkStatus#0': 'no inventory feed on this page' },
+    qaStatus: 'Failed',
+    qaComment: 'Draft comment',
+  };
+  const saved = await request(base, 'PATCH', `/api/qa-records/${mineId}/review`, draft, cookieHeader(shadow1Cookie));
+  assert.equal(saved.status, 200);
+
+  const queue = await request(base, 'GET', '/api/qa-records', undefined, cookieHeader(shadow1Cookie));
+  assert.equal(queue.status, 200);
+  const { records } = await queue.json();
+  const mine = records.find((record) => record.id === mineId);
+  const free = records.find((record) => record.id === freeId);
+
+  assert.equal(mine.reviewerId, shadow1Id);
+  assert.deepEqual(mine.checklist, {
+    'OPP-01': 'passed',
+    'FAIL-01': 'bug',
+    'CRIT-03': 'n/a',
+    _na: { 'linkStatus#0': 'no inventory feed on this page' },
+  });
+  assert.deepEqual(mine.bugDevices, { 'FAIL-01': 'M/D' });
+  assert.equal(mine.qaStatus, 'Failed');
+  assert.equal(mine.qaComment, 'Draft comment');
+
+  // A free QA carries no review fields at all.
+  assert.ok(free, 'the free QA stays in the queue');
+  for (const field of ['checklist', 'bugDevices', 'qaStatus', 'qaComment']) {
+    assert.ok(!(field in free), `a free QA must not carry ${field}`);
+  }
 });

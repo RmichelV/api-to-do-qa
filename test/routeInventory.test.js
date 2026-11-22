@@ -265,8 +265,9 @@ test('static files in public/ redirect anonymous visitors and serve with a sessi
 
   // Plan T9b: the admin screen is gated by the ROLE, not only by the session.
   const adminOnly = new Set(['admin-users.html', 'admin-users.js']);
-  // PLAN F4: same rule for the Shadow screen, with the qa_shadow role (D6).
-  const shadowOnly = new Set(['shadow.html']);
+  // PLAN F4/F5: same rule for the Shadow screen, with the qa_shadow role
+  // (D6) — page and script together.
+  const shadowOnly = new Set(['shadow.html', 'shadow.js']);
 
   for (const file of files) {
     const anon = await fetch(`${base}/${file}`, { redirect: 'manual' });

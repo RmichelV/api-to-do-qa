@@ -95,13 +95,21 @@ export function manualBugsFromChecklist(checklist, bugDevices = {}) {
 // catalog — whatever the browser sent only labels the screen (F2). Items
 // without a known id (bugId null: the H1 cases the Shadow classifies) are
 // skipped: they have no row in the criteria table.
-export function toolBugsFromSummary(summary) {
+//
+// `naFindings` (D26) holds the keys the Shadow marked as N/A
+// ("<check>#<index>", already validated by the service against this very
+// summary): those findings are left out exactly as if the tool had not
+// reported them — no bug row, no count, no comment line.
+export function toolBugsFromSummary(summary, naFindings = {}) {
   const bugs = [];
-  for (const check of Object.values(summary?.checks ?? {})) {
-    for (const item of Array.isArray(check?.items) ? check.items : []) {
+  for (const [checkName, check] of Object.entries(summary?.checks ?? {})) {
+    const items = Array.isArray(check?.items) ? check.items : [];
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index];
       if (!item || typeof item !== 'object') continue;
       const info = QA_BUGS[item.bugId];
       if (!info) continue;
+      if (Object.hasOwn(naFindings, `${checkName}#${index}`)) continue;
       bugs.push({
         bugId: item.bugId,
         source: 'tool',

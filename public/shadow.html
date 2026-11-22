@@ -24,19 +24,170 @@
       </div>
     </header>
 
-    <!-- PLAN F4: only the page and its role guard. The pending list, the
-         search, the checklist and the closing (D8, D10, D14) are F5. -->
+    <!-- PLAN F5 (paso 6): cola de pendientes con búsqueda por Task ID (D14),
+         formulario de revisión — nota (D12), resumen con N/A opcional
+         (D26/D27), checklist manual (D15/D19/D21/D24) y status/comentario
+         editables (D8) — e historial propio reabierto en modo lectura. -->
     <main class="admin-main">
       <div class="admin-card">
         <h1 class="auth-title">QA Shadow</h1>
         <p class="auth-subtitle">
-          Review queue of the QA Shadow. This screen is only reachable with the
-          <strong>qa_shadow</strong> role, which the Admin assigns from the Users screen.
+          Review queue: take a pending QA, answer the manual checklist, mark the tool's findings
+          that do not apply as N/A and close the QA with the final status and comment. Only the
+          <strong>qa_shadow</strong> role reaches this screen, which the Admin assigns from the
+          Users screen.
         </p>
-        <p class="admin-note">The pending list and the review form arrive with F5.</p>
+
+        <p id="sh-error" class="auth-error" role="alert" hidden></p>
+        <p id="sh-success" class="auth-success" role="status" hidden></p>
+
+        <section class="admin-section" aria-labelledby="sh-pending-title">
+          <div class="admin-section__header">
+            <h2 id="sh-pending-title" class="admin-subtitle">Pending review</h2>
+            <button type="button" id="sh-pending-refresh" class="ctrl-btn ctrl-btn--link">
+              Refresh
+            </button>
+          </div>
+          <div class="admin-row">
+            <div class="input-group">
+              <label for="sh-pending-search">Search by Task ID</label>
+              <input type="text" id="sh-pending-search" autocomplete="off" placeholder="D-147856" />
+            </div>
+            <button type="button" id="sh-pending-search-btn" class="ctrl-btn ctrl-btn--link">
+              Search
+            </button>
+            <button type="button" id="sh-pending-clear-btn" class="ctrl-btn ctrl-btn--reset">
+              Clear
+            </button>
+          </div>
+          <div class="admin-table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th scope="col">Task ID</th>
+                  <th scope="col">Page</th>
+                  <th scope="col">Owner</th>
+                  <th scope="col">Saved</th>
+                  <th scope="col">Action</th>
+                </tr>
+              </thead>
+              <tbody id="sh-pending-rows"></tbody>
+            </table>
+          </div>
+          <p id="sh-pending-empty" class="admin-empty" hidden>No pending QA right now.</p>
+        </section>
+
+        <!-- The review form opens here once a QA is taken (D10). -->
+        <section class="admin-section" id="sh-review" aria-labelledby="sh-review-title" hidden>
+          <div class="admin-section__header">
+            <h2 id="sh-review-title" class="admin-subtitle">Review</h2>
+            <button type="button" id="sh-review-back" class="ctrl-btn ctrl-btn--reset">
+              Back to the queue
+            </button>
+          </div>
+          <p id="sh-review-url" class="admin-note"></p>
+          <p id="sh-review-owner" class="admin-note"></p>
+          <p id="sh-review-closed" class="admin-note" hidden></p>
+
+          <section class="myqa-view__block" aria-labelledby="sh-review-note-title">
+            <h3 id="sh-review-note-title" class="admin-subtitle">Note for the QA Shadow</h3>
+            <p id="sh-review-note" class="myqa-view__note"></p>
+          </section>
+
+          <section class="myqa-view__block" aria-labelledby="sh-review-summary-title">
+            <h3 id="sh-review-summary-title" class="admin-subtitle">Tool summary</h3>
+            <p class="admin-note">
+              Every finding can be marked N/A (D26): the ones you mark leave the status, the
+              comment and the counts. The explanation is optional (D27).
+            </p>
+            <div id="sh-review-summary"></div>
+          </section>
+
+          <section class="myqa-view__block" aria-labelledby="sh-review-checklist-title">
+            <h3 id="sh-review-checklist-title" class="admin-subtitle">Manual checklist</h3>
+            <div class="admin-table-wrap">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Item</th>
+                    <th scope="col">Result</th>
+                    <th scope="col">Device</th>
+                  </tr>
+                </thead>
+                <tbody id="sh-review-checklist"></tbody>
+              </table>
+            </div>
+            <p class="admin-note">
+              Every item must be answered before closing the QA (D24), and each Bug carries the
+              device you pick (D21).
+            </p>
+          </section>
+
+          <section class="myqa-view__block" aria-labelledby="sh-review-status-title">
+            <h3 id="sh-review-status-title" class="admin-subtitle">QA Status and QA Comment</h3>
+            <p class="admin-note">
+              Generated from the BUGS.md criteria; edit them before closing if your criterion
+              differs (D8).
+            </p>
+            <div class="input-group">
+              <label for="sh-status">QA Status</label>
+              <input type="text" id="sh-status" autocomplete="off" />
+            </div>
+            <div class="input-group">
+              <label for="sh-comment">QA Comment</label>
+              <textarea id="sh-comment" placeholder="Leave it empty to keep the generated comment."></textarea>
+            </div>
+          </section>
+
+          <div class="admin-row" id="sh-review-actions">
+            <button type="button" id="sh-save" class="ctrl-btn ctrl-btn--todo">
+              Guardar avance
+            </button>
+            <button type="button" id="sh-close" class="ctrl-btn ctrl-btn--pdf">Cerrar QA</button>
+          </div>
+        </section>
+
+        <section class="admin-section" aria-labelledby="sh-history-title">
+          <div class="admin-section__header">
+            <h2 id="sh-history-title" class="admin-subtitle">My review history</h2>
+            <button type="button" id="sh-history-refresh" class="ctrl-btn ctrl-btn--link">
+              Refresh
+            </button>
+          </div>
+          <div class="admin-row">
+            <div class="input-group">
+              <label for="sh-history-search">Search by Task ID</label>
+              <input type="text" id="sh-history-search" autocomplete="off" placeholder="D-147856" />
+            </div>
+            <button type="button" id="sh-history-search-btn" class="ctrl-btn ctrl-btn--link">
+              Search
+            </button>
+            <button type="button" id="sh-history-clear-btn" class="ctrl-btn ctrl-btn--reset">
+              Clear
+            </button>
+          </div>
+          <div class="admin-table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th scope="col">Task ID</th>
+                  <th scope="col">Owner</th>
+                  <th scope="col">Closed</th>
+                  <th scope="col">QA Status</th>
+                  <th scope="col">Action</th>
+                </tr>
+              </thead>
+              <tbody id="sh-history-rows"></tbody>
+            </table>
+          </div>
+          <p id="sh-history-empty" class="admin-empty" hidden>
+            The QAs you close will appear here.
+          </p>
+        </section>
       </div>
     </main>
 
     <script src="auth-bar.js" defer></script>
+    <script src="shadow.js" defer></script>
   </body>
 </html>

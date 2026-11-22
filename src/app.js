@@ -104,8 +104,9 @@ export function createApp({ config, pool }) {
   app.use(requireAdminPage(['/admin-users.html', '/admin-users.js']));
   // PLAN F4: the Shadow screen is qa_shadow-only (D6: the Admin assigns the
   // role weekly). Same shape as the admin gate — a session with any other
-  // role answers 403 even typing the URL. F5 adds /shadow.js next to it.
-  app.use(requirePageRole('qa_shadow', ['/shadow.html']));
+  // role answers 403 even typing the URL. F5 adds /shadow.js next to it: the
+  // script is an asset of that page, so it is gated with the page.
+  app.use(requirePageRole('qa_shadow', ['/shadow.html', '/shadow.js']));
   app.use(express.static(PUBLIC_DIR, { index: false }));
   app.get('/', (req, res) => {
     res.sendFile(path.join(PUBLIC_DIR, 'index.html'));

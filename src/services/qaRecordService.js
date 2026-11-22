@@ -23,6 +23,7 @@ import { randomUUID } from 'node:crypto';
 import * as qaRecordRepository from '../repositories/qaRecordRepository.js';
 import { AppError } from '../utils/errors.js';
 import {
+  QA_BUGS,
   MANUAL_CHECKLIST,
   CHECKLIST_VALUES,
   BUG_DEVICES,
@@ -199,6 +200,79 @@ function assertQaComment(value) {
     throw new AppError(400, 'validation_error', `qaComment must be at most ${MAX_QA_COMMENT_LENGTH} characters.`);
   }
   return comment;
+}
+
+// D26/D27: the Shadow may mark a tool finding as N/A — optional, and with
+// an optional explanation. One key names the finding inside the saved
+// summary ("<check>#<index>"), its value is the explanation or null.
+// The marks are stored inside the checklist JSON column under `_na`, so
+// they are read, written and released together with it and need no
+// migration (D9 and D34 clear them with the checklist).
+const NA_KEY_PATTERN = /^([A-Za-z0-9_]+)#(\d+)$/;
+const CHECKLIST_NA_KEY = '_na';
+
+// Shape only: which findings, with which explanation. The target check
+// (assertNaTargets) needs the record's own summary, so it runs where the
+// record is already read — never on a bare payload.
+function parseNaFindings(value) {
+  if (value === undefined || value === null) return undefined;
+  if (!isPlainObject(value)) {
+    throw new AppError(400, 'validation_error', 'naFindings must be an object.');
+  }
+  const marks = {};
+  for (const [key, explanation] of Object.entries(value)) {
+    const match = NA_KEY_PATTERN.exec(key);
+    const index = match ? Number(match[2]) : Number.NaN;
+    if (!match || !Number.isSafeInteger(index)) {
+      throw new AppError(
+        400,
+        'validation_error',
+        `naFindings key must look like linkStatus#0: one check name, # and the index of its finding (${key}).`
+      );
+    }
+    const target = `${match[1]}#${index}`;
+    if (explanation === undefined || explanation === null || explanation === '') {
+      marks[target] = null;
+      continue;
+    }
+    if (typeof explanation !== 'string') {
+      throw new AppError(400, 'validation_error', `naFindings.${key} must be a string or null.`);
+    }
+    const text = explanation.trim();
+    if (text.length > MAX_ITEM_LENGTH) {
+      throw new AppError(400, 'validation_error', `naFindings.${key} must be at most ${MAX_ITEM_LENGTH} characters.`);
+    }
+    marks[target] = text;
+  }
+  return Object.keys(marks).length > 0 ? marks : undefined;
+}
+
+// Every mark must name a finding that would otherwise count: a real entry
+// of this record's own summary with a BUGS.md id. D26 is about the tool's
+// findings — the ones without an id never count, so they can never be N/A
+// either. Runs before the guarded UPDATE: a bad mark is a 400 even on a
+// closed QA, so a mistake is never hidden behind "already closed".
+function assertNaTargets(marks, summary) {
+  for (const key of Object.keys(marks)) {
+    const hashAt = key.lastIndexOf('#');
+    const items = summary?.checks?.[key.slice(0, hashAt)]?.items;
+    const item = Array.isArray(items) ? items[Number(key.slice(hashAt + 1))] : undefined;
+    const bugId = item && typeof item === 'object' ? item.bugId : undefined;
+    if (!bugId || !QA_BUGS[bugId]) {
+      throw new AppError(
+        400,
+        'validation_error',
+        `naFindings.${key} does not point at a tool finding with a BUGS.md id.`
+      );
+    }
+  }
+}
+
+// The checklist as stored: the marks ride along under `_na` (D26). The
+// payload is the whole state of the form, so a payload without marks
+// replaces the stored ones.
+function checklistWithNa(checklist, marks) {
+  return marks === undefined ? checklist : { ...checklist, [CHECKLIST_NA_KEY]: marks };
 }
 
 // Task ID of a query string: absent or empty means "no filter", anything
@@ -609,7 +683,22 @@ export function createQaRecordService({ pool }) {
       }
       const filter = taskIdFilter(taskId);
       const records = await qaRecordRepository.listPending(pool, { reviewerId, taskId: filter });
-      return records.map(toShadowShape);
+      // A QA this Shadow already took carries their saved draft, so the
+      // form refills after a reload ("Guardar avance"). Free rows carry no
+      // review fields: a draft belongs only to whoever took the QA (D10).
+      const hasDraft = records.some((record) => record.reviewer_id === reviewerId);
+      const devices = hasDraft ? await qaRecordRepository.listDraftBugDevices(pool, reviewerId) : {};
+      return records.map((record) =>
+        record.reviewer_id === reviewerId
+          ? {
+              ...toShadowShape(record),
+              checklist: record.checklist ?? null,
+              bugDevices: devices[record.id] ?? {},
+              qaStatus: record.qa_status ?? null,
+              qaComment: record.qa_comment ?? null,
+            }
+          : toShadowShape(record)
+      );
     },
 
     // F5 history (D14): only the QAs this Shadow took and closed, with the
@@ -643,27 +732,39 @@ export function createQaRecordService({ pool }) {
     },
 
     // F5 "Guardar avance" (D10/D19): the reviewer keeps their open work —
-    // a partial checklist, the devices of the bugs they marked and optional
-    // status/comment drafts (D8) — without closing anything. The guarded
-    // UPDATE (reviewer_id + closed_at IS NULL) plus the manual bug rows run
-    // in one transaction; the QA stays out of every queue but its owner's
+    // a partial checklist, the devices of the bugs they marked, the N/A
+    // marks of the tool's findings (D26) and optional status/comment
+    // drafts (D8) — without closing anything. The guarded UPDATE
+    // (reviewer_id + closed_at IS NULL) plus the manual bug rows run in
+    // one transaction; the QA stays out of every queue but its owner's
     // history.
     async saveReview({ id, reviewerId, body }) {
       if (!reviewerId) {
         throw new AppError(401, 'unauthenticated', 'Sign in to review a QA.');
       }
-      assertNoUnknownFields(body, ['checklist', 'bugDevices', 'qaStatus', 'qaComment']);
+      assertNoUnknownFields(body, ['checklist', 'bugDevices', 'qaStatus', 'qaComment', 'naFindings']);
       const checklist = assertChecklist(body?.checklist, { complete: false });
       const bugDevices = assertBugDevices(body?.bugDevices, checklist);
       const qaStatus = body?.qaStatus !== undefined ? assertQaStatus(body.qaStatus) : undefined;
       const qaComment = body?.qaComment !== undefined ? assertQaComment(body.qaComment) : undefined;
+      const naMarks = parseNaFindings(body?.naFindings);
+      if (naMarks !== undefined) {
+        // The marks name findings of this record's own summary, so the
+        // record is read — only when the payload carries marks, keeping
+        // every other save exactly as it was.
+        const record = await qaRecordRepository.findById(pool, id);
+        if (!record) {
+          throw new AppError(404, 'not_found', 'QA record not found.');
+        }
+        assertNaTargets(naMarks, record.summary);
+      }
 
       const manualBugs = manualBugsFromChecklist(checklist, bugDevices);
       const affected = await withReviewWrite(pool, async (connection) => {
         const rows = await qaRecordRepository.updateReview(connection, {
           id,
           reviewerId,
-          checklist,
+          checklist: checklistWithNa(checklist, naMarks),
           qaStatus,
           qaComment,
         });
@@ -682,21 +783,23 @@ export function createQaRecordService({ pool }) {
       return toShadowReviewShape(record);
     },
 
-    // F5 "Cerrar QA" (D6, D7, D8, D20, D21, D24, D25): the whole manual
-    // checklist must be closed, the bugs come from the server's BUGS.md
-    // catalog — the tool's findings from the saved summary plus every item
-    // marked as bug — and from them the status and the comment are
-    // generated. The Shadow may edit both (D8) before confirming. One
-    // guarded UPDATE (reviewer_id + closed_at IS NULL) and the bug rows
-    // share a transaction: the record closes with everything it needs or
-    // not at all, and the closer is the session user (D6).
+    // F5 "Cerrar QA" (D6, D7, D8, D20, D21, D24, D25, D26): the whole
+    // manual checklist must be closed, the bugs come from the server's
+    // BUGS.md catalog — the tool's findings from the saved summary, minus
+    // the ones marked N/A (D26), plus every item marked as bug — and from
+    // them the status and the comment are generated. The Shadow may edit
+    // both (D8) before confirming. One guarded UPDATE (reviewer_id +
+    // closed_at IS NULL) and the bug rows share a transaction: the record
+    // closes with everything it needs or not at all, and the closer is the
+    // session user (D6).
     async closeReview({ id, reviewerId, body }) {
       if (!reviewerId) {
         throw new AppError(401, 'unauthenticated', 'Sign in to close a QA.');
       }
-      assertNoUnknownFields(body, ['checklist', 'bugDevices', 'qaStatus', 'qaComment']);
-      // The record must exist: its summary feeds the tool bugs. Whether it
-      // may be closed is still decided by the guarded UPDATE below.
+      assertNoUnknownFields(body, ['checklist', 'bugDevices', 'qaStatus', 'qaComment', 'naFindings']);
+      // The record must exist: its summary feeds the tool bugs and its
+      // findings are the targets of the N/A marks. Whether it may be
+      // closed is still decided by the guarded UPDATE below.
       const existing = await qaRecordRepository.findById(pool, id);
       if (!existing) {
         throw new AppError(404, 'not_found', 'QA record not found.');
@@ -706,9 +809,11 @@ export function createQaRecordService({ pool }) {
       const bugDevices = assertBugDevices(body?.bugDevices, checklist);
       const editedStatus = body?.qaStatus !== undefined ? assertQaStatus(body.qaStatus) : undefined;
       const editedComment = body?.qaComment !== undefined ? assertQaComment(body.qaComment) : undefined;
+      const naMarks = parseNaFindings(body?.naFindings);
+      if (naMarks !== undefined) assertNaTargets(naMarks, existing.summary);
 
       const bugs = [
-        ...toolBugsFromSummary(existing.summary),
+        ...toolBugsFromSummary(existing.summary, naMarks),
         ...manualBugsFromChecklist(checklist, bugDevices),
       ];
       const generated = statusAndCommentFromBugs(bugs); // D21, D25, D20
@@ -719,7 +824,7 @@ export function createQaRecordService({ pool }) {
         const rows = await qaRecordRepository.closeRecord(connection, {
           id,
           reviewerId,
-          checklist,
+          checklist: checklistWithNa(checklist, naMarks),
           qaStatus,
           qaComment,
           criticalCount: generated.counts.critical,

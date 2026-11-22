@@ -340,3 +340,21 @@ export async function replaceBugs(pool, recordId, source, bugs) {
   await pool.execute('DELETE FROM qa_record_bugs WHERE record_id = ? AND source = ?', [recordId, source]);
   await insertBugs(pool, recordId, bugs);
 }
+
+// Devices of the manual bugs in this reviewer's OPEN drafts (F5 "Guardar
+// avance"): the queue hands them back so the form can refill after a
+// reload. Returns { recordId: { bugId: device } }.
+export async function listDraftBugDevices(pool, reviewerId) {
+  const [rows] = await pool.execute(
+    'SELECT b.record_id, b.bug_id, b.device FROM qa_record_bugs b ' +
+      'INNER JOIN qa_records r ON r.id = b.record_id ' +
+      "WHERE r.reviewer_id = ? AND r.closed_at IS NULL AND b.source = 'manual' ORDER BY b.id ASC",
+    [reviewerId]
+  );
+  const devices = {};
+  for (const row of rows) {
+    devices[row.record_id] ??= {};
+    devices[row.record_id][row.bug_id] = row.device;
+  }
+  return devices;
+}
