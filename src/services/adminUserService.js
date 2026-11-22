@@ -167,13 +167,18 @@ export function createAdminUserService({ pool }) {
         target.role === 'admin' &&
         target.is_active === 1 &&
         ((patch.role !== undefined && patch.role !== 'admin') || patch.isActive === false);
-      // D9 (PLAN F4): taking the qa_shadow role away releases that reviewer's
-      // open work — their unclosed reviews go back to pending — in the SAME
-      // transaction as the role change, so the two can never disagree. Only
-      // role removal counts: deactivating a Shadow or renaming them leaves
-      // their reviews alone.
-      const releasesShadowReviews =
+      // D9 (PLAN F4) and D34 (PLAN F5): taking the qa_shadow role away OR
+      // deactivating the account releases that reviewer's open work — their
+      // unclosed reviews go back to pending — in the SAME transaction as the
+      // change, so the two can never disagree. Both count only when they are
+      // real transitions: a rename, a PATCH with the same role, re-activating
+      // an account or deactivating a user who is not a qa_shadow never
+      // release anything.
+      const losesShadowRole =
         target.role === 'qa_shadow' && patch.role !== undefined && patch.role !== 'qa_shadow';
+      const deactivatesShadow =
+        target.role === 'qa_shadow' && target.is_active === 1 && patch.isActive === false;
+      const releasesShadowReviews = losesShadowRole || deactivatesShadow;
 
       let updated;
       if (!removesActiveAdmin && !releasesShadowReviews) {

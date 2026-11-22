@@ -127,8 +127,19 @@ export async function findById(pool, id) {
 // Task ID correction (F3, spec step 4): only the Task ID and the timestamp
 // move. The UNIQUE key on task_id makes a duplicate fail with ER_DUP_ENTRY,
 // which the service turns into 409.
-export async function updateTaskId(pool, id, taskId, now = new Date()) {
-  await pool.execute('UPDATE qa_records SET task_id = ?, updated_at = ? WHERE id = ?', [taskId, now, id]);
+//
+// Atomic guard (PLAN F5): the WHERE keeps `owner_id` and `closed_at IS
+// NULL`, and the caller must check `affectedRows` — a QA closed between
+// the service's read and this UPDATE simply does not match, so a closed
+// record can never be edited by a concurrent close. Returns null when
+// nothing matched instead of a re-read of a row we were not allowed to
+// touch.
+export async function updateTaskId(pool, id, taskId, ownerId, now = new Date()) {
+  const [result] = await pool.execute(
+    'UPDATE qa_records SET task_id = ?, updated_at = ? WHERE id = ? AND owner_id = ? AND closed_at IS NULL',
+    [taskId, now, id, ownerId]
+  );
+  if (result.affectedRows === 0) return null;
   return findById(pool, id);
 }
 
@@ -183,4 +194,149 @@ export async function list(pool, { ownerId, from, to } = {}) {
     ' ORDER BY created_at DESC, id DESC';
   const [rows] = await pool.execute(sql, params);
   return rows.map(mapRecord);
+}
+
+// ---------------------------------------------------------------------
+// PLAN F5 — the QA Shadow's review queue, history and review actions.
+// Every function here only talks SQL: authorization (own QA, who took it,
+// closed or not) is decided by the WHERE clauses plus `affectedRows`, and
+// classified by the service.
+// ---------------------------------------------------------------------
+
+const RECORD_COLUMNS_PREFIXED = RECORD_COLUMNS.split(', ')
+  .map((column) => `r.${column}`)
+  .join(', ');
+
+// Pending queue (D14): OPEN records of other people that are either free
+// or already taken by this reviewer — never the reviewer's own (D5), never
+// a closed one (D14), never one another Shadow took (D10). `taskId` is an
+// exact match (the service uppercases it first). Oldest first, so the queue
+// is served in the order the QAs were saved. The owner's name travels with
+// each row so the screen can say whose QA it is.
+export async function listPending(pool, { reviewerId, taskId } = {}) {
+  const where = ['r.closed_at IS NULL', 'r.owner_id <> ?', '(r.reviewer_id IS NULL OR r.reviewer_id = ?)'];
+  const params = [reviewerId, reviewerId];
+  if (taskId !== undefined) {
+    where.push('r.task_id = ?');
+    params.push(taskId);
+  }
+  const [rows] = await pool.execute(
+    `SELECT ${RECORD_COLUMNS_PREFIXED}, u.full_name AS owner_full_name ` +
+      'FROM qa_records r INNER JOIN users u ON u.id = r.owner_id ' +
+      `WHERE ${where.join(' AND ')} ORDER BY r.created_at ASC, r.id ASC`,
+    params
+  );
+  return rows.map(mapRecord);
+}
+
+// History (D14): only the QAs this reviewer took AND closed, newest first.
+export async function listHistory(pool, { reviewerId, taskId } = {}) {
+  const where = ['r.reviewer_id = ?', 'r.closed_at IS NOT NULL'];
+  const params = [reviewerId];
+  if (taskId !== undefined) {
+    where.push('r.task_id = ?');
+    params.push(taskId);
+  }
+  const [rows] = await pool.execute(
+    `SELECT ${RECORD_COLUMNS_PREFIXED}, u.full_name AS owner_full_name ` +
+      'FROM qa_records r INNER JOIN users u ON u.id = r.owner_id ' +
+      `WHERE ${where.join(' AND ')} ORDER BY r.closed_at DESC, r.id DESC`,
+    params
+  );
+  return rows.map(mapRecord);
+}
+
+// "Tomar" (D10): one statement decides the claim. Only a FREE record of
+// somebody else that is still open matches, so two Shadows racing the same
+// QA produce exactly one affectedRows = 1; the loser's UPDATE matches
+// nothing and the service answers 409. Returns the number of rows claimed.
+export async function takeRecord(pool, { id, reviewerId, now = new Date() }) {
+  const [result] = await pool.execute(
+    'UPDATE qa_records SET reviewer_id = ?, updated_at = ? ' +
+      'WHERE id = ? AND reviewer_id IS NULL AND closed_at IS NULL AND owner_id <> ?',
+    [reviewerId, now, id, reviewerId]
+  );
+  return result.affectedRows;
+}
+
+// "Guardar avance" (F5): the review stays open and belongs to whoever took
+// it — the UPDATE only matches `reviewer_id = ? AND closed_at IS NULL`, so
+// a concurrent close (or another reviewer) matches nothing. The checklist
+// is written as given (partial saves are the point); the optional
+// qa_status / qa_comment are the Shadow's drafts (D8) and are cleared with
+// the review by releaseShadowReviews (D9).
+export async function updateReview(
+  pool,
+  { id, reviewerId, checklist, qaStatus, qaComment, now = new Date() }
+) {
+  const sets = ['checklist = ?', 'updated_at = ?'];
+  const params = [toJsonColumn(checklist), now];
+  if (qaStatus !== undefined) {
+    sets.push('qa_status = ?');
+    params.push(qaStatus);
+  }
+  if (qaComment !== undefined) {
+    sets.push('qa_comment = ?');
+    params.push(qaComment);
+  }
+  params.push(id, reviewerId);
+  const [result] = await pool.execute(
+    `UPDATE qa_records SET ${sets.join(', ')} WHERE id = ? AND reviewer_id = ? AND closed_at IS NULL`,
+    params
+  );
+  return result.affectedRows;
+}
+
+// "Cerrar QA" (F5): one statement closes the record with everything the
+// closure carries — checklist, generated/edited status and comment (D8),
+// the severity counts (D21) and who closed it (D6: the session user). The
+// guard is `reviewer_id = ? AND closed_at IS NULL`: only the reviewer who
+// took it can close it, and only once. The caller writes the bug rows in
+// the same transaction, after this returns 1.
+export async function closeRecord(
+  pool,
+  {
+    id,
+    reviewerId,
+    checklist,
+    qaStatus,
+    qaComment,
+    criticalCount,
+    failedCount,
+    opportunityCount,
+    closedAt = new Date(),
+    now = new Date(),
+  }
+) {
+  const [result] = await pool.execute(
+    'UPDATE qa_records SET checklist = ?, qa_status = ?, qa_comment = ?, ' +
+      'critical_count = ?, failed_count = ?, opportunity_count = ?, ' +
+      'reviewer_id = ?, closed_at = ?, closed_by = ?, updated_at = ? ' +
+      'WHERE id = ? AND reviewer_id = ? AND closed_at IS NULL',
+    [
+      toJsonColumn(checklist),
+      qaStatus,
+      qaComment,
+      criticalCount,
+      failedCount,
+      opportunityCount,
+      reviewerId,
+      closedAt,
+      reviewerId,
+      now,
+      id,
+      reviewerId,
+    ]
+  );
+  return result.affectedRows;
+}
+
+// Replace one source's bug rows of a record (D9/D20): the manual marks of
+// a review are rewritten whenever the Shadow saves progress or closes, and
+// the tool's findings are written once, at closure. `pool` is a connection
+// when the caller opens a transaction — everything here only calls
+// .execute, so both work.
+export async function replaceBugs(pool, recordId, source, bugs) {
+  await pool.execute('DELETE FROM qa_record_bugs WHERE record_id = ? AND source = ?', [recordId, source]);
+  await insertBugs(pool, recordId, bugs);
 }

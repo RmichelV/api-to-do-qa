@@ -67,10 +67,12 @@ export function createApp({ config, pool }) {
   // self_change) live in the service.
   app.use('/api/admin/users', requireRole('admin'), adminUserRoutes({ pool }));
 
-  // §6 step 9b: save a QA (PLAN F2). Behind requireAuth +
-  // requirePasswordChanged; no role guard on purpose — qa_engineer and
-  // qa_shadow both save their own records (D5), and the owner always comes
-  // from the session.
+  // §6 step 9b: save a QA (PLAN F2) and the Shadow's review routes (F5).
+  // Behind requireAuth + requirePasswordChanged. POST /, GET /mine and
+  // PATCH /:id have NO role guard on purpose — qa_engineer and qa_shadow
+  // both save their own records (D5) and the owner comes from the session.
+  // The F5 routes inside the same router carry requireRole('qa_shadow')
+  // themselves, so the guard only covers what it must (D6, D14).
   app.use('/api/qa-records', qaRecordRoutes({ pool }));
 
   // §6 step 10: existing QA routers, contract unchanged (S12).

@@ -1,21 +1,35 @@
 // Save a QA record (PLAN F2 / SPEC step 3) and manage it afterwards (PLAN
-// F3 / SPEC step 4: the owner's month list and the Task ID correction).
-// Services never read `req` (§4.5): the controller passes the session user
-// id explicitly.
+// F3 / SPEC step 4: the owner's month list and the Task ID correction) and
+// the QA Shadow's review (PLAN F5: queue, history, take, save progress and
+// close). Services never read `req` (§4.5): the controller passes the
+// session user id explicitly.
 //
-// The rule of this phase is "one record per Task ID": a second save with the
-// same Task ID answers 409 and the existing record is untouched ("no se
-// puede guardar otro encima"). The owner is whoever is logged in, so the
-// same Task ID can never be claimed twice by anyone.
+// The rule of the first phases is "one record per Task ID": a second save
+// with the same Task ID answers 409 and the existing record is untouched
+// ("no se puede guardar otro encima"). The owner is whoever is logged in,
+// so the same Task ID can never be claimed twice by anyone.
 //
 // The summary is the D3 shape validated here before it reaches the JSON
 // column: version + checks, each check `pass` / `fail` / `not_run` with
 // counts, at most 20 items of at most 200 characters, and at most 16 KB for
-// the whole record. Severity counts and review fields stay empty: they are
-// filled when the QA Shadow closes the record (F5, D21).
+// the whole record.
+//
+// F5 rule: taking, saving progress and closing are decided by one guarded
+// UPDATE and its `affectedRows` — never by a read taken beforehand — so a
+// concurrent close or a second Shadow always loses the race cleanly (D10).
+// The status and the comment of a closure come from the server's BUGS.md
+// catalog (qaBugCatalog.js, D7/D20/D21), not from what the browser sends.
 import { randomUUID } from 'node:crypto';
 import * as qaRecordRepository from '../repositories/qaRecordRepository.js';
 import { AppError } from '../utils/errors.js';
+import {
+  MANUAL_CHECKLIST,
+  CHECKLIST_VALUES,
+  BUG_DEVICES,
+  manualBugsFromChecklist,
+  toolBugsFromSummary,
+  statusAndCommentFromBugs,
+} from './qaBugCatalog.js';
 
 // D22: one letter, a dash and numbers, e.g. "D-147856" (the numbers may grow
 // in length). Stored uppercase so `d-147856` and `D-147856` are the same
@@ -28,6 +42,8 @@ const MAX_SUMMARY_BYTES = 16 * 1024; // D3: 16 KB per record
 const CHECK_STATUSES = Object.freeze(['pass', 'fail', 'not_run']);
 const MAX_ITEMS_PER_CHECK = 20; // D3
 const MAX_ITEM_LENGTH = 200; // D3
+const MAX_QA_STATUS_LENGTH = 255; // column qa_status VARCHAR(255)
+const MAX_QA_COMMENT_LENGTH = 4000; // free-text bound; the generated one is bounded by D3
 
 function assertNoUnknownFields(body, allowed) {
   const unknown = Object.keys(body ?? {}).filter((key) => !allowed.includes(key));
@@ -91,6 +107,105 @@ function assertNote(value) {
 
 function isPlainObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+// F5 checklist (D15/D19/D24): a map of manual BUGS.md item → passed / bug /
+// n/a. Unknown items are rejected — the manual checklist is the F0 table,
+// never the "QA Todo List" of index.html. `complete` (close) requires every
+// item; a partial save keeps whatever the Shadow already marked.
+function assertChecklist(value, { complete }) {
+  if (!isPlainObject(value)) {
+    throw new AppError(400, 'validation_error', 'checklist must be an object.');
+  }
+  const unknown = Object.keys(value).filter((item) => !MANUAL_CHECKLIST.includes(item));
+  if (unknown.length > 0) {
+    throw new AppError(
+      400,
+      'validation_error',
+      `checklist has items that are not in the manual BUGS.md checklist: ${unknown.join(', ')}.`
+    );
+  }
+  if (complete) {
+    const missing = MANUAL_CHECKLIST.filter((item) => !(item in value));
+    if (missing.length > 0) {
+      throw new AppError(
+        400,
+        'validation_error',
+        `checklist must cover every manual item before closing (D24): missing ${missing.join(', ')}.`
+      );
+    }
+  }
+  for (const [item, state] of Object.entries(value)) {
+    if (!CHECKLIST_VALUES.includes(state)) {
+      throw new AppError(
+        400,
+        'validation_error',
+        `checklist.${item} must be one of: ${CHECKLIST_VALUES.join(', ')}.`
+      );
+    }
+  }
+  return value;
+}
+
+// D21: the Shadow picks the device (M, D or M/D) of every item they mark
+// as Bug. The map may only name manual items and only valid devices.
+function assertBugDevices(value, checklist) {
+  const devices = value === undefined || value === null ? {} : value;
+  if (!isPlainObject(devices)) {
+    throw new AppError(400, 'validation_error', 'bugDevices must be an object.');
+  }
+  const unknown = Object.keys(devices).filter((item) => !MANUAL_CHECKLIST.includes(item));
+  if (unknown.length > 0) {
+    throw new AppError(400, 'validation_error', `bugDevices has unknown items: ${unknown.join(', ')}.`);
+  }
+  for (const [item, device] of Object.entries(devices)) {
+    if (!BUG_DEVICES.includes(device)) {
+      throw new AppError(400, 'validation_error', `bugDevices.${item} must be one of: ${BUG_DEVICES.join(', ')}.`);
+    }
+  }
+  const withoutDevice = Object.entries(checklist)
+    .filter(([item, state]) => state === 'bug' && !(item in devices))
+    .map(([item]) => item);
+  if (withoutDevice.length > 0) {
+    throw new AppError(
+      400,
+      'validation_error',
+      `bugDevices is required for every item marked as bug (D21): ${withoutDevice.join(', ')}.`
+    );
+  }
+  return devices;
+}
+
+// D8: the Shadow may edit the generated status and comment before closing.
+function assertQaStatus(value) {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new AppError(400, 'validation_error', 'qaStatus must be a non-empty string.');
+  }
+  const status = value.trim();
+  if (status.length > MAX_QA_STATUS_LENGTH) {
+    throw new AppError(400, 'validation_error', `qaStatus must be at most ${MAX_QA_STATUS_LENGTH} characters.`);
+  }
+  return status;
+}
+
+function assertQaComment(value) {
+  if (value === null) return null; // explicitly clearing the generated one (D8)
+  if (typeof value !== 'string') {
+    throw new AppError(400, 'validation_error', 'qaComment must be a string.');
+  }
+  const comment = value.trim();
+  if (comment === '') return null;
+  if (comment.length > MAX_QA_COMMENT_LENGTH) {
+    throw new AppError(400, 'validation_error', `qaComment must be at most ${MAX_QA_COMMENT_LENGTH} characters.`);
+  }
+  return comment;
+}
+
+// Task ID of a query string: absent or empty means "no filter", anything
+// malformed is a 400 (same rule as saving, D22).
+function taskIdFilter(taskId) {
+  if (taskId === undefined || taskId === null || taskId === '') return undefined;
+  return assertTaskId(taskId);
 }
 
 // `items` (findings) and `found` (what the check saw, D32) share the D3 caps.
@@ -251,6 +366,31 @@ export function toQaRecordShape(record) {
   };
 }
 
+// F5: what the Shadow sees — the owner's name (the queue says whose QA it
+// is) and who holds the review right now.
+export function toShadowShape(record) {
+  return {
+    ...toQaRecordShape(record),
+    ownerFullName: record.owner_full_name ?? null,
+    reviewerId: record.reviewer_id ?? null,
+  };
+}
+
+// F5: the review fields, for the Shadow's own history and for the answers
+// to save/close. Never served to the owner before the closure (D10, F6).
+export function toShadowReviewShape(record) {
+  return {
+    ...toShadowShape(record),
+    checklist: record.checklist ?? null,
+    qaStatus: record.qa_status ?? null,
+    qaComment: record.qa_comment ?? null,
+    criticalCount: record.critical_count,
+    failedCount: record.failed_count,
+    opportunityCount: record.opportunity_count,
+    closedBy: record.closed_by ?? null,
+  };
+}
+
 // D13: the month is cut in Bolivia time — America/La_Paz is UTC-4 with no
 // daylight saving, so the local month runs from 04:00 UTC on day 1 to 04:00
 // UTC on day 1 of the next month. Shifting "now" by -4h and reading the UTC
@@ -264,6 +404,73 @@ export function boliviaMonthRange(now = new Date()) {
     from: new Date(Date.UTC(year, month, 1, 4)),
     to: new Date(Date.UTC(year, month + 1, 1, 4)),
   };
+}
+
+// Runs one guarded review UPDATE plus the bug rows it authorizes inside a
+// single transaction (F5). Returns 0 when the guard matched nothing — the
+// transaction rolled back and nothing was written — so the record and its
+// bugs can never disagree. `pool` is the real pool: every repository
+// function only calls .execute, so a connection works the same.
+async function withReviewWrite(pool, write) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const affected = await write(connection);
+    if (affected === 0) {
+      await connection.rollback();
+      return 0;
+    }
+    await connection.commit();
+    return affected;
+  } catch (error) {
+    try {
+      await connection.rollback();
+    } catch {
+      // The connection may already be unusable; nothing else to clean up.
+    }
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+// Why the atomic take matched nothing. The decision always comes from the
+// UPDATE's affectedRows; this only reads the row to explain the refusal.
+// Returns null when the QA is already this reviewer's (a repeated "Tomar"
+// is a no-op, not a conflict).
+async function takeRefusal(pool, id, reviewerId) {
+  const record = await qaRecordRepository.findById(pool, id);
+  if (!record) return new AppError(404, 'not_found', 'QA record not found.');
+  if (record.owner_id === reviewerId) {
+    return new AppError(403, 'forbidden', 'You cannot review your own QA (D5).');
+  }
+  if (record.closed_at) {
+    return new AppError(409, 'record_closed', 'This QA was already closed.');
+  }
+  if (record.reviewer_id === reviewerId) return null; // already mine
+  return new AppError(409, 'already_taken', 'Another QA Shadow took this QA first.');
+}
+
+// Why the atomic save/close matched nothing. Order matters: own QA is 403
+// (D5) before any 409, and a closed record is 409 for everybody (D10).
+// Returns null only when the record is still open and still this
+// reviewer's — the UPDATE simply had nothing left to change.
+async function reviewRefusal(pool, id, reviewerId) {
+  const record = await qaRecordRepository.findById(pool, id);
+  if (!record) return new AppError(404, 'not_found', 'QA record not found.');
+  if (record.owner_id === reviewerId) {
+    return new AppError(403, 'forbidden', 'You cannot review your own QA (D5).');
+  }
+  if (record.closed_at) {
+    return new AppError(409, 'record_closed', 'This QA was closed by the QA Shadow and can no longer be edited.');
+  }
+  if (record.reviewer_id && record.reviewer_id !== reviewerId) {
+    return new AppError(403, 'forbidden', 'Another QA Shadow is reviewing this QA.');
+  }
+  if (!record.reviewer_id) {
+    return new AppError(409, 'not_taken', 'Take this QA before saving a review on it.');
+  }
+  return null; // mine and open: nothing to change, not an error
 }
 
 export function createQaRecordService({ pool }) {
@@ -358,9 +565,25 @@ export function createQaRecordService({ pool }) {
       }
 
       try {
-        const updated = await qaRecordRepository.updateTaskId(pool, id, taskId);
+        // Atomic guard (F5): the UPDATE only matches an OPEN row of this
+        // owner, so a QA closed between the read above and here simply does
+        // not move — a closed record can never be edited by a race.
+        const updated = await qaRecordRepository.updateTaskId(pool, id, taskId, ownerId);
         if (!updated) {
-          throw new AppError(404, 'not_found', 'QA record not found.');
+          const current = await qaRecordRepository.findById(pool, id);
+          if (!current || current.owner_id !== ownerId) {
+            throw new AppError(404, 'not_found', 'QA record not found.');
+          }
+          if (current.closed_at) {
+            throw new AppError(
+              409,
+              'record_closed',
+              'This QA was closed by the QA Shadow and can no longer be edited.'
+            );
+          }
+          // Still open and still theirs: a concurrent writer stored the very
+          // same Task ID meanwhile, so there is nothing left to change.
+          return toQaRecordShape(current);
         }
         return toQaRecordShape(updated);
       } catch (error) {
@@ -374,6 +597,161 @@ export function createQaRecordService({ pool }) {
         }
         throw error;
       }
+    },
+
+    // F5 pending queue (D14): other people's open QAs, optionally filtered
+    // by an exact Task ID. Never the Shadow's own (D5), never a closed one
+    // (D14), never one another Shadow took (D10) — all three are in the
+    // WHERE clause, not in a filter applied afterwards.
+    async listPending({ reviewerId, taskId }) {
+      if (!reviewerId) {
+        throw new AppError(401, 'unauthenticated', 'Sign in to see the pending QA.');
+      }
+      const filter = taskIdFilter(taskId);
+      const records = await qaRecordRepository.listPending(pool, { reviewerId, taskId: filter });
+      return records.map(toShadowShape);
+    },
+
+    // F5 history (D14): only the QAs this Shadow took and closed, with the
+    // same Task ID search.
+    async listHistory({ reviewerId, taskId }) {
+      if (!reviewerId) {
+        throw new AppError(401, 'unauthenticated', 'Sign in to see your review history.');
+      }
+      const filter = taskIdFilter(taskId);
+      const records = await qaRecordRepository.listHistory(pool, { reviewerId, taskId: filter });
+      return records.map(toShadowReviewShape);
+    },
+
+    // F5 "Tomar" (D10): one guarded UPDATE decides the claim. Exactly one
+    // of two racing Shadows gets affectedRows = 1; the other is classified
+    // here and answers 409.
+    async takeQa({ id, reviewerId }) {
+      if (!reviewerId) {
+        throw new AppError(401, 'unauthenticated', 'Sign in to take a QA.');
+      }
+      const affected = await qaRecordRepository.takeRecord(pool, { id, reviewerId });
+      if (affected === 0) {
+        const refusal = await takeRefusal(pool, id, reviewerId);
+        if (refusal) throw refusal;
+      }
+      const record = await qaRecordRepository.findById(pool, id);
+      if (!record) {
+        throw new AppError(404, 'not_found', 'QA record not found.');
+      }
+      return toShadowShape(record);
+    },
+
+    // F5 "Guardar avance" (D10/D19): the reviewer keeps their open work —
+    // a partial checklist, the devices of the bugs they marked and optional
+    // status/comment drafts (D8) — without closing anything. The guarded
+    // UPDATE (reviewer_id + closed_at IS NULL) plus the manual bug rows run
+    // in one transaction; the QA stays out of every queue but its owner's
+    // history.
+    async saveReview({ id, reviewerId, body }) {
+      if (!reviewerId) {
+        throw new AppError(401, 'unauthenticated', 'Sign in to review a QA.');
+      }
+      assertNoUnknownFields(body, ['checklist', 'bugDevices', 'qaStatus', 'qaComment']);
+      const checklist = assertChecklist(body?.checklist, { complete: false });
+      const bugDevices = assertBugDevices(body?.bugDevices, checklist);
+      const qaStatus = body?.qaStatus !== undefined ? assertQaStatus(body.qaStatus) : undefined;
+      const qaComment = body?.qaComment !== undefined ? assertQaComment(body.qaComment) : undefined;
+
+      const manualBugs = manualBugsFromChecklist(checklist, bugDevices);
+      const affected = await withReviewWrite(pool, async (connection) => {
+        const rows = await qaRecordRepository.updateReview(connection, {
+          id,
+          reviewerId,
+          checklist,
+          qaStatus,
+          qaComment,
+        });
+        if (rows === 0) return 0;
+        await qaRecordRepository.replaceBugs(connection, id, 'manual', manualBugs);
+        return rows;
+      });
+      if (affected === 0) {
+        const refusal = await reviewRefusal(pool, id, reviewerId);
+        if (refusal) throw refusal;
+      }
+      const record = await qaRecordRepository.findById(pool, id);
+      if (!record) {
+        throw new AppError(404, 'not_found', 'QA record not found.');
+      }
+      return toShadowReviewShape(record);
+    },
+
+    // F5 "Cerrar QA" (D6, D7, D8, D20, D21, D24, D25): the whole manual
+    // checklist must be closed, the bugs come from the server's BUGS.md
+    // catalog — the tool's findings from the saved summary plus every item
+    // marked as bug — and from them the status and the comment are
+    // generated. The Shadow may edit both (D8) before confirming. One
+    // guarded UPDATE (reviewer_id + closed_at IS NULL) and the bug rows
+    // share a transaction: the record closes with everything it needs or
+    // not at all, and the closer is the session user (D6).
+    async closeReview({ id, reviewerId, body }) {
+      if (!reviewerId) {
+        throw new AppError(401, 'unauthenticated', 'Sign in to close a QA.');
+      }
+      assertNoUnknownFields(body, ['checklist', 'bugDevices', 'qaStatus', 'qaComment']);
+      // The record must exist: its summary feeds the tool bugs. Whether it
+      // may be closed is still decided by the guarded UPDATE below.
+      const existing = await qaRecordRepository.findById(pool, id);
+      if (!existing) {
+        throw new AppError(404, 'not_found', 'QA record not found.');
+      }
+
+      const checklist = assertChecklist(body?.checklist, { complete: true }); // D24
+      const bugDevices = assertBugDevices(body?.bugDevices, checklist);
+      const editedStatus = body?.qaStatus !== undefined ? assertQaStatus(body.qaStatus) : undefined;
+      const editedComment = body?.qaComment !== undefined ? assertQaComment(body.qaComment) : undefined;
+
+      const bugs = [
+        ...toolBugsFromSummary(existing.summary),
+        ...manualBugsFromChecklist(checklist, bugDevices),
+      ];
+      const generated = statusAndCommentFromBugs(bugs); // D21, D25, D20
+      const qaStatus = editedStatus ?? generated.status;
+      const qaComment = editedComment !== undefined ? editedComment : generated.comment;
+
+      const affected = await withReviewWrite(pool, async (connection) => {
+        const rows = await qaRecordRepository.closeRecord(connection, {
+          id,
+          reviewerId,
+          checklist,
+          qaStatus,
+          qaComment,
+          criticalCount: generated.counts.critical,
+          failedCount: generated.counts.failed,
+          opportunityCount: generated.counts.opportunity,
+        });
+        if (rows === 0) return 0;
+        // Insertion order = comment order (F1): tool findings first, then
+        // the manual marks, replacing whatever a draft save left behind.
+        await qaRecordRepository.replaceBugs(
+          connection,
+          id,
+          'tool',
+          bugs.filter((bug) => bug.source === 'tool')
+        );
+        await qaRecordRepository.replaceBugs(
+          connection,
+          id,
+          'manual',
+          bugs.filter((bug) => bug.source === 'manual')
+        );
+        return rows;
+      });
+      if (affected === 0) {
+        const refusal = await reviewRefusal(pool, id, reviewerId);
+        if (refusal) throw refusal;
+      }
+      const record = await qaRecordRepository.findById(pool, id);
+      if (!record) {
+        throw new AppError(404, 'not_found', 'QA record not found.');
+      }
+      return toShadowReviewShape(record);
     },
   };
 }

@@ -48,6 +48,7 @@ Respuestas de la usuaria del 2026-11-10 a las dudas pendientes:
 - **D30. FAIL-04 es el atributo alt** y lo revisa la herramienta (texto corregido en `BUGS.md`).
 - **D31. CSV:** el del Admin y el del Shadow tienen **las mismas columnas**; la lista la pasa la usuaria (Dudas 1).
 - **D33. El dueño ve su resumen desde "Mis QA"** (2026-11-12): con un clic en "Ver", también en QA pendientes. La revisión del Shadow sigue visible solo al cerrar (D10, F6).
+- **D34. Desactivar a un Shadow también libera sus QA** (2026-11-16, respuesta de la usuaria: "si deberian volverse pendientes"): si la Admin desactiva a un usuario `qa_shadow`, sus QA tomados y sin cerrar vuelven a pendientes igual que en D9 (misma transacción, mismo borrado). Los cerrados no se tocan.
 - **D32. Resumen legible para el Shadow** (2026-11-10, sobre F2): "TIENES QUE PONER EL RESULTADO QUE DA CADA SECCION POR LO MENOS EL RESUMEN Y EN LOS LINKS TIENE QUE MOSTRAR LOS FAILED SI NO EL SHADOW NO SABRA CUAL ES EL PROBLEMA SI GUARDAMOS INFO TAN AMBIGUA OBVIO NO TIENE QUE SER MUY EXPLICITO". Cada check guarda la misma línea de resultado que muestra su panel y el detalle de lo que falló (en links, cada link que falló con su código), cada hallazgo con su ID de bug y dispositivo.
 - **D20. Comentario: una línea por bug** con el formato `Dispositivo / Tipo / Severidad / Descripción`. Ejemplos literales de la usuaria: "M/D / Styling / Failed / Croppe Images" y "M/D / Instructions / Critical / The instructions was not followed as requested". `M/D` = mobile y desktop. Si hay más de un bug, se registra cada uno. El QA Shadow puede editar el comentario. El tipo de cada bug está en la columna **Type** de `BUGS.md` (agregada por Claude Code con criterio propio, a pedido de la usuaria): Styling, Images, Links, Anchors, H1, Inventory, SEO, Forms, Copy, Instructions.
 - **D7. Tabla de criterios (cargada en `BUGS.md`; regla del status en D21 y formato del comentario en D20):** los bugs manuales junto con los automáticos dan el estado final (Passed, Opportunity, Failed, Critical). La tabla de criterios se usa al cerrar el QA para categorizar el estado **y para generar el comentario**.
@@ -288,7 +289,7 @@ Consecuencia para F1: el resumen (D3) guarda cada hallazgo de la herramienta **c
 > - **Guarda de API:** F4 no monta rutas nuevas (la vista real es F5). El contrato queda probado con `requireRole('qa_shadow')` corriendo en un servidor HTTP real dentro de `qaRecordsShadow.test.js`: 401 sin sesión (default deny, antes que 403), 403 `forbidden` con `qa_engineer` o `admin`, `next()` con `qa_shadow`. F5 monta esa misma guarda en las rutas Shadow.
 > - **Vigencia del rol sin re-login:** `sessionMiddleware` lee `users` en **cada** request, así que el cambio de rol se aplica en el siguiente request con la misma cookie. Probado en los dos sentidos: 403 → (PATCH a `qa_shadow`) → 200 → (PATCH a `qa_engineer`) → 403, con `GET /api/auth/me` devolviendo 200 y el rol nuevo todo el tiempo.
 > - **D9 en la misma transacción:** `updateUser` abre transacción cuando el rol **sale** de `qa_shadow` y, antes del commit, `qaRecordRepository.releaseShadowReviews` borra los `qa_record_bugs` con `source='manual'` de los registros **abiertos** de ese revisor (`closed_at IS NULL`) y pone `reviewer_id`, `checklist`, `qa_comment` y `qa_status` en NULL. El DELETE va antes que el UPDATE porque el subconsulta lee `reviewer_id`. Los cerrados y los de otros Shadows no se tocan; los hallazgos `source='tool'` sobreviven (salen del run, no del revisor).
-> - **Solo la baja dispara la limpieza:** un rename, un PATCH con el mismo rol, o bajar el rol de un usuario que no es `qa_shadow` no ejecutan `releaseShadowReviews`. Desactivar una cuenta tampoco (pide "al quitarle el rol").
+> - **Solo la baja dispara la limpieza:** un rename, un PATCH con el mismo rol, o bajar el rol de un usuario que no es `qa_shadow` no ejecutan `releaseShadowReviews`. ~~Desactivar una cuenta tampoco (pide "al quitarle el rol").~~ **D34 (F5, 2026-11-21) la excepción:** desactivar (`isActive: false`) a un `qa_shadow` **activo** sí la ejecuta, en la misma transacción; ver F5.
 > - **Atomicidad:** vive en el código (una transacción, rollback si falla cualquiera de los dos pasos); los tests no fuerzan un fallo a mitad de camino, solo verifican el resultado conjunto.
 > - **Tests RED → GREEN:** `test/adminUsersApi.test.js` (3) — alta y cambio a `qa_shadow`, dos Shadow a la vez, y guardas admin vigentes (`self_change` con dos admins, `last_admin` con uno solo, 403 de todo el API para un Shadow). `test/qaRecordsShadow.test.js` (5) — página 302/403/403/200, guarda de API, siguiente request sin re-login, D9 completo (lo abierto se limpia, lo cerrado y lo de otros queda intacto, `tool` sobrevive) y "D9 solo al bajar el rol". `migrate.test.js` suma 006 y verifica el ENUM; `routeInventory.test.js` trata `shadow.html` como gated y por eso agrega un usuario `qa_shadow` a su seed. **Suite: 159/159.**
 > - `npm run migrate` aplicó 006 y es no-op al repetirlo.
@@ -305,22 +306,24 @@ Consecuencia para F1: el resumen (D3) guarda cada hallazgo de la herramienta **c
 - `test/qaRecordsShadow.test.js`
 
 **Tareas:**
-- [ ] `GET /api/qa-records`: lista de los QA **pendientes de revisar** de otras personas, con su owner; los propios no aparecen (D5).
-- [ ] Búsqueda por Task ID (un Task ID propio no aparece en los pendientes).
-- [ ] Los QA cerrados salen de la lista de pendientes, los haya cerrado quien sea (D14).
-- [ ] **Historial del Shadow:** lista de los QA que él revisó y cerró, con búsqueda por Task ID (D14).
-- [ ] Mostrar la nota que dejó el Engineer al guardar (D12).
-- [ ] Ítems del checklist manual tomados de `BUGS.md` (D15); el "QA Todo List" de `index.html` no se toca.
-- [ ] Botón **"Tomar"**: asigna el QA al Shadow de forma atómica (`UPDATE ... WHERE reviewer_id IS NULL`); si otro lo tomó antes → 409 (D10).
-- [ ] Un QA tomado sale de los pendientes de los demás Shadows; solo quien lo tomó puede editarlo y cerrarlo (403 para los demás).
-- [ ] Guardar el avance de la revisión sin cerrar, a nombre del Shadow (lo que se borra en D9, que además libera el QA).
-- [ ] Formulario con QA Comment, QA Status y checklist manual (Passed / Bug / N/A por ítem). Sin QA Link (D2).
-- [ ] El campo "QA Shadow" se guarda con el usuario de la sesión (D6); no se elige a mano.
-- [ ] Al cerrar, calcular el estado final y generar el comentario con la tabla de criterios de F0 (D7), a partir de los hallazgos automáticos (resumen D3) y del checklist manual.
-- [ ] Tabla de bugs en un solo lugar: el servidor tiene el catálogo de `BUGS.md` (ID → tipo y severidad) y toma el tipo y la severidad de ahí al cerrar. Hoy `QA_BUG_INFO` de `public/index.html` (F2) los copia para etiquetar los hallazgos; F5 deja de depender de esa copia.
-- [ ] El Shadow puede editar el status y el comentario generados antes de confirmar el cierre (D8).
-- [ ] Botón **"Cerrar QA"**: después del cierre no se puede editar nada (409 en cualquier cambio).
-- [ ] Revisar o cerrar un QA propio → 403 (D5).
+- [x] D34: desactivar a un `qa_shadow` (`isActive: false`) libera sus QA abiertos igual que quitarle el rol (D9), en la misma transacción (`adminUserService`, `releaseShadowReviews`).
+- [x] Guarda atómica del cambio de Task ID (pendiente de la revisión de F3): el `UPDATE` de `qaRecordRepository.updateTaskId` filtra `owner_id = ? AND closed_at IS NULL` y revisa `affectedRows`, para que un cierre simultáneo no deje editar un QA cerrado.
+- [x] `GET /api/qa-records`: lista de los QA **pendientes de revisar** de otras personas, con su owner; los propios no aparecen (D5).
+- [x] Búsqueda por Task ID (un Task ID propio no aparece en los pendientes).
+- [x] Los QA cerrados salen de la lista de pendientes, los haya cerrado quien sea (D14).
+- [x] **Historial del Shadow:** lista de los QA que él revisó y cerró, con búsqueda por Task ID (D14).
+- [x] Mostrar la nota que dejó el Engineer al guardar (D12). *(servidor: `note` viaja en cada fila de la cola; el render es la parte 2)*
+- [x] Ítems del checklist manual tomados de `BUGS.md` (D15); el "QA Todo List" de `index.html` no se toca. *(servidor: catálogo + validación; el formulario es la parte 2)*
+- [x] Botón **"Tomar"**: asigna el QA al Shadow de forma atómica (`UPDATE ... WHERE reviewer_id IS NULL`); si otro lo tomó antes → 409 (D10). *(el botón es la parte 2; la ruta `POST /:id/take` ya resuelve)*
+- [x] Un QA tomado sale de los pendientes de los demás Shadows; solo quien lo tomó puede editarlo y cerrarlo (403 para los demás).
+- [x] Guardar el avance de la revisión sin cerrar, a nombre del Shadow (lo que se borra en D9, que además libera el QA).
+- [ ] Formulario con QA Comment, QA Status y checklist manual (Passed / Bug / N/A por ítem). Sin QA Link (D2). — **parte 2 (pantalla)**
+- [x] El campo "QA Shadow" se guarda con el usuario de la sesión (D6); no se elige a mano.
+- [x] Al cerrar, calcular el estado final y generar el comentario con la tabla de criterios de F0 (D7), a partir de los hallazgos automáticos (resumen D3) y del checklist manual.
+- [x] Tabla de bugs en un solo lugar: el servidor tiene el catálogo de `BUGS.md` (ID → tipo y severidad) y toma el tipo y la severidad de ahí al cerrar. Hoy `QA_BUG_INFO` de `public/index.html` (F2) los copia para etiquetar los hallazgos; F5 deja de depender de esa copia.
+- [x] El Shadow puede editar el status y el comentario generados antes de confirmar el cierre (D8). *(servidor: `qaStatus`/`qaComment` opcionales en el cierre; el formulario es la parte 2)*
+- [x] Botón **"Cerrar QA"**: después del cierre no se puede editar nada (409 en cualquier cambio). *(el botón es la parte 2; la guarda ya responde 409)*
+- [x] Revisar o cerrar un QA propio → 403 (D5).
 
 **Criterios de aceptación:**
 - Solo el rol `qa_shadow` usa estas rutas.
@@ -335,6 +338,21 @@ Consecuencia para F1: el resumen (D3) guarda cada hallazgo de la herramienta **c
 2. Buscar un Task ID que el Shadow guardó en una semana anterior → no aparece.
 3. Completar el checklist, ver el estado y el comentario propuestos, editar los dos y cerrar.
 4. Intentar editar otra vez (como Shadow y como Engineer) → bloqueado.
+
+> **Parte servidor hecha el 2026-11-21** (la pantalla `shadow.html`/`shadow.js` queda para la parte 2). Decisiones de implementación:
+> - **Rutas** (`src/routes/qaRecordRoutes.js`): `GET /` (cola + `?taskId=`), `GET /history` (`?taskId=`), `POST /:id/take`, `PATCH /:id/review` y `POST /:id/close` van detrás de `requireRole('qa_shadow')`; `POST /`, `GET /mine` y `PATCH /:id` siguen **sin guarda de rol** (D5), sin cambios. `/history` se registra antes de cualquier `/:id` (F6 agregará `GET /:id`).
+> - **Cola** (D5/D10/D14): `WHERE closed_at IS NULL AND owner_id <> yo AND (reviewer_id IS NULL OR reviewer_id = yo)` — el QA que tomé sigue visible para mí y sale de los demás; los cerrados salen de todos. Trae `ownerFullName` (JOIN con `users`) y el `note` del Engineer (D12). La búsqueda es `task_id = ?` exacto con el Task ID en mayúsculas (D22); mal formado → 400.
+> - **Historial** (D14): `WHERE reviewer_id = yo AND closed_at IS NOT NULL`, el más reciente primero, con la misma búsqueda.
+> - **Atómico, sin lectura previa** (como pidió la fase): `take` = `UPDATE ... WHERE id = ? AND reviewer_id IS NULL AND closed_at IS NULL AND owner_id <> ?`; `review` y `close` = `WHERE id = ? AND reviewer_id = ? AND closed_at IS NULL`. Con `affectedRows = 0` la clasificación se hace con una lectura posterior: 404 inexistente, 403 propio (D5), 409 `record_closed`, 403 ajeno, 409 `not_taken` (hay que tomarlo primero), 409 `already_taken`. Un `take` repetido del mismo Shadow es idempotente (200).
+> - **Guardar avance y cerrar comparten transacción** con sus filas de `qa_record_bugs` (`withReviewWrite`): o se guarda todo o nada, así el registro y sus bugs nunca quedan a medias. Se reemplazan solo las filas de la fuente que toca (`manual` en el avance, `manual` + `tool` al cerrar).
+> - **Formato del avance:** `checklist` = mapa ítem → `passed` / `bug` / `n/a` con los 12 ítems de F0 (parcial en el avance, completo en el cierre, D24); `bugDevices` = mapa ítem → `M` / `D` / `M/D`, **obligatorio para cada ítem marcado `bug`** (D21); `qaStatus` y `qaComment` opcionales como borrador del cierre (D8) — por eso `releaseShadowReviews` (D9) limpia esas dos columnas.
+> - **Cierre:** los bugs entran en este orden — hallazgos del resumen con `bugId` que el catálogo conoce (en el orden de los checks) y después los ítems manuales en orden F0 — que es exactamente el orden de inserción en `qa_record_bugs`, así el comentario (D20) y los `qa_record_bugs` coinciden. Los hallazgos con `bugId: null` (los casos de H1 sin id único de F2) **no entran** al status ni al comentario: no tienen fila en la tabla de criterios. Estado D21/D25 (`Passed` sin comentario si no hay bugs), `qaStatus`/`qaComment` del cuerpo los reemplazan (D8), conteos en las tres columnas, `closed_by` = `reviewer_id` = usuario de la sesión (D6).
+> - **Catálogo nuevo:** `src/services/qaBugCatalog.js` con `QA_BUGS` (los 21 bugs de `BUGS.md`: nombre, tipo, severidad), `MANUAL_CHECKLIST` (los 12 de F0) y los tres builders (`manualBugsFromChecklist`, `toolBugsFromSummary`, `statusAndCommentFromBugs`). Tipo y severidad salen **siempre** del catálogo, nunca del payload: la copia `QA_BUG_INFO` del navegador queda solo para etiquetar la pantalla (F2).
+> - **Validación antes que estado:** un payload inválido responde 400 aunque el registro esté cerrado; el 409 aplica a ediciones con forma válida (los tests usan un payload válido para probar los 409/403).
+> - **D34:** `isActive: false` sobre un usuario `qa_shadow` **activo** dispara `releaseShadowReviews` en la misma transacción del PATCH (junto con la revocación de sesiones); no cambia el rol, y una re-activación o la desactivación de un que no es Shadow no la dispara.
+> - **`updateTaskId` atómico:** el `UPDATE` filtra `owner_id = ? AND closed_at IS NULL` y devuelve `null` con `affectedRows = 0`; el servicio relee para responder 404 / 409 `record_closed` (o el no-op si otro guardó el mismo Task ID en el medio).
+> - **Tests:** 13 nuevos en `test/qaRecordsShadow.test.js` (RED → GREEN), uno por criterio de aceptación: guarda de las 5 rutas, cola + búsqueda (propio/cerrado/ajeno tomado), historial, carrera de `take` (409 `already_taken`), avance (409/403/400 + bugs `manual`), cierre `Passed` sin comentario (D25), un bug manual (D20/D21), tool + manual con catálogo mandando sobre el payload, edición D8, D24 completo, bloqueo posterior al cierre con `closed_by`, D34 completo y la guarda de `updateTaskId`. **Suite: 172/172.**
+> - **Abierto (parte 2):** D26/D27 — cómo persiste el servidor el N/A opcional sobre un hallazgo automático (hoy todo hallazgo con `bugId` cuenta) y la explicación del N/A del checklist (hoy el checklist guarda solo el estado). Ninguna tarea de F5 ni su aceptación lo piden; definirlo antes de armar el formulario.
 
 ---
 
@@ -419,7 +437,7 @@ Consecuencia para F1: el resumen (D3) guarda cada hallazgo de la herramienta **c
 | F2 Guardar QA | completada 2026-11-10 y corregida en la revisión (D22 una letra, D32 resumen legible con `result`, `found` y hallazgos `{ bugId, device, text }`); 10 tests en `qaRecordsApi.test.js`; suite 141/142 (fallo intermitente `EPIPE` de `create-admin`, ajeno a F2) | — (sin commit) |
 | F3 Vista Engineer | completada 2026-11-12: `GET /mine` (mes de Bolivia D13), `PATCH /:id` (solo owner, solo taskId), 404 ajeno, 409 duplicado y 409 cerrado, pantalla `my-qa.html`/`my-qa.js` con link "Mis QA" en `index.html`; 18 tests en `qaRecordsApi.test.js`, suite 150/150 | — (sin commit) |
 | F4 Rol QA Shadow | completada 2026-11-16: migración 006 (ENUM con `qa_shadow`, sin DROP), `USER_ROLES` y selector de rol, `requirePageRole` para `shadow.html`, guarda `requireRole('qa_shadow')` para F5, D9 en la misma transacción; RED → GREEN, `npm run migrate` no-op al repetir, suite 159/159 | — (sin commit, a pedido) |
-| F5 Vista Shadow y cierre | pendiente; depende de F0 y F4 (F4 lista) | — |
+| F5 Vista Shadow y cierre | **servidor completado 2026-11-21**: 5 rutas con `requireRole('qa_shadow')`, cola/historial/búsqueda, `take`/`review`/`close` atómicos, catálogo `qaBugCatalog.js` (D7/D20/D21/D25), D8, D24, D34 y guarda de `updateTaskId`; 13 tests nuevos en `qaRecordsShadow.test.js` (RED → GREEN), suite 172/172; decisiones anotadas arriba. **Pantalla pendiente (parte 2)**: `shadow.html`/`shadow.js`. Dependencias F0 y F4 listas | — (sin commit, a pedido) |
 | F6 Resultado y PDF para el Engineer | pendiente; decidido (D2) | — |
 | F7 Vista Admin y CSV | pendiente; Duda 1 | — |
 | F8 Borrado mensual | pendiente; decidido (D4) | — |
