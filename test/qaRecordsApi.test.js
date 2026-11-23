@@ -627,11 +627,40 @@ test('the Ver button shows the summary by section and the note, without innerHTM
   assert.match(js, /dataset\.action === 'ver'/);
   assert.match(js, /record\.summary/);
   assert.match(js, /record\.note/);
-  // One line per finding: bugId · type · severity · device · text (D33).
-  assert.match(js, /bugId/);
-  assert.match(js, /' · '/);
+  // Findings are drawn by the shared renderer (qa-view.js), loaded first:
+  // chips for bugId, severity and device plus the text (D33).
+  assert.match(html, /src="qa-view\.js"[\s\S]*src="my-qa\.js"/);
+  assert.match(js, /QaView\.findingContent/);
+  const view = fs.readFileSync(path.join(PUBLIC_DIR, 'qa-view.js'), 'utf8');
+  for (const field of ['bugId', 'severity', 'device', 'text']) {
+    assert.ok(view.includes(`item.${field}`), `qa-view.js must render item.${field}`);
+  }
+  assert.doesNotMatch(view, /innerHTML|insertAdjacentHTML|outerHTML/);
   // Escaping rule: the data is never injected as HTML.
   assert.doesNotMatch(js, /innerHTML/);
   assert.doesNotMatch(js, /insertAdjacentHTML/);
   assert.doesNotMatch(js, /outerHTML/);
+});
+
+// The tool paints some H1 results orange (only an sr-only H1, or an H1
+// that differs from the sr-only one): a warning, not a failure. The summary
+// keeps that as `warn` so every view shows it orange, never as Failed.
+test('the summary accepts a warn status for checks the tool shows in orange', { skip: skipReason }, async (t) => {
+  const { base, pool, cookie } = await seedAndLogin(t);
+  const summary = summaryFixture();
+  summary.checks.h1 = {
+    status: 'warn',
+    result: 'No visible H1 found, only sr-only H1 is present',
+    items: [{ bugId: null, device: 'D', text: 'Only sr-only H1: New Ford Maverick' }],
+  };
+
+  const response = await request(
+    base, 'POST', '/api/qa-records',
+    saveBody({ taskId: 'D-400001', summary }),
+    cookieHeader(cookie)
+  );
+
+  assert.equal(response.status, 201);
+  const stored = await qaRecordRepository.findByTaskId(pool, 'D-400001');
+  assert.equal(stored.summary.checks.h1.status, 'warn');
 });

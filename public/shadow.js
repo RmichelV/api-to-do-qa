@@ -162,40 +162,9 @@ function fieldOrDash(value) {
   return value === null || value === undefined || value === '' ? '—' : String(value);
 }
 
-// One line per finding: `bugId · type · severity · device · text` (D32).
-function findingLine(item) {
-  if (typeof item === 'string') return item;
-  if (!isPlainObject(item)) return String(item);
-  const fields = [item.bugId, item.type, item.severity, item.device, item.text];
-  const hasFields = fields.some((value) => value !== null && value !== undefined && value !== '');
-  if (!hasFields) {
-    return Object.entries(item)
-      .map(([key, value]) => `${key}: ${value}`)
-      .join(', ');
-  }
-  return fields.map(fieldOrDash).join(' · ');
-}
-
-function statusBadgeClass(status) {
-  if (status === 'pass') return 'admin-badge--on';
-  if (status === 'fail') return 'admin-badge--off';
-  return 'admin-badge--closed';
-}
-
 function linkCell(pageUrl) {
   const cell = document.createElement('td');
-  // Defense in depth: the server only stores http(s) URLs, but a link is
-  // built only for those; anything else is shown as plain text.
-  if (/^https?:\/\//i.test(String(pageUrl))) {
-    const link = document.createElement('a');
-    link.href = pageUrl;
-    link.target = '_blank';
-    link.rel = 'noreferrer noopener';
-    link.textContent = pageUrl;
-    cell.append(link);
-  } else {
-    cell.textContent = fieldOrDash(pageUrl);
-  }
+  cell.append(QaView.pageLink(pageUrl));
   return cell;
 }
 
@@ -229,9 +198,7 @@ function buildFinding(checkName, item, index, { editable, na }) {
   const entry = document.createElement('li');
   entry.dataset.naKey = key;
 
-  const text = document.createElement('span');
-  text.textContent = findingLine(item);
-  entry.append(text);
+  entry.append(QaView.findingContent(item));
 
   const countable = isPlainObject(item) && Boolean(QA_BUGS[item.bugId]);
   const marked = Boolean(na && Object.hasOwn(na, key));
@@ -275,15 +242,7 @@ function buildSection(name, check, options) {
   const section = document.createElement('section');
   section.className = 'myqa-section';
 
-  const heading = document.createElement('h4');
-  const label = document.createElement('span');
-  label.className = 'myqa-section__name';
-  label.textContent = name;
-  const badge = document.createElement('span');
-  badge.className = `admin-badge ${statusBadgeClass(check?.status)}`;
-  badge.textContent = fieldOrDash(check?.status);
-  heading.append(label, badge);
-  section.append(heading);
+  section.append(QaView.sectionHeading(name, check));
 
   if (check?.result) {
     const result = document.createElement('p');
@@ -306,10 +265,20 @@ function buildSection(name, check, options) {
 // for a closed QA (where the stored N/A marks are shown as they were saved).
 function renderSummary(record, { editable, na = null }) {
   const checks = record?.summary?.checks;
-  const sections = isPlainObject(checks)
-    ? Object.entries(checks).map(([name, check]) => buildSection(name, check, { editable, na }))
-    : [textParagraph('admin-empty', 'This QA has no saved summary.')];
-  reviewSummary.replaceChildren(...sections);
+  if (!isPlainObject(checks)) {
+    reviewSummary.replaceChildren(textParagraph('admin-empty', 'This QA has no saved summary.'));
+    return;
+  }
+  // Failed sections first: that is where the Shadow has work to do. The
+  // N/A keys stay `<check>#<index>`, so the order changes nothing the
+  // server sees.
+  const entries = Object.entries(checks).sort(
+    ([nameA, a], [nameB, b]) => QaView.statusRank(nameA, a) - QaView.statusRank(nameB, b)
+  );
+  const grid = document.createElement('div');
+  grid.className = 'qa-sections';
+  grid.append(...entries.map(([name, check]) => buildSection(name, check, { editable, na })));
+  reviewSummary.replaceChildren(QaView.overview(checks), grid);
 }
 
 function textParagraph(className, text) {
@@ -326,7 +295,28 @@ function selectedState(itemId) {
 }
 
 function deviceValue(itemId) {
-  return reviewChecklist.querySelector(`select[data-device="${itemId}"]`)?.value ?? '';
+  return reviewChecklist.querySelector(`input[name="sh-dev-${itemId}"]:checked`)?.value ?? '';
+}
+
+// One segmented control: radios styled as joined buttons (.qa-seg).
+function segmented(name, options, selected, label) {
+  const group = document.createElement('div');
+  group.className = 'qa-seg';
+  group.setAttribute('role', 'radiogroup');
+  group.setAttribute('aria-label', label);
+  for (const option of options) {
+    const wrap = document.createElement('label');
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = name;
+    input.value = option.value;
+    input.checked = selected === option.value;
+    const text = document.createElement('span');
+    text.textContent = option.label;
+    wrap.append(input, text);
+    group.append(wrap);
+  }
+  return group;
 }
 
 function buildChecklistRow(itemId, state, { editable, device: savedDevice = '' }) {
@@ -341,7 +331,9 @@ function buildChecklistRow(itemId, state, { editable, device: savedDevice = '' }
   item.append(id, name);
 
   const result = document.createElement('td');
+  result.className = 'qa-nowrap';
   const device = document.createElement('td');
+  device.className = 'qa-nowrap';
 
   if (!editable) {
     // Read-only (a closed QA): the state as a badge. The device of a
@@ -364,42 +356,25 @@ function buildChecklistRow(itemId, state, { editable, device: savedDevice = '' }
     return row;
   }
 
-  const group = document.createElement('div');
-  group.className = 'admin-row';
-  for (const option of CHECK_STATES) {
-    const label = document.createElement('label');
-    label.className = 'toggle-label';
-    const input = document.createElement('input');
-    input.type = 'radio';
-    input.name = `sh-${itemId}`;
-    input.value = option.value;
-    input.checked = state === option.value;
-    const text = document.createElement('span');
-    text.textContent = option.label;
-    label.append(input, text);
-    group.append(label);
-  }
-  result.append(group);
+  result.append(segmented(`sh-${itemId}`, CHECK_STATES, state, `Result for ${itemId}`));
 
-  // D21: the device is only meaningful for a Bug, so the select starts
-  // disabled and wakes up with the "Bug" radio.
-  const select = document.createElement('select');
-  select.dataset.device = itemId;
-  select.setAttribute('aria-label', `Device for ${itemId}`);
-  select.disabled = state !== 'bug';
-  const placeholder = document.createElement('option');
-  placeholder.value = '';
-  placeholder.textContent = '—';
-  select.append(placeholder);
-  for (const value of BUG_DEVICES) {
-    const option = document.createElement('option');
-    option.value = value;
-    option.textContent = value;
-    select.append(option);
-  }
-  // A saved draft refills its device ("Guardar avance" survives a reload).
-  if (savedDevice) select.value = savedDevice;
-  device.append(select);
+  // D21: the device only matters for a Bug, so its choice appears with the
+  // "Bug" button and a short hint stands in for it otherwise.
+  const devices = segmented(
+    `sh-dev-${itemId}`,
+    BUG_DEVICES.map((value) => ({ value, label: value })),
+    state === 'bug' ? savedDevice : '',
+    `Device for ${itemId}`
+  );
+  devices.classList.add('qa-seg--device');
+  devices.dataset.device = itemId;
+  devices.hidden = state !== 'bug';
+  const hint = document.createElement('span');
+  hint.className = 'qa-device-hint';
+  hint.dataset.deviceHint = itemId;
+  hint.textContent = '—';
+  hint.hidden = state === 'bug';
+  device.append(devices, hint);
 
   row.append(item, result, device);
   return row;
@@ -528,16 +503,7 @@ function setBusy(busy) {
 
 function showRecordHead(record) {
   reviewTitle.textContent = `${mode === 'edit' ? 'Reviewing' : 'Closed QA'} ${record.taskId}`;
-  if (/^https?:\/\//i.test(String(record.pageUrl))) {
-    const link = document.createElement('a');
-    link.href = record.pageUrl;
-    link.target = '_blank';
-    link.rel = 'noreferrer noopener';
-    link.textContent = record.pageUrl;
-    reviewUrl.replaceChildren(link);
-  } else {
-    reviewUrl.textContent = fieldOrDash(record.pageUrl);
-  }
+  reviewUrl.replaceChildren(QaView.pageLink(record.pageUrl, { compact: false }));
   reviewOwner.textContent = record.ownerFullName ? `Owner: ${record.ownerFullName}` : 'Owner: —';
   reviewNote.textContent = record.note
     ? String(record.note)
@@ -680,6 +646,7 @@ function buildPendingRow(record) {
   row.dataset.id = record.id;
 
   const taskId = document.createElement('td');
+  taskId.className = 'qa-nowrap';
   const value = document.createElement('span');
   value.className = 'myqa-task-id';
   value.textContent = record.taskId;
@@ -689,19 +656,17 @@ function buildPendingRow(record) {
   owner.textContent = fieldOrDash(record.ownerFullName);
 
   const saved = document.createElement('td');
+  saved.className = 'qa-nowrap';
   saved.textContent = formatDate(record.createdAt);
 
   // The queue only holds other people's open QAs and the ones this Shadow
-  // took (D5/D10): a row with a reviewer is theirs, so it says "Revisar".
+  // took (D5/D10): a QA this Shadow already took says "Revisar" instead of "Tomar".
   const action = document.createElement('td');
-  action.className = 'admin-row';
-  if (record.reviewerId) {
-    const badge = document.createElement('span');
-    badge.className = 'admin-badge admin-badge--on';
-    badge.textContent = 'Yours';
-    action.append(badge);
-  }
-  action.append(actionButton(record.reviewerId ? 'Revisar' : 'Tomar', 'take'));
+  action.className = 'qa-nowrap';
+  const actions = document.createElement('div');
+  actions.className = 'qa-actions';
+  action.append(actions);
+  actions.append(actionButton(record.reviewerId ? 'Revisar' : 'Tomar', 'take'));
 
   row.append(taskId, linkCell(record.pageUrl), owner, saved, action);
   return row;
@@ -720,6 +685,7 @@ function buildHistoryRow(record) {
   row.dataset.id = record.id;
 
   const taskId = document.createElement('td');
+  taskId.className = 'qa-nowrap';
   const value = document.createElement('span');
   value.className = 'myqa-task-id';
   value.textContent = record.taskId;
@@ -729,14 +695,18 @@ function buildHistoryRow(record) {
   owner.textContent = fieldOrDash(record.ownerFullName);
 
   const closed = document.createElement('td');
+  closed.className = 'qa-nowrap';
   closed.textContent = formatDate(record.closedAt);
 
   const status = document.createElement('td');
   status.textContent = fieldOrDash(record.qaStatus);
 
   const action = document.createElement('td');
-  action.className = 'admin-row';
-  action.append(actionButton('Ver', 'view'));
+  action.className = 'qa-nowrap';
+  const actions = document.createElement('div');
+  actions.className = 'qa-actions';
+  action.append(actions);
+  actions.append(actionButton('Ver', 'view'));
 
   row.append(taskId, owner, closed, status, action);
   return row;
@@ -817,17 +787,21 @@ reviewSummary.addEventListener('click', (event) => {
 
 reviewChecklist.addEventListener('change', (event) => {
   const target = event.target;
-  if (target.matches('input[type="radio"]')) {
-    const select = target.closest('tr')?.querySelector('select[data-device]');
-    if (select) {
-      const isBug = target.value === 'bug';
-      select.disabled = !isBug;
-      if (!isBug) select.value = '';
+  if (!target.matches('input[type="radio"]')) return;
+  if (!target.name.startsWith('sh-dev-')) {
+    // A result changed: show the device choice only for a Bug (D21) and
+    // forget the device when the item stops being one.
+    const row = target.closest('tr');
+    const devices = row?.querySelector('[data-device]');
+    const hint = row?.querySelector('[data-device-hint]');
+    const isBug = target.value === 'bug';
+    if (devices) {
+      devices.hidden = !isBug;
+      if (!isBug) devices.querySelectorAll('input').forEach((input) => { input.checked = false; });
     }
-    recomputePreview();
-    return;
+    if (hint) hint.hidden = isBug;
   }
-  if (target.matches('select[data-device]')) recomputePreview();
+  recomputePreview();
 });
 
 statusInput.addEventListener('input', () => {

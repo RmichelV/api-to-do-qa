@@ -10,7 +10,7 @@
 // so the same Task ID can never be claimed twice by anyone.
 //
 // The summary is the D3 shape validated here before it reaches the JSON
-// column: version + checks, each check `pass` / `fail` / `not_run` with
+// column: version + checks, each check `pass` / `warn` / `fail` / `not_run` with
 // counts, at most 20 items of at most 200 characters, and at most 16 KB for
 // the whole record.
 //
@@ -40,7 +40,9 @@ const MAX_TASK_ID_LENGTH = 50; // column task_id VARCHAR(50)
 const MAX_PAGE_URL_LENGTH = 2048; // column page_url VARCHAR(2048)
 const MAX_NOTE_LENGTH = 2000; // bounded so a note never blows up TEXT
 const MAX_SUMMARY_BYTES = 16 * 1024; // D3: 16 KB per record
-const CHECK_STATUSES = Object.freeze(['pass', 'fail', 'not_run']);
+// `warn` is the tool's orange result (e.g. only an sr-only H1): shown as a
+// warning, never as Failed.
+const CHECK_STATUSES = Object.freeze(['pass', 'warn', 'fail', 'not_run']);
 const MAX_ITEMS_PER_CHECK = 20; // D3
 const MAX_ITEM_LENGTH = 200; // D3
 const MAX_QA_STATUS_LENGTH = 255; // column qa_status VARCHAR(255)

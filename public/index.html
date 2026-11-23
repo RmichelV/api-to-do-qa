@@ -544,7 +544,8 @@
         let result;
         if (count === 0) {
           result = {
-            status: "fail",
+            // Orange in the panel when an sr-only H1 exists; red when there is none.
+            status: srOnlyText ? "warn" : "fail",
             result: srOnlyText ? "No visible H1 found, only sr-only H1 is present" : "No H1 was found",
             total: 0,
             failed: 0,
@@ -560,7 +561,7 @@
           };
         } else if (srOnlyText && normalizeStr(texts[0]) !== normalizeStr(srOnlyText)) {
           result = {
-            status: "fail",
+            status: "warn", // orange in the panel, not a failure
             result: "H1 and sr-only H1 are different",
             total: 1,
             failed: 0,

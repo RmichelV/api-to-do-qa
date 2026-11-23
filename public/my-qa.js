@@ -66,19 +66,24 @@ function actionButton(label, action, variant = 'ctrl-btn--link') {
 
 function taskIdCell(record) {
   const cell = document.createElement('td');
+  cell.className = 'qa-nowrap';
   cell.dataset.role = 'task-id';
   const value = document.createElement('span');
   value.className = 'myqa-task-id';
   value.textContent = record.taskId;
   cell.append(value);
   if (!record.closedAt) {
-    cell.append(actionButton('Edit Task ID', 'edit'));
+    const wrap = document.createElement('div');
+    wrap.className = 'qa-actions qa-actions--below';
+    wrap.append(actionButton('Edit Task ID', 'edit'));
+    cell.append(wrap);
   }
   return cell;
 }
 
 function statusCell(record) {
   const cell = document.createElement('td');
+  cell.className = 'qa-nowrap';
   const badge = document.createElement('span');
   badge.className = `admin-badge ${record.closedAt ? 'admin-badge--closed' : 'admin-badge--on'}`;
   badge.textContent = record.closedAt ? 'Closed' : 'Open';
@@ -89,8 +94,11 @@ function statusCell(record) {
 // D33: every row can open the read-only view of its saved QA.
 function actionCell() {
   const cell = document.createElement('td');
-  cell.className = 'admin-row';
-  cell.append(actionButton('Ver', 'ver'));
+  cell.className = 'qa-nowrap';
+  const wrap = document.createElement('div');
+  wrap.className = 'qa-actions';
+  wrap.append(actionButton('Ver', 'ver'));
+  cell.append(wrap);
   return cell;
 }
 
@@ -99,20 +107,10 @@ function buildRow(record) {
   row.dataset.id = record.id;
 
   const page = document.createElement('td');
-  // Defense in depth: the server only stores http(s) URLs, but a link is
-  // built only for those; anything else is shown as plain text.
-  if (/^https?:\/\//i.test(record.pageUrl)) {
-    const link = document.createElement('a');
-    link.href = record.pageUrl;
-    link.target = '_blank';
-    link.rel = 'noreferrer noopener';
-    link.textContent = record.pageUrl;
-    page.append(link);
-  } else {
-    page.textContent = record.pageUrl;
-  }
+  page.append(QaView.pageLink(record.pageUrl));
 
   const saved = document.createElement('td');
+  saved.className = 'qa-nowrap';
   saved.textContent = formatDate(record.createdAt);
 
   row.append(taskIdCell(record), page, saved, statusCell(record), actionCell());
@@ -192,38 +190,9 @@ async function patchTaskId(record, rawTaskId, saveButton, cancelButton) {
 
 // ── D33: read-only view of the saved QA ────────────────────────────────
 // The list already carries `summary` and `note`, so the view never asks the
-// server again. Every string reaches the DOM through textContent: saved
-// summaries and notes are user data and are never parsed as HTML.
-function isPlainObject(value) {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function fieldOrDash(value) {
-  return value === null || value === undefined || value === '' ? '—' : String(value);
-}
-
-// One line per finding: `bugId · type · severity · device · text`. A string
-// finding is shown as-is; an object without those fields falls back to its
-// own key/value pairs instead of a row of dashes.
-function findingLine(item) {
-  if (typeof item === 'string') return item;
-  if (!isPlainObject(item)) return String(item);
-  const fields = [item.bugId, item.type, item.severity, item.device, item.text];
-  const hasFields = fields.some((value) => value !== null && value !== undefined && value !== '');
-  if (!hasFields) {
-    return Object.entries(item)
-      .map(([key, value]) => `${key}: ${value}`)
-      .join(', ');
-  }
-  return fields.map(fieldOrDash).join(' · ');
-}
-
-function statusBadgeClass(status) {
-  if (status === 'pass') return 'admin-badge--on';
-  if (status === 'fail') return 'admin-badge--off';
-  return 'admin-badge--closed';
-}
-
+// server again. Sections and findings are drawn by QaView (qa-view.js),
+// the same renderer as the QA Shadow screen; every string reaches the DOM
+// through textContent, never as HTML.
 function textParagraph(className, text) {
   const paragraph = document.createElement('p');
   paragraph.className = className;
@@ -231,21 +200,12 @@ function textParagraph(className, text) {
   return paragraph;
 }
 
-// One block per section: name + status badge, the result line the panel
-// shows and its findings. A section without findings only shows the result.
+// One block per section: readable name + status, the result line the
+// panel shows and its findings (bugId · severity · device chips + text).
 function buildSection(name, check) {
   const section = document.createElement('section');
   section.className = 'myqa-section';
-
-  const heading = document.createElement('h4');
-  const label = document.createElement('span');
-  label.className = 'myqa-section__name';
-  label.textContent = name;
-  const badge = document.createElement('span');
-  badge.className = `admin-badge ${statusBadgeClass(check?.status)}`;
-  badge.textContent = fieldOrDash(check?.status);
-  heading.append(label, badge);
-  section.append(heading);
+  section.append(QaView.sectionHeading(name, check));
 
   if (check?.result) section.append(textParagraph('myqa-section__result', String(check.result)));
 
@@ -255,7 +215,7 @@ function buildSection(name, check) {
     list.className = 'myqa-findings';
     for (const item of items) {
       const entry = document.createElement('li');
-      entry.textContent = findingLine(item);
+      entry.append(QaView.findingContent(item));
       list.append(entry);
     }
     section.append(list);
@@ -265,16 +225,25 @@ function buildSection(name, check) {
 
 function openView(record) {
   viewTitle.textContent = record.taskId;
-  viewUrl.textContent = record.pageUrl;
+  viewUrl.replaceChildren(QaView.pageLink(record.pageUrl, { compact: false }));
   viewNote.textContent = record.note
     ? String(record.note)
     : 'No note was left for the QA Shadow.';
+  viewNote.classList.toggle('admin-note', !record.note);
 
   const checks = record.summary?.checks;
-  const sections = isPlainObject(checks)
-    ? Object.entries(checks).map(([name, check]) => buildSection(name, check))
-    : [textParagraph('admin-empty', 'This QA has no saved summary.')];
-  viewSections.replaceChildren(...sections);
+  if (QaView.isPlainObject(checks)) {
+    // Failed sections first: that is what the reader is looking for.
+    const entries = Object.entries(checks).sort(
+      ([nameA, a], [nameB, b]) => QaView.statusRank(nameA, a) - QaView.statusRank(nameB, b)
+    );
+    const grid = document.createElement('div');
+    grid.className = 'qa-sections';
+    grid.append(...entries.map(([name, check]) => buildSection(name, check)));
+    viewSections.replaceChildren(QaView.overview(checks), grid);
+  } else {
+    viewSections.replaceChildren(textParagraph('admin-empty', 'This QA has no saved summary.'));
+  }
 
   if (typeof viewDialog.showModal === 'function') viewDialog.showModal();
   else viewDialog.setAttribute('open', '');
