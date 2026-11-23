@@ -50,11 +50,6 @@ body {
 
 .topbar__title { font-size: 1rem; }
 
-.topbar__nav {
-  display: flex;
-  gap: 0.4rem;
-}
-
 .ctrl-btn {
   padding: 0.3rem 0.75rem;
   font-size: 0.76rem;
@@ -75,16 +70,6 @@ body {
 .ctrl-btn--pdf   { background: #16a34a; }
 .ctrl-btn--todo  { background: #0ea5e9; }
 
-/* ── Auth top bar (T7) ── */
-.topbar__auth {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-left: 0.75rem;
-  padding-left: 0.75rem;
-  border-left: 1px solid #e5e7eb;
-}
-
 .topbar__user {
   font-size: 0.76rem;
   font-weight: 600;
@@ -103,6 +88,149 @@ body {
 }
 
 .ctrl-btn--logout { background: #dc2626; }
+/* ── Main navigation (shared by every protected page) ── */
+/* Anchor targets (e.g. Review › History) clear the fixed top bar. */
+h2[id], section[id] { scroll-margin-top: 72px; }
+a.topbar__brand { text-decoration: none; flex-shrink: 0; }
+.topbar__inner { gap: 1rem; justify-content: flex-start; }
+
+.app-nav { display: flex; align-items: center; gap: 0.25rem; flex: 1; }
+
+.nav-menu { position: relative; }
+.nav-menu > summary { list-style: none; }
+.nav-menu > summary::-webkit-details-marker { display: none; }
+
+.nav-menu__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.nav-menu__trigger::after {
+  content: "";
+  width: 0.4rem;
+  height: 0.4rem;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  opacity: 0.55;
+  transition: transform 0.15s;
+}
+.nav-menu[open] > .nav-menu__trigger::after { transform: translateY(1px) rotate(225deg); }
+.nav-menu__trigger:hover,
+.nav-menu[open] > .nav-menu__trigger { background: #f3f4f6; color: #111827; }
+.nav-menu__trigger:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+/* The group of the page on screen. */
+.nav-menu--current > .nav-menu__trigger { color: #1d4ed8; box-shadow: inset 0 -2px 0 #2563eb; border-radius: 6px 6px 0 0; }
+
+.nav-menu__panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 15rem;
+  padding: 0.35rem;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+  z-index: 120;
+}
+.nav-menu__panel--right { left: auto; right: 0; }
+
+.nav-menu__item {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #111827;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.nav-menu__item small { display: block; font-size: 0.74rem; font-weight: 400; color: #6b7280; }
+.nav-menu__item:hover,
+.nav-menu__item:focus-visible { background: #eff6ff; color: #1d4ed8; outline: none; }
+.nav-menu__item[aria-current="page"] { background: #eff6ff; color: #1d4ed8; }
+.nav-menu__item--danger { color: #b91c1c; }
+.nav-menu__item--danger:hover,
+.nav-menu__item--danger:focus-visible { background: #fef2f2; color: #991b1b; }
+
+.nav-menu__meta {
+  padding: 0.4rem 0.65rem 0.5rem;
+  margin-bottom: 0.25rem;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 0.74rem;
+  color: #6b7280;
+  overflow-wrap: anywhere;
+}
+
+/* The user's menu, always at the far right. */
+.nav-menu--user { margin-left: auto; }
+.nav-menu__trigger--user {
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  padding: 0.3rem 0.75rem;
+}
+.nav-menu__trigger--user .topbar__user { max-width: 10rem; }
+
+/* Page-only actions (the analysis tool), separated from the navigation. */
+.page-actions {
+  display: flex;
+  gap: 0.35rem;
+  padding-left: 0.75rem;
+  border-left: 1px solid #e5e7eb;
+}
+
+.nav-toggle {
+  display: none;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  border-radius: 6px;
+  padding: 0.25rem 0.55rem;
+  font-size: 1.05rem;
+  cursor: pointer;
+}
+
+@media (max-width: 860px) {
+  .nav-toggle { display: inline-block; order: 2; }
+  .nav-menu--user { order: 3; }
+  .page-actions { order: 4; border-left: 0; padding-left: 0; }
+  .app-nav {
+    display: none;
+    position: fixed;
+    top: 56px;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 0.5rem;
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+  }
+  .app-nav.app-nav--open { display: flex; }
+  .app-nav .nav-menu__panel { position: static; box-shadow: none; border: 0; padding: 0 0 0.4rem 0.75rem; }
+  .app-nav .nav-menu__trigger { width: 100%; }
+}
+
+@media (max-width: 600px) {
+  .page-actions .ctrl-btn { padding: 0.25rem 0.45rem; }
+  .nav-menu__trigger--user .topbar__user { max-width: 6rem; }
+}
+
 
 /* ── Auth screens (T7): login and change-password ── */
 body.auth-body {
@@ -1267,6 +1395,4 @@ mark.diff-ins {
 @media (max-width: 480px) {
   .topbar__title { font-size: 0.9rem; }
   .ctrl-btn { padding: 0.25rem 0.5rem; font-size: 0.7rem; }
-  .topbar__user { display: none; }
-  .topbar__auth { margin-left: 0.4rem; padding-left: 0.4rem; }
 }

@@ -7,20 +7,53 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <!-- Main navigation (same markup on every protected page). Groups are
+         native <details> dropdowns; role-only groups ship hidden and
+         auth-bar.js reveals them from /api/auth/me. Hiding is only UX: the
+         server still guards every page (requireRole / requirePageRole). -->
     <header class="topbar">
       <div class="topbar__inner">
-        <div class="topbar__brand">
+        <a class="topbar__brand" href="/">
           <span aria-hidden="true">🤖</span>
           <span class="topbar__title">QA API Tester</span>
-        </div>
-        <nav class="topbar__nav">
-          <div class="topbar__auth">
-            <span id="auth-user-name" class="topbar__user"></span>
-            <a class="ctrl-btn ctrl-btn--link" href="/">Tool</a>
-            <a class="ctrl-btn ctrl-btn--link" href="/change-password.html">Change password</a>
-            <button id="auth-logout" class="ctrl-btn ctrl-btn--logout">Logout</button>
-          </div>
+        </a>
+
+        <button type="button" class="nav-toggle" id="nav-toggle" aria-expanded="false" aria-controls="app-nav" aria-label="Open navigation">☰</button>
+
+        <nav class="app-nav" id="app-nav" aria-label="Main">
+          <details class="nav-menu">
+            <summary class="nav-menu__trigger">QA</summary>
+            <div class="nav-menu__panel">
+              <a class="nav-menu__item" href="/">Run analysis<small>Check a dealer page</small></a>
+              <a class="nav-menu__item" href="/my-qa.html">My QA<small>Your saved QA this month</small></a>
+            </div>
+          </details>
+
+          <details class="nav-menu" data-roles="qa_shadow" hidden>
+            <summary class="nav-menu__trigger">Review</summary>
+            <div class="nav-menu__panel">
+              <a class="nav-menu__item" href="/shadow.html">Pending review<small>Take and close QA</small></a>
+              <a class="nav-menu__item" href="/shadow.html#sh-history-title">History<small>QA you closed</small></a>
+            </div>
+          </details>
+
+          <details class="nav-menu" data-roles="admin" hidden>
+            <summary class="nav-menu__trigger">Admin</summary>
+            <div class="nav-menu__panel">
+              <a id="auth-users" class="nav-menu__item" href="/admin-users.html" hidden>Users<small>Accounts and roles</small></a>
+            </div>
+          </details>
         </nav>
+        <details class="nav-menu nav-menu--user">
+          <summary class="nav-menu__trigger nav-menu__trigger--user">
+            <span id="auth-user-name" class="topbar__user">Account</span>
+          </summary>
+          <div class="nav-menu__panel nav-menu__panel--right">
+            <p class="nav-menu__meta" id="auth-user-role"></p>
+            <a id="auth-change-password" class="nav-menu__item" href="/change-password.html">Change password</a>
+            <button id="auth-logout" type="button" class="nav-menu__item nav-menu__item--danger">Logout</button>
+          </div>
+        </details>
       </div>
     </header>
 
