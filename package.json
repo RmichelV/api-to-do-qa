@@ -17,6 +17,8 @@
   "license": "ISC",
   "dependencies": {
     "cheerio": "^1.2.0",
+    "csv-parse": "^7.0.3",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "mysql2": "^3.24.6",
     "playwright": "^1.58.2"

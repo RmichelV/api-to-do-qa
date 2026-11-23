@@ -246,7 +246,13 @@ test('static files in public/ redirect anonymous visitors and serve with a sessi
   assert.ok(files.includes('index.html'));
 
   // Plan T9b: the admin screen is gated by the ROLE, not only by the session.
-  const adminOnly = new Set(['admin-users.html', 'admin-users.js']);
+  const adminOnly = new Set([
+    'admin-users.html',
+    'admin-users.js',
+    'upload-csv.html',
+    'upload-csv.js',
+    'csv-header.js',
+  ]);
 
   for (const file of files) {
     const anon = await fetch(`${base}/${file}`, { redirect: 'manual' });

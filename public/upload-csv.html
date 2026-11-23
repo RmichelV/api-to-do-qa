@@ -29,7 +29,7 @@
       <section class="admin-card" aria-labelledby="csv-title">
         <h1 id="csv-title" class="auth-title">Upload CSV File</h1>
         <p class="auth-subtitle">
-          Select a CSV file with the required columns in its header. Additional columns are allowed.
+          Select one CSV file. The report will contain one Excel row per deliverable.
         </p>
 
         <div class="input-group">
@@ -39,10 +39,15 @@
         <p id="csv-error" class="auth-error" role="alert" hidden></p>
         <p id="csv-success" class="auth-success" role="status" hidden></p>
         <p id="csv-selected-file" aria-live="polite" hidden></p>
+        <div class="csv-actions">
+          <button id="csv-run" class="ctrl-btn ctrl-btn--pdf" type="button" disabled>Run QA and Download Excel</button>
+          <progress id="csv-progress" aria-label="CSV QA progress" hidden></progress>
+        </div>
+        <p id="csv-progress-label" role="status" hidden></p>
 
         <section class="admin-section" aria-labelledby="csv-columns-title">
           <h2 id="csv-columns-title" class="admin-subtitle">Required columns</h2>
-          <p>Deliverable Id, Website, URL, Links, Calls to Action, Completed Copy, Completed Page URL</p>
+          <p>Deliverable Id, Website, Links, Calls to Action, Completed Copy, Completed Page URL</p>
         </section>
       </section>
     </main>

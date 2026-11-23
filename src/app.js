@@ -6,6 +6,7 @@ import linkReadingRoutes from './routes/linkReadingRoutes.js'
 import anchorReadingRoutes from './routes/anchorReadingRoutes.js'
 import imageReadingRoutes from './routes/imageReadingRoutes.js'
 import fullAnalysisRoutes from './routes/fullAnalysisRoutes.js'
+import qaExcelRoutes from './routes/qaExcelRoutes.js'
 import authRoutes from './routes/authRoutes.js'
 import adminUserRoutes from './routes/adminUserRoutes.js'
 import { activeBrowsers } from './services/textReadingService.js'
@@ -65,6 +66,7 @@ export function createApp({ config, pool }) {
   // 403 forbidden before any handler; the guards of §7.2 (last_admin,
   // self_change) live in the service.
   app.use('/api/admin/users', requireRole('admin'), adminUserRoutes({ pool }));
+  app.use('/api/admin/qa-excel', requireRole('admin'), qaExcelRoutes);
 
   // §6 step 10: existing QA routers, contract unchanged (S12).
   app.use('/api/text-reading', textReadingRoutes);

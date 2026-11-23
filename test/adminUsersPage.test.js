@@ -185,7 +185,6 @@ test('an admin session gets the CSV page and its validation scripts', { skip: sk
   for (const header of [
     'Deliverable Id',
     'Website',
-    'URL',
     'Links',
     'Calls to Action',
     'Completed Copy',

@@ -10,6 +10,14 @@ test('accepts required CSV headers in any order and allows additional columns', 
   assert.deepEqual(missingRequiredHeaders(headers), []);
 });
 
+test('accepts semicolon-delimited CSV headers', () => {
+  const headers = parseCsvHeader(
+    'Deliverable Id;Website;Links;Calls to Action;Completed Copy;Completed Page URL\r\n'
+  );
+
+  assert.deepEqual(missingRequiredHeaders(headers), []);
+});
+
 test('reports required CSV headers that are missing', () => {
   const headers = parseCsvHeader('Deliverable Id,Website,URL\n');
 

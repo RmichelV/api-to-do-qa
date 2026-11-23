@@ -7,7 +7,7 @@ import { readImages } from './imageReadingService.js';
 // Kept for cancel compatibility
 export const activeBrowsersFull = new Set();
 
-export const runFullAnalysis = async (url, coText = '') => {
+export const runFullAnalysis = async (url, coText = '', { includeLinkStatuses = true } = {}) => {
   console.log(`[full-analysis] Start for ${url}`);
 
   const [desktop, mobileRawText, imageScan] = await Promise.all([
@@ -34,7 +34,9 @@ export const runFullAnalysis = async (url, coText = '') => {
   // Check HTTP statuses for the extracted links
   const desktopText = compareTextContent(desktop.rawText || '', coText);
   const mobileText = compareMobileTextContent(typeof mobileRawText === 'string' ? mobileRawText : '', coText);
-  const anchorsWithStatus = await addHttpStatusesToAnchors(desktop.anchors || []);
+  const anchorsWithStatus = includeLinkStatuses
+    ? await addHttpStatusesToAnchors(desktop.anchors || [])
+    : desktop.anchors || [];
 
   console.log(`[full-analysis] Complete for ${url}`);
 
